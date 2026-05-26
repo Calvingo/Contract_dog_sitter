@@ -23,6 +23,7 @@ type UiCopy = {
   signatureRequired: string;
   agreeRequired: string;
   submitError: string;
+  signatureLocked: string;
   successTitle: string;
   successBody: string;
   backHome: string;
@@ -53,6 +54,8 @@ const copy: Record<Locale, UiCopy> = {
     signatureRequired: "Please provide your signature",
     agreeRequired: "You must agree to the terms",
     submitError: "Something went wrong. Please try again.",
+    signatureLocked:
+      "Please check the agreement above before signing.",
     successTitle: "Agreement Submitted!",
     successBody:
       "Thank you! A confirmation email has been sent to your inbox.",
@@ -81,6 +84,7 @@ const copy: Record<Locale, UiCopy> = {
     signatureRequired: "请完成签名",
     agreeRequired: "请先同意协议条款",
     submitError: "提交失败，请稍后重试。",
+    signatureLocked: "请先勾选上方协议同意框，才能签名。",
     successTitle: "协议已提交！",
     successBody: "感谢填写！确认邮件已发送至您的邮箱。",
     backHome: "返回表单",

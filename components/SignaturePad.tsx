@@ -6,9 +6,16 @@ import SignatureCanvas from "react-signature-canvas";
 type Props = {
   onChange: (value: string) => void;
   clearLabel: string;
+  disabled?: boolean;
+  disabledMessage?: string;
 };
 
-export function SignaturePad({ onChange, clearLabel }: Props) {
+export function SignaturePad({
+  onChange,
+  clearLabel,
+  disabled = false,
+  disabledMessage,
+}: Props) {
   const canvasRef = useRef<SignatureCanvas | null>(null);
 
   useEffect(() => {
@@ -33,6 +40,13 @@ export function SignaturePad({ onChange, clearLabel }: Props) {
     };
   }, [onChange]);
 
+  useEffect(() => {
+    if (disabled) {
+      canvasRef.current?.clear();
+      onChange("");
+    }
+  }, [disabled, onChange]);
+
   const handleClear = () => {
     canvasRef.current?.clear();
     onChange("");
@@ -40,7 +54,13 @@ export function SignaturePad({ onChange, clearLabel }: Props) {
 
   return (
     <div className="space-y-3">
-      <div className="overflow-hidden rounded-xl border border-dashed border-orange-200 bg-white">
+      <div
+        className={`relative overflow-hidden rounded-xl border border-dashed ${
+          disabled
+            ? "border-stone-300 bg-stone-100"
+            : "border-orange-200 bg-white"
+        }`}
+      >
         <SignatureCanvas
           ref={canvasRef}
           penColor="#1c1917"
@@ -48,11 +68,17 @@ export function SignaturePad({ onChange, clearLabel }: Props) {
             className: "h-44 w-full touch-none",
           }}
         />
+        {disabled ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-stone-100/85 px-4 text-center text-sm font-medium text-stone-600">
+            {disabledMessage}
+          </div>
+        ) : null}
       </div>
       <button
         type="button"
         onClick={handleClear}
-        className="rounded-lg border border-orange-200 px-4 py-2 text-sm font-medium text-orange-700 hover:bg-orange-50"
+        disabled={disabled}
+        className="rounded-lg border border-orange-200 px-4 py-2 text-sm font-medium text-orange-700 hover:bg-orange-50 disabled:cursor-not-allowed disabled:border-stone-200 disabled:text-stone-400 disabled:hover:bg-transparent"
       >
         {clearLabel}
       </button>

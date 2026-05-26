@@ -203,6 +203,8 @@ export default function HomePage() {
             </div>
             <SignaturePad
               clearLabel={ui.clearSignature}
+              disabled={!formValues.agreed}
+              disabledMessage={ui.signatureLocked}
               onChange={(value) => {
                 setFormValues((current) => ({ ...current, signature: value }));
                 setErrors((current) => ({ ...current, signature: undefined }));
@@ -221,7 +223,9 @@ export default function HomePage() {
 
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={
+              isSubmitting || !formValues.agreed || !formValues.signature
+            }
             className="w-full rounded-2xl bg-orange-600 px-6 py-4 text-base font-semibold text-white shadow-sm transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {isSubmitting ? ui.submitting : ui.submit}
