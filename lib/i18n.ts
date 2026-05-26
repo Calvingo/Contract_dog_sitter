@@ -30,7 +30,7 @@ type UiCopy = {
 
 const copy: Record<Locale, UiCopy> = {
   en: {
-    siteTitle: "XYZ Pet Service",
+    siteTitle: "Pocky & Mia Pet Boarding Service",
     siteSubtitle: "Pet Boarding & Daycare Agreement",
     sections: {
       booking: "Booking Information",
@@ -59,7 +59,7 @@ const copy: Record<Locale, UiCopy> = {
     backHome: "Back to form",
   },
   zh: {
-    siteTitle: "XYZ Pet Service",
+    siteTitle: "Pocky & Mia 宠物寄养服务",
     siteSubtitle: "宠物寄养协议",
     sections: {
       booking: "预约信息",

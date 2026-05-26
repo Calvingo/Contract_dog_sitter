@@ -7,12 +7,23 @@ import {
   type FormField,
 } from "./form-config";
 
+const BRAND_NAME_EN = "Pocky & Mia Pet Boarding Service";
+const BRAND_NAME_ZH = "Pocky & Mia 宠物寄养服务";
+
 function getEnv(name: string): string {
   const value = process.env[name];
   if (!value) {
     throw new Error(`Missing environment variable: ${name}`);
   }
   return value;
+}
+
+function parseAdminEmails(): string[] {
+  const raw = getEnv("ADMIN_EMAIL");
+  return raw
+    .split(",")
+    .map((email) => email.trim())
+    .filter((email) => email.length > 0);
 }
 
 export function createMailer() {
@@ -61,7 +72,7 @@ function buildCustomerEmailHtml(data: FormValues): string {
   if (data.locale === "zh") {
     return `
       <div style="font-family:Arial,sans-serif;line-height:1.6;color:#333;">
-        <h2>【XYZ Pet Service】您的寄养协议已提交成功</h2>
+        <h2>【${BRAND_NAME_ZH}】您的寄养协议已提交成功</h2>
         <p>亲爱的 ${escapeHtml(ownerName)}，</p>
         <p>感谢您提交宠物寄养协议。我们已收到您的信息。</p>
         <ul>
@@ -69,14 +80,14 @@ function buildCustomerEmailHtml(data: FormValues): string {
           <li><strong>提交时间：</strong>${escapeHtml(submittedAt)}</li>
         </ul>
         <p>如有任何问题，请直接联系我们。</p>
-        <p>XYZ Pet Service</p>
+        <p>${BRAND_NAME_ZH}</p>
       </div>
     `;
   }
 
   return `
     <div style="font-family:Arial,sans-serif;line-height:1.6;color:#333;">
-      <h2>[XYZ Pet Service] Your boarding agreement has been submitted</h2>
+      <h2>[${BRAND_NAME_EN}] Your boarding agreement has been submitted</h2>
       <p>Dear ${escapeHtml(ownerName)},</p>
       <p>Thank you for submitting your pet boarding agreement. We have received your information.</p>
       <ul>
@@ -84,7 +95,7 @@ function buildCustomerEmailHtml(data: FormValues): string {
         <li><strong>Submitted at:</strong> ${escapeHtml(submittedAt)}</li>
       </ul>
       <p>If you have any questions, please contact us directly.</p>
-      <p>XYZ Pet Service</p>
+      <p>${BRAND_NAME_EN}</p>
     </div>
   `;
 }
@@ -111,25 +122,27 @@ export async function sendSubmissionEmails(
 ) {
   const transporter = createMailer();
   const fromUser = getEnv("GMAIL_USER");
-  const adminEmail = getEnv("ADMIN_EMAIL");
+  const adminEmails = parseAdminEmails();
   const ownerName = `${data.firstName} ${data.lastName}`.trim();
 
   const customerSubject =
     data.locale === "zh"
-      ? "【XYZ Pet Service】您的寄养协议已提交成功"
-      : "[XYZ Pet Service] Your boarding agreement has been submitted";
+      ? `【${BRAND_NAME_ZH}】您的寄养协议已提交成功`
+      : `[${BRAND_NAME_EN}] Your boarding agreement has been submitted`;
+
+  const fromHeader = `"${BRAND_NAME_EN}" <${fromUser}>`;
 
   await transporter.sendMail({
-    from: `"XYZ Pet Service" <${fromUser}>`,
+    from: fromHeader,
     to: data.email,
     subject: customerSubject,
     html: buildCustomerEmailHtml(data),
   });
 
   await transporter.sendMail({
-    from: `"XYZ Pet Service" <${fromUser}>`,
-    to: adminEmail,
-    subject: `[新提交] ${ownerName} - ${data.petName}`,
+    from: fromHeader,
+    to: adminEmails,
+    subject: `[New Submission] ${ownerName} - ${data.petName}`,
     html: buildAdminEmailHtml(data),
     attachments: [
       {

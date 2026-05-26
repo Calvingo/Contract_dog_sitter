@@ -69,8 +69,8 @@ export const formFields: FormField[] = [
   {
     name: "firstTimeBooking",
     type: "select",
-    labelEn: "Is this your first time booking with XYZ pet service?",
-    labelZh: "这是您第一次预约 XYZ 宠物服务吗？",
+    labelEn: "Is this your first time booking with Pocky & Mia Pet Boarding Service?",
+    labelZh: "这是您第一次预约 Pocky & Mia 宠物寄养服务吗？",
     required: true,
     options: yesNoOptions,
     section: "booking",

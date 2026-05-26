@@ -1,6 +1,8 @@
 # contract_dog_sitter
 
-XYZ Pet Service pet boarding agreement form with bilingual UI, signature capture, and Gmail email notifications.
+Pocky & Mia Pet Boarding Service agreement form with bilingual UI, signature capture, and Gmail email notifications.
+
+`ADMIN_EMAIL` accepts a single address or a comma-separated list to send the notification to multiple recipients.
 
 ## Setup
 
