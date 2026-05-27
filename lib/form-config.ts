@@ -8,6 +8,7 @@ export type FormValues = {
   email: string;
   phone: string;
   backupContact: string;
+  wechatId: string;
   petName: string;
   petBreed: string;
   agreed: boolean;
@@ -40,6 +41,7 @@ export const initialFormValues: FormValues = {
   email: "",
   phone: "",
   backupContact: "",
+  wechatId: "",
   petName: "",
   petBreed: "",
   agreed: false,
@@ -62,15 +64,15 @@ export const backupContactOptions: SelectOption[] = [
   { value: "phone", labelEn: "Phone", labelZh: "电话" },
   { value: "email", labelEn: "Email", labelZh: "邮箱" },
   { value: "sms", labelEn: "SMS", labelZh: "短信" },
-  { value: "other", labelEn: "Other", labelZh: "其他" },
+  { value: "wechat", labelEn: "WeChat", labelZh: "微信" },
 ];
 
 export const formFields: FormField[] = [
   {
     name: "firstTimeBooking",
     type: "select",
-    labelEn: "Is this your first time booking with Pocky & Mia Pet Boarding Service?",
-    labelZh: "这是您第一次预约 Pocky & Mia 宠物寄养服务吗？",
+    labelEn: "Is this your first time booking with Silicon Paws Retreat?",
+    labelZh: "这是您第一次预约 Silicon Paws Retreat 吗？",
     required: true,
     options: yesNoOptions,
     section: "booking",
@@ -119,10 +121,18 @@ export const formFields: FormField[] = [
   {
     name: "backupContact",
     type: "select",
-    labelEn: "Preferred backup contact method (Other than WeChat)",
-    labelZh: "首选备用联系方式（微信以外）",
+    labelEn: "Preferred backup contact method",
+    labelZh: "首选备用联系方式",
     required: true,
     options: backupContactOptions,
+    section: "owner",
+  },
+  {
+    name: "wechatId",
+    type: "text",
+    labelEn: "WeChat ID",
+    labelZh: "微信号",
+    required: false,
     section: "owner",
   },
   {

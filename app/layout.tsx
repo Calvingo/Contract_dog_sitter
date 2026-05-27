@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Pocky & Mia Pet Boarding Service | Pet Boarding Agreement",
-  description: "Pet boarding and daycare agreement form for Pocky & Mia Pet Boarding Service",
+  title: "Silicon Paws Retreat | Pet Boarding Agreement",
+  description: "Pet boarding and daycare agreement form for Silicon Paws Retreat",
 };
 
 export default function RootLayout({

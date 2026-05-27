@@ -26,6 +26,10 @@ export function validateSubmission(data: FormValues): string | null {
     }
   }
 
+  if (data.backupContact === "wechat" && !data.wechatId?.trim()) {
+    return "Missing required field: wechatId";
+  }
+
   if (!emailPattern.test(data.email)) {
     return "Invalid email address";
   }

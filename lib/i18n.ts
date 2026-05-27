@@ -24,6 +24,9 @@ type UiCopy = {
   agreeRequired: string;
   submitError: string;
   signatureLocked: string;
+  agreementScrollHint: string;
+  agreementScrollRequired: string;
+  wechatIdRequired: string;
   successTitle: string;
   successBody: string;
   backHome: string;
@@ -31,7 +34,7 @@ type UiCopy = {
 
 const copy: Record<Locale, UiCopy> = {
   en: {
-    siteTitle: "Pocky & Mia Pet Boarding Service",
+    siteTitle: "Silicon Paws Retreat",
     siteSubtitle: "Pet Boarding & Daycare Agreement",
     sections: {
       booking: "Booking Information",
@@ -56,13 +59,18 @@ const copy: Record<Locale, UiCopy> = {
     submitError: "Something went wrong. Please try again.",
     signatureLocked:
       "Please check the agreement above before signing.",
+    agreementScrollHint:
+      "Please scroll to the bottom of the agreement to enable the checkbox.",
+    agreementScrollRequired:
+      "Please read the full agreement before agreeing.",
+    wechatIdRequired: "Please enter your WeChat ID",
     successTitle: "Agreement Submitted!",
     successBody:
       "Thank you! A confirmation email has been sent to your inbox.",
     backHome: "Back to form",
   },
   zh: {
-    siteTitle: "Pocky & Mia 宠物寄养服务",
+    siteTitle: "Silicon Paws Retreat",
     siteSubtitle: "宠物寄养协议",
     sections: {
       booking: "预约信息",
@@ -85,6 +93,9 @@ const copy: Record<Locale, UiCopy> = {
     agreeRequired: "请先同意协议条款",
     submitError: "提交失败，请稍后重试。",
     signatureLocked: "请先勾选上方协议同意框，才能签名。",
+    agreementScrollHint: "请将协议滚动到底部后才能勾选同意。",
+    agreementScrollRequired: "请阅读完整协议后再勾选同意。",
+    wechatIdRequired: "请填写微信号",
     successTitle: "协议已提交！",
     successBody: "感谢填写！确认邮件已发送至您的邮箱。",
     backHome: "返回表单",

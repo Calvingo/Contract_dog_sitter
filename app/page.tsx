@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AgreementPanel } from "@/components/AgreementPanel";
 import { FormFieldInput } from "@/components/FormFieldInput";
@@ -24,6 +24,7 @@ export default function HomePage() {
   );
   const [submitError, setSubmitError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hasReadAgreement, setHasReadAgreement] = useState(false);
 
   const ui = useMemo(() => getUiCopy(locale), [locale]);
   const today = useMemo(
@@ -37,24 +38,42 @@ export default function HomePage() {
   );
 
   const ownerName = `${formValues.firstName} ${formValues.lastName}`.trim();
+  const needsWechatId = formValues.backupContact === "wechat";
 
   const handleFieldChange = (name: keyof FormValues, value: string) => {
-    setFormValues((current) => ({ ...current, [name]: value }));
+    setFormValues((current) => {
+      const next = { ...current, [name]: value };
+      if (name === "backupContact" && value !== "wechat") {
+        next.wechatId = "";
+      }
+      return next;
+    });
     setErrors((current) => ({ ...current, [name]: undefined }));
     setSubmitError("");
   };
+
+  const handleReachBottom = useCallback(() => {
+    setHasReadAgreement(true);
+  }, []);
 
   const validateClient = (): boolean => {
     const nextErrors: Partial<Record<keyof FormValues, string>> = {};
 
     for (const field of formFields) {
+      if (field.name === "wechatId") continue;
       const value = String(formValues[field.name] ?? "").trim();
       if (field.required && !value) {
         nextErrors[field.name] = ui.required;
       }
     }
 
-    if (!formValues.agreed) {
+    if (needsWechatId && !formValues.wechatId.trim()) {
+      nextErrors.wechatId = ui.wechatIdRequired;
+    }
+
+    if (!hasReadAgreement) {
+      nextErrors.agreed = ui.agreementScrollRequired;
+    } else if (!formValues.agreed) {
       nextErrors.agreed = ui.agreeRequired;
     }
 
@@ -93,8 +112,17 @@ export default function HomePage() {
   };
 
   const bookingFields = formFields.filter((field) => field.section === "booking");
-  const ownerFields = formFields.filter((field) => field.section === "owner");
+  const ownerFields = formFields.filter(
+    (field) => field.section === "owner" && field.name !== "wechatId"
+  );
   const petFields = formFields.filter((field) => field.section === "pet");
+  const wechatField = formFields.find((field) => field.name === "wechatId");
+
+  const canSubmit =
+    !isSubmitting &&
+    hasReadAgreement &&
+    formValues.agreed &&
+    !!formValues.signature;
 
   return (
     <main className="min-h-screen px-4 py-8">
@@ -144,6 +172,16 @@ export default function HomePage() {
                 onChange={handleFieldChange}
               />
             ))}
+            {needsWechatId && wechatField ? (
+              <FormFieldInput
+                field={{ ...wechatField, required: true }}
+                locale={locale}
+                value={formValues.wechatId}
+                error={errors.wechatId}
+                selectPlaceholder={ui.selectPlaceholder}
+                onChange={handleFieldChange}
+              />
+            ) : null}
           </FormSection>
 
           <FormSection title={ui.sections.pet}>
@@ -161,11 +199,21 @@ export default function HomePage() {
           </FormSection>
 
           <FormSection title={ui.sections.agreement}>
-            <AgreementPanel intro={ui.agreementIntro} />
-            <label className="flex items-start gap-3 rounded-xl bg-orange-50/60 p-4">
+            <AgreementPanel
+              intro={ui.agreementIntro}
+              scrollHint={ui.agreementScrollHint}
+              hasReadToBottom={hasReadAgreement}
+              onReachBottom={handleReachBottom}
+            />
+            <label
+              className={`flex items-start gap-3 rounded-xl bg-orange-50/60 p-4 ${
+                !hasReadAgreement ? "cursor-not-allowed opacity-60" : ""
+              }`}
+            >
               <input
                 type="checkbox"
                 checked={formValues.agreed}
+                disabled={!hasReadAgreement}
                 onChange={(event) => {
                   setFormValues((current) => ({
                     ...current,
@@ -173,7 +221,7 @@ export default function HomePage() {
                   }));
                   setErrors((current) => ({ ...current, agreed: undefined }));
                 }}
-                className="mt-1 h-4 w-4 rounded border-orange-300 text-orange-600 focus:ring-orange-500"
+                className="mt-1 h-4 w-4 rounded border-orange-300 text-orange-600 focus:ring-orange-500 disabled:cursor-not-allowed"
               />
               <span className="text-sm text-stone-700">{ui.agreeLabel}</span>
             </label>
@@ -223,9 +271,7 @@ export default function HomePage() {
 
           <button
             type="submit"
-            disabled={
-              isSubmitting || !formValues.agreed || !formValues.signature
-            }
+            disabled={!canSubmit}
             className="w-full rounded-2xl bg-orange-600 px-6 py-4 text-base font-semibold text-white shadow-sm transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {isSubmitting ? ui.submitting : ui.submit}

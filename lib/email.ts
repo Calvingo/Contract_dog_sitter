@@ -7,8 +7,8 @@ import {
   type FormField,
 } from "./form-config";
 
-const BRAND_NAME_EN = "Pocky & Mia Pet Boarding Service";
-const BRAND_NAME_ZH = "Pocky & Mia 宠物寄养服务";
+const BRAND_NAME_EN = "Silicon Paws Retreat";
+const BRAND_NAME_ZH = "Silicon Paws Retreat";
 
 function getEnv(name: string): string {
   const value = process.env[name];
