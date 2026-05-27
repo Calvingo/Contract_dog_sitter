@@ -1,4 +1,4 @@
-import PDFDocument from "pdfkit";
+import { PDFDocument, StandardFonts, rgb, type PDFPage, type PDFFont } from "pdf-lib";
 import type { FormValues } from "./form-config";
 import {
   formFields,
@@ -10,6 +10,10 @@ import {
 import { formatDateTime, type PriceBreakdown } from "./pricing";
 
 const BRAND_NAME = "Silicon Paws Retreat";
+const PAGE_WIDTH = 612;
+const PAGE_HEIGHT = 792;
+const MARGIN = 50;
+const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
 
 function fieldDisplayValue(field: FormField, data: FormValues): string {
   if (field.type === "select") {
@@ -24,119 +28,197 @@ function fieldDisplayValue(field: FormField, data: FormValues): string {
   return String(data[field.name] ?? "");
 }
 
-type PdfDoc = InstanceType<typeof PDFDocument>;
+type PdfContext = {
+  doc: PDFDocument;
+  page: PDFPage;
+  y: number;
+  font: PDFFont;
+  bold: PDFFont;
+};
 
-function addSectionTitle(doc: PdfDoc, title: string) {
-  doc.moveDown(0.5);
-  doc.fontSize(13).fillColor("#c2410c").text(title);
-  doc.fillColor("#1c1917");
-  doc.moveDown(0.3);
+function wrapLines(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
+  const words = text.split(/\s+/);
+  const lines: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (font.widthOfTextAtSize(next, size) <= maxWidth) {
+      current = next;
+    } else {
+      if (current) lines.push(current);
+      current = word;
+    }
+  }
+  if (current) lines.push(current);
+  return lines.length ? lines : [""];
 }
 
-function addRow(doc: PdfDoc, label: string, value: string) {
-  doc.fontSize(10).font("Helvetica-Bold").text(`${label}: `, {
-    continued: true,
-    width: 500,
-  });
-  doc.font("Helvetica").text(value || "—");
+function ensureSpace(ctx: PdfContext, needed: number): PdfContext {
+  if (ctx.y >= needed) return ctx;
+  const page = ctx.doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+  return { ...ctx, page, y: PAGE_HEIGHT - MARGIN };
 }
 
-export function generateSubmissionPdf(
+function drawLines(
+  ctx: PdfContext,
+  lines: string[],
+  size: number,
+  font: PDFFont,
+  color = rgb(0.11, 0.11, 0.11)
+): PdfContext {
+  let next = ctx;
+  const lineHeight = size + 4;
+  for (const line of lines) {
+    next = ensureSpace(next, MARGIN + lineHeight);
+    next.page.drawText(line, {
+      x: MARGIN,
+      y: next.y,
+      size,
+      font,
+      color,
+    });
+    next = { ...next, y: next.y - lineHeight };
+  }
+  return next;
+}
+
+function drawSectionTitle(ctx: PdfContext, title: string): PdfContext {
+  let next = ensureSpace(ctx, MARGIN + 24);
+  next = drawLines(next, [title], 13, next.bold, rgb(0.76, 0.25, 0.05));
+  return { ...next, y: next.y - 6 };
+}
+
+function drawRow(ctx: PdfContext, label: string, value: string): PdfContext {
+  const text = `${label}: ${value || "—"}`;
+  const lines = wrapLines(text, ctx.font, 10, CONTENT_WIDTH);
+  return drawLines(ctx, lines, 10, ctx.font);
+}
+
+export async function generateSubmissionPdf(
   data: FormValues,
   quote: PriceBreakdown,
   signatureBuffer: Buffer
 ): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ margin: 50, size: "LETTER" });
-    const chunks: Buffer[] = [];
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
 
-    doc.on("data", (chunk) => chunks.push(chunk));
-    doc.on("end", () => resolve(Buffer.concat(chunks)));
-    doc.on("error", reject);
+  let ctx: PdfContext = {
+    doc,
+    page: doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]),
+    y: PAGE_HEIGHT - MARGIN,
+    font,
+    bold,
+  };
 
-    const ownerName = `${data.firstName} ${data.lastName}`.trim();
-    const submittedAt = new Date().toLocaleString("en-US", {
-      dateStyle: "full",
-      timeStyle: "short",
-      hour12: false,
-    });
-
-    doc.fontSize(20).font("Helvetica-Bold").text(BRAND_NAME, { align: "center" });
-    doc
-      .fontSize(12)
-      .font("Helvetica")
-      .text("Pet Boarding & Daycare Agreement — Signed Submission", {
-        align: "center",
-      });
-    doc.moveDown();
-    doc.fontSize(10).fillColor("#57534e").text(`Submitted: ${submittedAt}`, {
-      align: "center",
-    });
-    doc.fillColor("#1c1917");
-    doc.moveDown();
-
-    addSectionTitle(doc, "Price Estimate");
-    addRow(doc, "Weight tier", quote.weightTier);
-    addRow(doc, "Stay duration", `${quote.totalHours} hours`);
-    addRow(doc, "Billable days", String(quote.billableDays));
-    addRow(doc, "Daily rate", `$${quote.dailyRate}`);
-    doc.font("Helvetica-Bold").fontSize(11);
-    addRow(doc, "Estimated total", `$${quote.totalPrice.toFixed(2)}`);
-
-    addSectionTitle(doc, "Pre-Screening");
-    for (const q of prescreenQuestions) {
-      addRow(
-        doc,
-        q.label,
-        getOptionLabel(yesNoOptions, String(data[q.name]))
-      );
-    }
-    if (data.prescreenNotes?.trim()) {
-      addRow(doc, "Additional notes", data.prescreenNotes.trim());
-    }
-
-    addSectionTitle(doc, "Booking & Contact Details");
-    const skipNames = new Set(["dropoffTime", "pickupTime"]);
-    for (const field of formFields) {
-      if (skipNames.has(field.name)) continue;
-      if (field.name === "wechatId" && data.backupContact !== "wechat") continue;
-      addRow(doc, field.label, fieldDisplayValue(field, data));
-    }
-
-    addSectionTitle(doc, "Owner Acknowledgment");
-    doc
-      .fontSize(10)
-      .font("Helvetica")
-      .text(
-        "By signing below, the Owner confirms they have read, understood, and agreed to all terms of the Pet Boarding & Daycare Agreement.",
-        { width: 500 }
-      );
-    doc.moveDown(0.5);
-    addRow(doc, "Owner name", ownerName);
-    addRow(doc, "Dog name(s)", data.petName);
-    addRow(doc, "Date signed", submittedAt.split(",")[0] ?? submittedAt);
-
-    doc.moveDown();
-    doc.fontSize(11).font("Helvetica-Bold").text("Signature:");
-    doc.moveDown(0.3);
-
-    try {
-      doc.image(signatureBuffer, { width: 220, height: 80 });
-    } catch {
-      doc.fontSize(10).font("Helvetica").text("[Signature image unavailable]");
-    }
-
-    doc.moveDown(2);
-    doc
-      .fontSize(8)
-      .fillColor("#78716c")
-      .text(
-        "This document is an electronic record of your submitted agreement. Please retain for your records.",
-        { align: "center", width: 500 }
-      );
-
-    doc.end();
+  const ownerName = `${data.firstName} ${data.lastName}`.trim();
+  const submittedAt = new Date().toLocaleString("en-US", {
+    dateStyle: "full",
+    timeStyle: "short",
+    hour12: false,
   });
+
+  const titleLines = wrapLines(BRAND_NAME, bold, 20, CONTENT_WIDTH);
+  ctx = drawLines(ctx, titleLines, 20, bold);
+  ctx = drawLines(
+    ctx,
+    wrapLines(
+      "Pet Boarding & Daycare Agreement — Signed Submission",
+      font,
+      12,
+      CONTENT_WIDTH
+    ),
+    12,
+    font
+  );
+  ctx = drawLines(
+    ctx,
+    wrapLines(`Submitted: ${submittedAt}`, font, 10, CONTENT_WIDTH),
+    10,
+    font,
+    rgb(0.34, 0.33, 0.31)
+  );
+  ctx = { ...ctx, y: ctx.y - 10 };
+
+  ctx = drawSectionTitle(ctx, "Price Estimate");
+  ctx = drawRow(ctx, "Weight tier", quote.weightTier);
+  ctx = drawRow(ctx, "Stay duration", `${quote.totalHours} hours`);
+  ctx = drawRow(ctx, "Billable days", String(quote.billableDays));
+  ctx = drawRow(ctx, "Daily rate", `$${quote.dailyRate}`);
+  ctx = drawRow(ctx, "Estimated total", `$${quote.totalPrice.toFixed(2)}`);
+
+  ctx = drawSectionTitle(ctx, "Pre-Screening");
+  for (const q of prescreenQuestions) {
+    ctx = drawRow(
+      ctx,
+      q.label,
+      getOptionLabel(yesNoOptions, String(data[q.name]))
+    );
+  }
+  if (data.prescreenNotes?.trim()) {
+    ctx = drawRow(ctx, "Additional notes", data.prescreenNotes.trim());
+  }
+
+  ctx = drawSectionTitle(ctx, "Booking & Contact Details");
+  const skipNames = new Set(["dropoffTime", "pickupTime"]);
+  for (const field of formFields) {
+    if (skipNames.has(field.name)) continue;
+    if (field.name === "wechatId" && data.backupContact !== "wechat") continue;
+    ctx = drawRow(ctx, field.label, fieldDisplayValue(field, data));
+  }
+
+  ctx = drawSectionTitle(ctx, "Owner Acknowledgment");
+  ctx = drawLines(
+    ctx,
+    wrapLines(
+      "By signing below, the Owner confirms they have read, understood, and agreed to all terms of the Pet Boarding & Daycare Agreement.",
+      font,
+      10,
+      CONTENT_WIDTH
+    ),
+    10,
+    font
+  );
+  ctx = drawRow(ctx, "Owner name", ownerName);
+  ctx = drawRow(ctx, "Dog name(s)", data.petName);
+  ctx = drawRow(ctx, "Date signed", submittedAt.split(",")[0] ?? submittedAt);
+
+  ctx = ensureSpace(ctx, MARGIN + 100);
+  ctx = drawLines(ctx, ["Signature:"], 11, bold);
+  ctx = { ...ctx, y: ctx.y - 8 };
+
+  try {
+    const png = await doc.embedPng(signatureBuffer);
+    const sigHeight = 80;
+    const sigWidth = 220;
+    ctx = ensureSpace(ctx, MARGIN + sigHeight + 20);
+    ctx.page.drawImage(png, {
+      x: MARGIN,
+      y: ctx.y - sigHeight,
+      width: sigWidth,
+      height: sigHeight,
+    });
+    ctx = { ...ctx, y: ctx.y - sigHeight - 16 };
+  } catch {
+    ctx = drawLines(ctx, ["[Signature image unavailable]"], 10, font);
+  }
+
+  ctx = drawLines(
+    ctx,
+    wrapLines(
+      "This document is an electronic record of your submitted agreement. Please retain for your records.",
+      font,
+      8,
+      CONTENT_WIDTH
+    ),
+    8,
+    font,
+    rgb(0.47, 0.44, 0.42)
+  );
+
+  const bytes = await doc.save();
+  return Buffer.from(bytes);
 }
 
 export function pdfFilename(petName: string): string {
