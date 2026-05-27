@@ -13,7 +13,8 @@ import {
   type PriceBreakdown,
 } from "./pricing";
 import { generateSubmissionPdf, pdfFilename } from "./pdf-receipt";
-import { createDecisionToken, getAppBaseUrl } from "./token";
+import { getAppBaseUrl } from "./app-url";
+import { buildDecisionUrl, createDecisionToken } from "./token";
 import {
   BRAND_NAME,
   createMailer,
@@ -121,14 +122,23 @@ function formatContactsSection(): string {
   `;
 }
 
-function decisionButton(
+function decisionButtonRow(
   label: string,
   action: string,
   token: string,
   bg: string
 ): string {
-  const url = `${getAppBaseUrl()}/api/decision?token=${encodeURIComponent(token)}&action=${action}`;
-  return `<a href="${url}" style="display:inline-block;margin:6px 8px 6px 0;padding:12px 20px;background:${bg};color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;font-size:14px;">${label}</a>`;
+  const url = buildDecisionUrl(action, token);
+  return `<tr>
+    <td style="padding:0 8px 10px 0;">
+      <a href="${url}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 24px;background:${bg};color:#ffffff !important;text-decoration:none;border-radius:8px;font-weight:bold;font-size:15px;font-family:Arial,sans-serif;">${label}</a>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:0 0 14px 0;font-size:11px;color:#78716c;word-break:break-all;">
+      Or copy this link: <a href="${url}" target="_blank" rel="noopener noreferrer" style="color:#ea580c;">${escapeHtml(url)}</a>
+    </td>
+  </tr>`;
 }
 
 function buildAdminDecisionButtons(data: FormValues): string {
@@ -142,14 +152,18 @@ function buildAdminDecisionButtons(data: FormValues): string {
   const acceptToken = createDecisionToken(tokenBase);
   const rejectToken = createDecisionToken(tokenBase);
   const meetToken = createDecisionToken(tokenBase);
+  const baseUrl = getAppBaseUrl();
 
   return `
     <div style="margin:28px 0;padding:20px;background:#fff7ed;border-radius:12px;border:1px solid #fed7aa;">
-      <p style="margin:0 0 12px;font-weight:bold;color:#9a3412;">Review this submission:</p>
-      ${decisionButton("Accept", "accept", acceptToken, "#16a34a")}
-      ${decisionButton("Reject", "reject", rejectToken, "#dc2626")}
-      ${decisionButton("Meet &amp; Greet", "meet_greet", meetToken, "#ea580c")}
-      <p style="margin:12px 0 0;font-size:12px;color:#78716c;">Clicking a button will email the customer automatically. Links expire in 7 days.</p>
+      <p style="margin:0 0 8px;font-weight:bold;color:#9a3412;">Review this submission</p>
+      <p style="margin:0 0 16px;font-size:12px;color:#78716c;">Tap a button (opens in browser). Customer will be emailed automatically. Links expire in 7 days.</p>
+      <p style="margin:0 0 12px;font-size:11px;color:#57534e;">Site: ${escapeHtml(baseUrl)}</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+        ${decisionButtonRow("Accept", "accept", acceptToken, "#16a34a")}
+        ${decisionButtonRow("Reject", "reject", rejectToken, "#dc2626")}
+        ${decisionButtonRow("Meet &amp; Greet", "meet_greet", meetToken, "#ea580c")}
+      </table>
     </div>
   `;
 }

@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "crypto";
+import { getAppBaseUrl } from "./app-url";
 
 export type DecisionTokenPayload = {
   email: string;
@@ -9,6 +10,8 @@ export type DecisionTokenPayload = {
 };
 
 const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+/** Avoid "." in tokens — some email clients truncate URLs at dots */
+const TOKEN_SEP = "~";
 
 function getSecret(): string {
   const secret = process.env.APP_SECRET;
@@ -30,12 +33,17 @@ export function createDecisionToken(
     exp: Date.now() + TOKEN_TTL_MS,
   };
   const data = Buffer.from(JSON.stringify(full)).toString("base64url");
-  return `${data}.${sign(data)}`;
+  return `${data}${TOKEN_SEP}${sign(data)}`;
 }
 
 export function verifyDecisionToken(token: string): DecisionTokenPayload | null {
   try {
-    const [data, signature] = token.split(".");
+    const normalized = decodeURIComponent(token).trim();
+    const sepIndex = normalized.lastIndexOf(TOKEN_SEP);
+    if (sepIndex <= 0) return null;
+
+    const data = normalized.slice(0, sepIndex);
+    const signature = normalized.slice(sepIndex + 1);
     if (!data || !signature) return null;
 
     const expected = sign(data);
@@ -58,12 +66,13 @@ export function verifyDecisionToken(token: string): DecisionTokenPayload | null 
   }
 }
 
-export function getAppBaseUrl(): string {
-  if (process.env.NEXT_PUBLIC_APP_URL) {
-    return process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, "");
-  }
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL}`;
-  }
-  return "http://localhost:3000";
+export function buildDecisionUrl(action: string, token: string): string {
+  const base = getAppBaseUrl();
+  const params = new URLSearchParams({
+    action,
+    token,
+  });
+  return `${base}/decision?${params.toString()}`;
 }
+
+export { getAppBaseUrl };
