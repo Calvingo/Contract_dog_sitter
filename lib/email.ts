@@ -1,4 +1,3 @@
-import nodemailer from "nodemailer";
 import type { FormValues } from "./form-config";
 import {
   formFields,
@@ -13,36 +12,16 @@ import {
   formatDateTime,
   type PriceBreakdown,
 } from "./pricing";
+import { generateSubmissionPdf, pdfFilename } from "./pdf-receipt";
+import { createDecisionToken, getAppBaseUrl } from "./token";
+import {
+  BRAND_NAME,
+  createMailer,
+  getEnv,
+  parseAdminEmails,
+} from "./mailer";
 
-const BRAND_NAME = "Silicon Paws Retreat";
-
-function getEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(`Missing environment variable: ${name}`);
-  }
-  return value;
-}
-
-function parseAdminEmails(): string[] {
-  const raw = getEnv("ADMIN_EMAIL");
-  return raw
-    .split(",")
-    .map((email) => email.trim())
-    .filter((email) => email.length > 0);
-}
-
-export function createMailer() {
-  return nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 587,
-    secure: false,
-    auth: {
-      user: getEnv("GMAIL_USER"),
-      pass: getEnv("GMAIL_APP_PASSWORD"),
-    },
-  });
-}
+export { createMailer } from "./mailer";
 
 function escapeHtml(value: string): string {
   return value
@@ -73,9 +52,6 @@ function formatValue(field: FormField, data: FormValues): string {
   }
   if (field.name === "pickupDate") {
     return formatDateTime(data.pickupDate, data.pickupTime);
-  }
-  if (field.name === "dropoffTime" || field.name === "pickupTime") {
-    return "";
   }
   return String(rawValue);
 }
@@ -140,24 +116,54 @@ function formatContactsSection(): string {
     .join("");
   return `
     <h3 style="margin:24px 0 8px;font-size:16px;">Contact Us</h3>
-    <p>If you have any questions about your submission, please reach out:</p>
+    <p>If you have any questions, please reach out:</p>
     <ul style="padding-left:20px;line-height:1.8;">${items}</ul>
+  `;
+}
+
+function decisionButton(
+  label: string,
+  action: string,
+  token: string,
+  bg: string
+): string {
+  const url = `${getAppBaseUrl()}/api/decision?token=${encodeURIComponent(token)}&action=${action}`;
+  return `<a href="${url}" style="display:inline-block;margin:6px 8px 6px 0;padding:12px 20px;background:${bg};color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;font-size:14px;">${label}</a>`;
+}
+
+function buildAdminDecisionButtons(data: FormValues): string {
+  const tokenBase = {
+    email: data.email,
+    firstName: data.firstName,
+    lastName: data.lastName,
+    petName: data.petName,
+  };
+
+  const acceptToken = createDecisionToken(tokenBase);
+  const rejectToken = createDecisionToken(tokenBase);
+  const meetToken = createDecisionToken(tokenBase);
+
+  return `
+    <div style="margin:28px 0;padding:20px;background:#fff7ed;border-radius:12px;border:1px solid #fed7aa;">
+      <p style="margin:0 0 12px;font-weight:bold;color:#9a3412;">Review this submission:</p>
+      ${decisionButton("Accept", "accept", acceptToken, "#16a34a")}
+      ${decisionButton("Reject", "reject", rejectToken, "#dc2626")}
+      ${decisionButton("Meet &amp; Greet", "meet_greet", meetToken, "#ea580c")}
+      <p style="margin:12px 0 0;font-size:12px;color:#78716c;">Clicking a button will email the customer automatically. Links expire in 7 days.</p>
+    </div>
   `;
 }
 
 function buildCustomerEmailHtml(data: FormValues, quote: PriceBreakdown): string {
   const ownerName = `${data.firstName} ${data.lastName}`.trim();
-  const submittedAt = new Date().toLocaleString("en-US");
 
   return `
     <div style="font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:640px;">
-      <h2>[${BRAND_NAME}] Your submission receipt</h2>
+      <h2>[${BRAND_NAME}] Your signed agreement receipt</h2>
       <p>Dear ${escapeHtml(ownerName)},</p>
-      <p>Thank you for submitting your pet boarding agreement with ${BRAND_NAME}. Below is a copy of what you submitted. We will review your request and follow up soon.</p>
-      <p><strong>Submitted at:</strong> ${escapeHtml(submittedAt)}</p>
-      ${formatPricingSection(quote)}
-      ${formatPrescreenSection(data)}
-      ${formatFormSection(data)}
+      <p>Thank you for submitting your pet boarding agreement with ${BRAND_NAME}.</p>
+      <p><strong>Please find your signed submission attached as a PDF.</strong> It includes all information you provided, the price estimate ($${quote.totalPrice.toFixed(2)}), and your signature. Please save it for your records.</p>
+      <p>We will review your request and follow up soon.</p>
       ${formatContactsSection()}
       <p style="margin-top:24px;">We look forward to caring for ${escapeHtml(data.petName)}!</p>
       <p>${BRAND_NAME}</p>
@@ -176,10 +182,11 @@ function buildAdminEmailHtml(data: FormValues, quote: PriceBreakdown): string {
       <p><strong>Email:</strong> ${escapeHtml(data.email)}</p>
       <p><strong>Pet:</strong> ${escapeHtml(data.petName)}</p>
       <p><strong>Submitted at:</strong> ${escapeHtml(submittedAt)}</p>
+      ${buildAdminDecisionButtons(data)}
       ${formatPricingSection(quote)}
       ${formatPrescreenSection(data)}
       ${formatFormSection(data)}
-      <p>Signature attached as PNG.</p>
+      <p>Signature attached as PNG. Customer received a PDF receipt.</p>
     </div>
   `;
 }
@@ -193,6 +200,9 @@ export async function sendSubmissionEmails(
     throw new Error("Unable to calculate price for email");
   }
 
+  const pdfBuffer = await generateSubmissionPdf(data, quote, signatureBuffer);
+  const pdfName = pdfFilename(data.petName);
+
   const transporter = createMailer();
   const fromUser = getEnv("GMAIL_USER");
   const adminEmails = parseAdminEmails();
@@ -202,8 +212,15 @@ export async function sendSubmissionEmails(
   await transporter.sendMail({
     from: fromHeader,
     to: data.email,
-    subject: `[${BRAND_NAME}] Your submission receipt — ${data.petName}`,
+    subject: `[${BRAND_NAME}] Your signed agreement — ${data.petName}`,
     html: buildCustomerEmailHtml(data, quote),
+    attachments: [
+      {
+        filename: pdfName,
+        content: pdfBuffer,
+        contentType: "application/pdf",
+      },
+    ],
   });
 
   await transporter.sendMail({
@@ -216,6 +233,11 @@ export async function sendSubmissionEmails(
         filename: `signature-${Date.now()}.png`,
         content: signatureBuffer,
         contentType: "image/png",
+      },
+      {
+        filename: pdfName,
+        content: pdfBuffer,
+        contentType: "application/pdf",
       },
     ],
   });
