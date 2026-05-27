@@ -1,4 +1,6 @@
+import { DateTimeInput } from "@/components/DateTimeInput";
 import type { FormField, FormValues } from "@/lib/form-config";
+import { ui } from "@/lib/i18n";
 
 type Props = {
   field: FormField;
@@ -17,6 +19,20 @@ export function FormFieldInput({
 }: Props) {
   const commonClass =
     "w-full rounded-xl border border-orange-100 bg-white px-4 py-3 text-stone-800 outline-none transition focus:border-orange-300 focus:ring-2 focus:ring-orange-100";
+
+  if (field.type === "date" || field.type === "time") {
+    return (
+      <DateTimeInput
+        field={field}
+        value={value}
+        error={error}
+        emptyHint={
+          field.type === "date" ? ui.dateFieldEmpty : ui.timeFieldEmpty
+        }
+        onChange={onChange}
+      />
+    );
+  }
 
   return (
     <label className="block space-y-2">

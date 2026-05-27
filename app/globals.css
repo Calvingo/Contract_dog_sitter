@@ -10,3 +10,36 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Hide browser “ghost” date/time until the user picks a value */
+input.dt-empty::-webkit-datetime-edit,
+input.dt-empty::-webkit-datetime-edit-fields-wrapper,
+input.dt-empty::-webkit-datetime-edit-text,
+input.dt-empty::-webkit-datetime-edit-month-field,
+input.dt-empty::-webkit-datetime-edit-day-field,
+input.dt-empty::-webkit-datetime-edit-year-field,
+input.dt-empty::-webkit-datetime-edit-hour-field,
+input.dt-empty::-webkit-datetime-edit-minute-field,
+input.dt-empty::-webkit-datetime-edit-ampm-field {
+  color: transparent;
+}
+
+input.dt-empty:focus::-webkit-datetime-edit,
+input.dt-empty:focus::-webkit-datetime-edit-fields-wrapper,
+input.dt-empty:focus::-webkit-datetime-edit-text,
+input.dt-empty:focus::-webkit-datetime-edit-month-field,
+input.dt-empty:focus::-webkit-datetime-edit-day-field,
+input.dt-empty:focus::-webkit-datetime-edit-year-field,
+input.dt-empty:focus::-webkit-datetime-edit-hour-field,
+input.dt-empty:focus::-webkit-datetime-edit-minute-field,
+input.dt-empty:focus::-webkit-datetime-edit-ampm-field {
+  color: inherit;
+}
+
+input.dt-empty {
+  color: transparent;
+}
+
+input.dt-empty:focus {
+  color: inherit;
+}

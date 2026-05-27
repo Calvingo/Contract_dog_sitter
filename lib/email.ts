@@ -17,12 +17,12 @@ import { getAppBaseUrl } from "./app-url";
 import { buildDecisionUrl, createDecisionToken } from "./token";
 import {
   BRAND_NAME,
-  createMailer,
+  sendMail,
   getEnv,
   parseAdminEmails,
 } from "./mailer";
 
-export { createMailer } from "./mailer";
+export { sendMail } from "./mailer";
 
 function escapeHtml(value: string): string {
   return value
@@ -217,13 +217,12 @@ export async function sendSubmissionEmails(
   const pdfBuffer = await generateSubmissionPdf(data, quote, signatureBuffer);
   const pdfName = pdfFilename(data.petName);
 
-  const transporter = createMailer();
   const fromUser = getEnv("GMAIL_USER");
   const adminEmails = parseAdminEmails();
   const ownerName = `${data.firstName} ${data.lastName}`.trim();
   const fromHeader = `"${BRAND_NAME}" <${fromUser}>`;
 
-  await transporter.sendMail({
+  await sendMail({
     from: fromHeader,
     to: data.email,
     subject: `[${BRAND_NAME}] Your signed agreement — ${data.petName}`,
@@ -237,7 +236,7 @@ export async function sendSubmissionEmails(
     ],
   });
 
-  await transporter.sendMail({
+  await sendMail({
     from: fromHeader,
     to: adminEmails,
     subject: `[New Submission] ${ownerName} - ${data.petName} — $${quote.totalPrice.toFixed(2)}`,

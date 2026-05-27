@@ -1,5 +1,5 @@
 import { teamContacts } from "./contacts";
-import { BRAND_NAME, createMailer, getEnv } from "./mailer";
+import { BRAND_NAME, getEnv, sendMail } from "./mailer";
 import type { DecisionTokenPayload } from "./token";
 
 export type DecisionAction = "accept" | "reject" | "meet_greet";
@@ -75,11 +75,10 @@ export async function sendDecisionEmail(
   payload: DecisionTokenPayload,
   action: DecisionAction
 ) {
-  const transporter = createMailer();
   const fromUser = getEnv("GMAIL_USER");
   const { subject, html } = buildDecisionEmail(payload, action);
 
-  await transporter.sendMail({
+  await sendMail({
     from: `"${BRAND_NAME}" <${fromUser}>`,
     to: payload.email,
     subject,

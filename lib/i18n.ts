@@ -12,6 +12,8 @@ export const ui = {
     signature: "Signature",
   },
   selectPlaceholder: "Select an option",
+  dateFieldEmpty: "Tap to choose date",
+  timeFieldEmpty: "Tap to choose time",
   agreementIntro: "Please read the agreement below carefully before signing.",
   agreeLabel: "I have read, understood, and agree to all terms above",
   ownerName: "Owner Name",
