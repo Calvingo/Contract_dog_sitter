@@ -1,5 +1,6 @@
 import type { FormValues } from "./form-config";
 import { allSubmittableFieldKeys } from "./form-config";
+import { calculatePrice, parseDateTime } from "./pricing";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -20,12 +21,33 @@ export function validateSubmission(data: FormValues): string | null {
     return "Missing required field: wechatId";
   }
 
-  if (!emailPattern.test(data.email)) {
-    return "Invalid email address";
+  const weight = Number(data.petWeightLb);
+  if (!Number.isFinite(weight) || weight <= 0) {
+    return "Invalid weight";
   }
 
-  if (data.dropoffDate && data.pickupDate && data.pickupDate < data.dropoffDate) {
-    return "Pick-up date must be on or after drop-off date";
+  const dropoff = parseDateTime(data.dropoffDate, data.dropoffTime);
+  const pickup = parseDateTime(data.pickupDate, data.pickupTime);
+  if (!dropoff || !pickup) {
+    return "Invalid drop-off or pick-up date/time";
+  }
+  if (pickup <= dropoff) {
+    return "Pick-up must be after drop-off";
+  }
+
+  const quote = calculatePrice(
+    weight,
+    data.dropoffDate,
+    data.dropoffTime,
+    data.pickupDate,
+    data.pickupTime
+  );
+  if (!quote) {
+    return "Unable to calculate price";
+  }
+
+  if (!emailPattern.test(data.email)) {
+    return "Invalid email address";
   }
 
   if (!data.agreed) {

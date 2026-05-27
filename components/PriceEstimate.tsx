@@ -1,0 +1,63 @@
+import type { FormValues } from "@/lib/form-config";
+import { calculatePrice } from "@/lib/pricing";
+
+type Props = {
+  values: FormValues;
+  title: string;
+  incompleteHint: string;
+};
+
+export function PriceEstimate({ values, title, incompleteHint }: Props) {
+  const weight = Number(values.petWeightLb);
+  const quote = calculatePrice(
+    weight,
+    values.dropoffDate,
+    values.dropoffTime,
+    values.pickupDate,
+    values.pickupTime
+  );
+
+  if (!quote) {
+    const hasPartial =
+      values.petWeightLb ||
+      values.dropoffDate ||
+      values.dropoffTime ||
+      values.pickupDate ||
+      values.pickupTime;
+
+    if (!hasPartial) return null;
+
+    return (
+      <div className="rounded-xl border border-dashed border-orange-200 bg-orange-50/50 px-4 py-3 text-sm text-stone-600">
+        {incompleteHint}
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-4">
+      <h3 className="text-base font-semibold text-stone-900">{title}</h3>
+      <dl className="mt-3 space-y-2 text-sm text-stone-700">
+        <div className="flex justify-between gap-4">
+          <dt>Weight tier</dt>
+          <dd className="text-right font-medium">{quote.weightTier}</dd>
+        </div>
+        <div className="flex justify-between gap-4">
+          <dt>Stay duration</dt>
+          <dd className="text-right font-medium">{quote.totalHours} hours</dd>
+        </div>
+        <div className="flex justify-between gap-4">
+          <dt>Billable days</dt>
+          <dd className="text-right font-medium">{quote.billableDays}</dd>
+        </div>
+        <div className="flex justify-between gap-4 border-t border-orange-200 pt-2 text-base">
+          <dt className="font-semibold text-stone-900">Estimated total</dt>
+          <dd className="font-bold text-orange-700">
+            ${quote.totalPrice.toFixed(2)}
+          </dd>
+        </div>
+      </dl>
+      <p className="mt-2 text-xs text-stone-500">{quote.summary}</p>
+    </div>
+  );
+}

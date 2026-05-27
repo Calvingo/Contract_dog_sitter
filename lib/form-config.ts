@@ -16,8 +16,12 @@ export type FormValues = {
   wechatId: string;
   petName: string;
   petBreed: string;
+  petWeightLb: string;
   dropoffDate: string;
+  dropoffTime: string;
   pickupDate: string;
+  pickupTime: string;
+  prescreenNotes: string;
   agreed: boolean;
   signature: string;
   honeypot?: string;
@@ -30,7 +34,7 @@ export type SelectOption = {
 
 export type FormField = {
   name: keyof FormValues;
-  type: "text" | "email" | "tel" | "select" | "date";
+  type: "text" | "email" | "tel" | "select" | "date" | "time" | "number";
   label: string;
   required: boolean;
   options?: SelectOption[];
@@ -60,8 +64,12 @@ export const initialFormValues: FormValues = {
   wechatId: "",
   petName: "",
   petBreed: "",
+  petWeightLb: "",
   dropoffDate: "",
+  dropoffTime: "",
   pickupDate: "",
+  pickupTime: "",
+  prescreenNotes: "",
   agreed: false,
   signature: "",
   honeypot: "",
@@ -90,8 +98,7 @@ export const prescreenQuestions: PrescreenQuestion[] = [
   },
   {
     name: "prescreenPottyTraining",
-    label:
-      "Has your dog completed potty training? Does your dog have indoor accidents (urination/defecation)?",
+    label: "Does your dog have indoor accidents at home?",
   },
   {
     name: "prescreenSeparationAnxiety",
@@ -183,6 +190,13 @@ export const formFields: FormField[] = [
     section: "pet",
   },
   {
+    name: "petWeightLb",
+    type: "number",
+    label: "Weight (lbs)",
+    required: true,
+    section: "pet",
+  },
+  {
     name: "dropoffDate",
     type: "date",
     label: "Drop-off date",
@@ -190,9 +204,23 @@ export const formFields: FormField[] = [
     section: "pet",
   },
   {
+    name: "dropoffTime",
+    type: "time",
+    label: "Drop-off time (24h)",
+    required: true,
+    section: "pet",
+  },
+  {
     name: "pickupDate",
     type: "date",
     label: "Pick-up date",
+    required: true,
+    section: "pet",
+  },
+  {
+    name: "pickupTime",
+    type: "time",
+    label: "Pick-up time (24h)",
     required: true,
     section: "pet",
   },
@@ -265,6 +293,9 @@ export const allSubmittableFieldKeys: (keyof FormValues)[] = [
   "wechatId",
   "petName",
   "petBreed",
+  "petWeightLb",
   "dropoffDate",
+  "dropoffTime",
   "pickupDate",
+  "pickupTime",
 ];

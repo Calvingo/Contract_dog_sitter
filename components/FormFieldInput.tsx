@@ -40,7 +40,9 @@ export function FormFieldInput({
         </select>
       ) : (
         <input
-          type={field.type}
+          type={field.type === "number" ? "number" : field.type}
+          min={field.type === "number" ? 1 : undefined}
+          step={field.type === "number" ? 1 : undefined}
           required={field.required}
           value={value}
           onChange={(event) => onChange(field.name, event.target.value)}

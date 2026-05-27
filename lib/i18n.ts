@@ -29,7 +29,14 @@ export const ui = {
     "Please scroll to the bottom of the agreement to enable the checkbox.",
   agreementScrollRequired: "Please read the full agreement before agreeing.",
   wechatIdRequired: "Please enter your WeChat ID",
-  pickupBeforeDropoff: "Pick-up date must be on or after drop-off date",
+  pickupBeforeDropoff: "Pick-up must be after drop-off date and time",
+  invalidWeight: "Please enter a valid weight in lbs",
+  priceEstimateTitle: "Estimated boarding price",
+  priceEstimateIncomplete:
+    "Enter weight, drop-off, and pick-up date & time to see your estimate.",
+  prescreenNotesLabel: "Additional notes (optional)",
+  prescreenNotesPlaceholder:
+    "Special habits, health conditions, behavior concerns, etc.",
   successTitle: "Agreement Submitted!",
   successBody: "Thank you! A confirmation email has been sent to your inbox.",
   backHome: "Back to form",

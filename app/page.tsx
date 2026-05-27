@@ -6,7 +6,10 @@ import { AgreementPanel } from "@/components/AgreementPanel";
 import { FormFieldInput } from "@/components/FormFieldInput";
 import { FormSection } from "@/components/FormSection";
 import { PrescreenField } from "@/components/PrescreenField";
+import { PrescreenNotes } from "@/components/PrescreenNotes";
+import { PriceEstimate } from "@/components/PriceEstimate";
 import { SignaturePad } from "@/components/SignaturePad";
+import { parseDateTime } from "@/lib/pricing";
 import {
   formFields,
   initialFormValues,
@@ -72,12 +75,16 @@ export default function HomePage() {
       nextErrors.wechatId = ui.wechatIdRequired;
     }
 
-    if (
-      formValues.dropoffDate &&
-      formValues.pickupDate &&
-      formValues.pickupDate < formValues.dropoffDate
-    ) {
+    const weight = Number(formValues.petWeightLb);
+    if (formValues.petWeightLb && (!Number.isFinite(weight) || weight <= 0)) {
+      nextErrors.petWeightLb = ui.invalidWeight;
+    }
+
+    const dropoff = parseDateTime(formValues.dropoffDate, formValues.dropoffTime);
+    const pickup = parseDateTime(formValues.pickupDate, formValues.pickupTime);
+    if (dropoff && pickup && pickup <= dropoff) {
       nextErrors.pickupDate = ui.pickupBeforeDropoff;
+      nextErrors.pickupTime = ui.pickupBeforeDropoff;
     }
 
     if (!hasReadAgreement) {
@@ -177,6 +184,12 @@ export default function HomePage() {
                 onChange={handleFieldChange}
               />
             ))}
+            <PrescreenNotes
+              value={formValues.prescreenNotes}
+              label={ui.prescreenNotesLabel}
+              placeholder={ui.prescreenNotesPlaceholder}
+              onChange={handleFieldChange}
+            />
           </FormSection>
 
           <FormSection title={ui.sections.owner}>
@@ -212,6 +225,11 @@ export default function HomePage() {
                 onChange={handleFieldChange}
               />
             ))}
+            <PriceEstimate
+              values={formValues}
+              title={ui.priceEstimateTitle}
+              incompleteHint={ui.priceEstimateIncomplete}
+            />
           </FormSection>
 
           <FormSection title={ui.sections.agreement}>
