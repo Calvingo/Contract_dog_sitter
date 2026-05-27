@@ -1,4 +1,5 @@
-import { PDFDocument, StandardFonts, rgb, type PDFPage, type PDFFont } from "pdf-lib";
+import { PDFDocument, rgb, type PDFPage, type PDFFont } from "pdf-lib";
+import { embedPdfFonts } from "./pdf-fonts";
 import type { FormValues } from "./form-config";
 import {
   agreementSections,
@@ -37,18 +38,23 @@ type PdfContext = {
   bold: PDFFont;
 };
 
+/** Character-based wrap — works for English, Chinese, and mixed text */
 function wrapLines(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
-  const words = text.split(/\s+/);
   const lines: string[] = [];
   let current = "";
 
-  for (const word of words) {
-    const next = current ? `${current} ${word}` : word;
+  for (const ch of text) {
+    if (ch === "\n") {
+      if (current) lines.push(current);
+      current = "";
+      continue;
+    }
+    const next = current + ch;
     if (font.widthOfTextAtSize(next, size) <= maxWidth) {
       current = next;
     } else {
       if (current) lines.push(current);
-      current = word;
+      current = ch.trim() === "" ? "" : ch;
     }
   }
   if (current) lines.push(current);
@@ -124,8 +130,7 @@ export async function generateSubmissionPdf(
   signatureBuffer: Buffer
 ): Promise<Buffer> {
   const doc = await PDFDocument.create();
-  const font = await doc.embedFont(StandardFonts.Helvetica);
-  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const { font, bold } = await embedPdfFonts(doc);
 
   let ctx: PdfContext = {
     doc,
