@@ -7,8 +7,9 @@ export const BRAND_NAME = "Silicon Paws Retreat";
 
 /** Prefer IPv4 — avoids ENOTFOUND on some networks with broken IPv6 DNS */
 dns.setDefaultResultOrder("ipv4first");
-if (!process.env.DNS_SERVERS) {
-  dns.setServers(["8.8.8.8", "8.8.4.4", "1.1.1.1"]);
+/** Custom DNS servers break SMTP on Vercel — only opt in via DNS_SERVERS */
+if (process.env.DNS_SERVERS) {
+  dns.setServers(process.env.DNS_SERVERS.split(",").map((s) => s.trim()));
 }
 
 export function getEnv(name: string): string {

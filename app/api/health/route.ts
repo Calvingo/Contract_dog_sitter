@@ -1,6 +1,6 @@
 import { resolve4 } from "node:dns/promises";
 import { NextResponse } from "next/server";
-import { getAppBaseUrl } from "@/lib/app-url";
+import { getAppBaseUrlDiagnostics } from "@/lib/app-url";
 import { getSmtpHost } from "@/lib/mailer";
 
 /** Quick check that email/decision env is configured (no secrets exposed). */
@@ -20,9 +20,13 @@ export async function GET() {
       error instanceof Error ? error.message : "DNS lookup failed";
   }
 
+  const urlInfo = getAppBaseUrlDiagnostics();
+
   return NextResponse.json({
-    ok: true,
-    appBaseUrl: getAppBaseUrl(),
+    ok: !urlInfo.appBaseUrlMisconfigured,
+    appBaseUrl: urlInfo.appBaseUrl,
+    appBaseUrlSource: urlInfo.appBaseUrlSource,
+    appBaseUrlMisconfigured: urlInfo.appBaseUrlMisconfigured,
     smtpHost,
     smtpResolvable,
     smtpResolveError,
