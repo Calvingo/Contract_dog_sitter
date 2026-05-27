@@ -1,23 +1,22 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AgreementPanel } from "@/components/AgreementPanel";
 import { FormFieldInput } from "@/components/FormFieldInput";
 import { FormSection } from "@/components/FormSection";
-import { LanguageToggle } from "@/components/LanguageToggle";
+import { PrescreenField } from "@/components/PrescreenField";
 import { SignaturePad } from "@/components/SignaturePad";
 import {
   formFields,
   initialFormValues,
+  prescreenQuestions,
   type FormValues,
-  type Locale,
 } from "@/lib/form-config";
-import { getUiCopy } from "@/lib/i18n";
+import { ui } from "@/lib/i18n";
 
 export default function HomePage() {
   const router = useRouter();
-  const [locale, setLocale] = useState<Locale>("en");
   const [formValues, setFormValues] = useState<FormValues>(initialFormValues);
   const [errors, setErrors] = useState<Partial<Record<keyof FormValues, string>>>(
     {}
@@ -26,16 +25,11 @@ export default function HomePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasReadAgreement, setHasReadAgreement] = useState(false);
 
-  const ui = useMemo(() => getUiCopy(locale), [locale]);
-  const today = useMemo(
-    () =>
-      new Date().toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      }),
-    [locale]
-  );
+  const today = new Date().toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
 
   const ownerName = `${formValues.firstName} ${formValues.lastName}`.trim();
   const needsWechatId = formValues.backupContact === "wechat";
@@ -67,8 +61,23 @@ export default function HomePage() {
       }
     }
 
+    for (const question of prescreenQuestions) {
+      const value = String(formValues[question.name] ?? "").trim();
+      if (!value) {
+        nextErrors[question.name] = ui.required;
+      }
+    }
+
     if (needsWechatId && !formValues.wechatId.trim()) {
       nextErrors.wechatId = ui.wechatIdRequired;
+    }
+
+    if (
+      formValues.dropoffDate &&
+      formValues.pickupDate &&
+      formValues.pickupDate < formValues.dropoffDate
+    ) {
+      nextErrors.pickupDate = ui.pickupBeforeDropoff;
     }
 
     if (!hasReadAgreement) {
@@ -96,14 +105,14 @@ export default function HomePage() {
       const response = await fetch("/api/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...formValues, locale }),
+        body: JSON.stringify(formValues),
       });
 
       if (!response.ok) {
         throw new Error("Submit failed");
       }
 
-      router.push(`/success?lang=${locale}`);
+      router.push("/success");
     } catch {
       setSubmitError(ui.submitError);
     } finally {
@@ -127,12 +136,9 @@ export default function HomePage() {
   return (
     <main className="min-h-screen px-4 py-8">
       <div className="mx-auto flex max-w-2xl flex-col gap-6">
-        <header className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-stone-900">{ui.siteTitle}</h1>
-            <p className="mt-1 text-stone-600">{ui.siteSubtitle}</p>
-          </div>
-          <LanguageToggle locale={locale} onChange={setLocale} />
+        <header>
+          <h1 className="text-3xl font-bold text-stone-900">{ui.siteTitle}</h1>
+          <p className="mt-1 text-stone-600">{ui.siteSubtitle}</p>
         </header>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -151,9 +157,23 @@ export default function HomePage() {
               <FormFieldInput
                 key={field.name}
                 field={field}
-                locale={locale}
                 value={String(formValues[field.name] ?? "")}
                 error={errors[field.name]}
+                selectPlaceholder={ui.selectPlaceholder}
+                onChange={handleFieldChange}
+              />
+            ))}
+          </FormSection>
+
+          <FormSection title={ui.sections.prescreen}>
+            <p className="text-sm text-stone-600">{ui.sections.prescreenIntro}</p>
+            {prescreenQuestions.map((question) => (
+              <PrescreenField
+                key={question.name}
+                name={question.name}
+                label={question.label}
+                value={String(formValues[question.name] ?? "")}
+                error={errors[question.name]}
                 selectPlaceholder={ui.selectPlaceholder}
                 onChange={handleFieldChange}
               />
@@ -165,7 +185,6 @@ export default function HomePage() {
               <FormFieldInput
                 key={field.name}
                 field={field}
-                locale={locale}
                 value={String(formValues[field.name] ?? "")}
                 error={errors[field.name]}
                 selectPlaceholder={ui.selectPlaceholder}
@@ -175,7 +194,6 @@ export default function HomePage() {
             {needsWechatId && wechatField ? (
               <FormFieldInput
                 field={{ ...wechatField, required: true }}
-                locale={locale}
                 value={formValues.wechatId}
                 error={errors.wechatId}
                 selectPlaceholder={ui.selectPlaceholder}
@@ -189,7 +207,6 @@ export default function HomePage() {
               <FormFieldInput
                 key={field.name}
                 field={field}
-                locale={locale}
                 value={String(formValues[field.name] ?? "")}
                 error={errors[field.name]}
                 selectPlaceholder={ui.selectPlaceholder}
@@ -234,9 +251,7 @@ export default function HomePage() {
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-xl bg-orange-50/60 px-4 py-3 text-sm">
                 <div className="font-medium text-stone-700">{ui.ownerName}</div>
-                <div className="mt-1 text-stone-900">
-                  {ownerName || "—"}
-                </div>
+                <div className="mt-1 text-stone-900">{ownerName || "—"}</div>
               </div>
               <div className="rounded-xl bg-orange-50/60 px-4 py-3 text-sm">
                 <div className="font-medium text-stone-700">{ui.dogName}</div>

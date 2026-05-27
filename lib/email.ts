@@ -2,13 +2,13 @@ import nodemailer from "nodemailer";
 import type { FormValues } from "./form-config";
 import {
   formFields,
-  getFieldLabel,
   getOptionLabel,
+  prescreenQuestions,
+  yesNoOptions,
   type FormField,
 } from "./form-config";
 
-const BRAND_NAME_EN = "Silicon Paws Retreat";
-const BRAND_NAME_ZH = "Silicon Paws Retreat";
+const BRAND_NAME = "Silicon Paws Retreat";
 
 function getEnv(name: string): string {
   const value = process.env[name];
@@ -46,56 +46,50 @@ function escapeHtml(value: string): string {
     .replaceAll('"', "&quot;");
 }
 
-function formatFieldRows(data: FormValues): string {
-  const rows = formFields.map((field: FormField) => {
-    const rawValue = data[field.name];
-    const displayValue =
-      field.type === "select"
-        ? getOptionLabel(field.options, String(rawValue), data.locale)
-        : String(rawValue);
+function rowHtml(label: string, value: string): string {
+  return `<tr>
+    <td style="padding:8px 12px;border:1px solid #eee;font-weight:600;">${escapeHtml(label)}</td>
+    <td style="padding:8px 12px;border:1px solid #eee;">${escapeHtml(value)}</td>
+  </tr>`;
+}
 
-    return `<tr>
-      <td style="padding:8px 12px;border:1px solid #eee;font-weight:600;">${escapeHtml(getFieldLabel(field, data.locale))}</td>
-      <td style="padding:8px 12px;border:1px solid #eee;">${escapeHtml(displayValue)}</td>
-    </tr>`;
-  });
+function formatValue(field: FormField, data: FormValues): string {
+  const rawValue = data[field.name];
+  if (field.type === "select") {
+    return getOptionLabel(field.options, String(rawValue));
+  }
+  return String(rawValue);
+}
 
-  return `<table style="border-collapse:collapse;width:100%;max-width:640px;">${rows.join("")}</table>`;
+function formatAllRows(data: FormValues): string {
+  const prescreenRows = prescreenQuestions.map((q) =>
+    rowHtml(q.label, getOptionLabel(yesNoOptions, String(data[q.name])))
+  );
+
+  const formRows = formFields
+    .filter((f) => f.name !== "wechatId" || data.backupContact === "wechat")
+    .map((field) => rowHtml(field.label, formatValue(field, data)));
+
+  return `<table style="border-collapse:collapse;width:100%;max-width:640px;">${[...prescreenRows, ...formRows].join("")}</table>`;
 }
 
 function buildCustomerEmailHtml(data: FormValues): string {
   const ownerName = `${data.firstName} ${data.lastName}`.trim();
-  const submittedAt = new Date().toLocaleString(
-    data.locale === "zh" ? "zh-CN" : "en-US"
-  );
-
-  if (data.locale === "zh") {
-    return `
-      <div style="font-family:Arial,sans-serif;line-height:1.6;color:#333;">
-        <h2>【${BRAND_NAME_ZH}】您的寄养协议已提交成功</h2>
-        <p>亲爱的 ${escapeHtml(ownerName)}，</p>
-        <p>感谢您提交宠物寄养协议。我们已收到您的信息。</p>
-        <ul>
-          <li><strong>宠物名字：</strong>${escapeHtml(data.petName)}</li>
-          <li><strong>提交时间：</strong>${escapeHtml(submittedAt)}</li>
-        </ul>
-        <p>如有任何问题，请直接联系我们。</p>
-        <p>${BRAND_NAME_ZH}</p>
-      </div>
-    `;
-  }
+  const submittedAt = new Date().toLocaleString("en-US");
 
   return `
     <div style="font-family:Arial,sans-serif;line-height:1.6;color:#333;">
-      <h2>[${BRAND_NAME_EN}] Your boarding agreement has been submitted</h2>
+      <h2>[${BRAND_NAME}] Your boarding agreement has been submitted</h2>
       <p>Dear ${escapeHtml(ownerName)},</p>
       <p>Thank you for submitting your pet boarding agreement. We have received your information.</p>
       <ul>
         <li><strong>Pet name:</strong> ${escapeHtml(data.petName)}</li>
+        <li><strong>Drop-off:</strong> ${escapeHtml(data.dropoffDate)}</li>
+        <li><strong>Pick-up:</strong> ${escapeHtml(data.pickupDate)}</li>
         <li><strong>Submitted at:</strong> ${escapeHtml(submittedAt)}</li>
       </ul>
       <p>If you have any questions, please contact us directly.</p>
-      <p>${BRAND_NAME_EN}</p>
+      <p>${BRAND_NAME}</p>
     </div>
   `;
 }
@@ -110,7 +104,7 @@ function buildAdminEmailHtml(data: FormValues): string {
       <p><strong>Owner:</strong> ${escapeHtml(ownerName)}</p>
       <p><strong>Pet:</strong> ${escapeHtml(data.petName)}</p>
       <p><strong>Submitted at:</strong> ${escapeHtml(submittedAt)}</p>
-      ${formatFieldRows(data)}
+      ${formatAllRows(data)}
       <p>Signature attached as PNG.</p>
     </div>
   `;
@@ -124,18 +118,12 @@ export async function sendSubmissionEmails(
   const fromUser = getEnv("GMAIL_USER");
   const adminEmails = parseAdminEmails();
   const ownerName = `${data.firstName} ${data.lastName}`.trim();
-
-  const customerSubject =
-    data.locale === "zh"
-      ? `【${BRAND_NAME_ZH}】您的寄养协议已提交成功`
-      : `[${BRAND_NAME_EN}] Your boarding agreement has been submitted`;
-
-  const fromHeader = `"${BRAND_NAME_EN}" <${fromUser}>`;
+  const fromHeader = `"${BRAND_NAME}" <${fromUser}>`;
 
   await transporter.sendMail({
     from: fromHeader,
     to: data.email,
-    subject: customerSubject,
+    subject: `[${BRAND_NAME}] Your boarding agreement has been submitted`,
     html: buildCustomerEmailHtml(data),
   });
 

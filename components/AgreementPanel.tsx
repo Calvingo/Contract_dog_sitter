@@ -30,7 +30,6 @@ export function AgreementPanel({
       }
     };
 
-    // If content fits without scrolling, count as read.
     if (el.scrollHeight <= el.clientHeight + 4) {
       onReachBottom();
     }
@@ -49,12 +48,9 @@ export function AgreementPanel({
         className="max-h-80 overflow-y-auto rounded-xl border border-orange-100 bg-orange-50/40 p-4 text-sm leading-6 text-stone-700"
       >
         {agreementSections.map((section) => (
-          <div key={section.titleEn} className="mb-5 last:mb-0">
-            <h3 className="font-semibold text-stone-900">
-              {section.titleEn} / {section.titleZh}
-            </h3>
-            <p className="mt-2">{section.bodyEn}</p>
-            <p className="mt-2 text-stone-600">{section.bodyZh}</p>
+          <div key={section.title} className="mb-5 last:mb-0">
+            <h3 className="font-semibold text-stone-900">{section.title}</h3>
+            <p className="mt-2">{section.body}</p>
           </div>
         ))}
       </div>

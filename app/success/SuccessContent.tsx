@@ -1,16 +1,7 @@
-"use client";
-
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import type { Locale } from "@/lib/form-config";
-import { getUiCopy } from "@/lib/i18n";
+import { ui } from "@/lib/i18n";
 
 export default function SuccessContent() {
-  const searchParams = useSearchParams();
-  const lang = searchParams.get("lang");
-  const locale: Locale = lang === "zh" ? "zh" : "en";
-  const ui = getUiCopy(locale);
-
   return (
     <main className="flex min-h-screen items-center justify-center px-4 py-8">
       <div className="max-w-lg rounded-3xl bg-white p-8 text-center shadow-sm ring-1 ring-orange-100">

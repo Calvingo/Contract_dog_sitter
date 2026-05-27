@@ -1,4 +1,5 @@
 import type { FormValues } from "./form-config";
+import { allSubmittableFieldKeys } from "./form-config";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -7,19 +8,8 @@ export function validateSubmission(data: FormValues): string | null {
     return "Invalid submission";
   }
 
-  const requiredKeys: (keyof FormValues)[] = [
-    "firstTimeBooking",
-    "infoUpdates",
-    "firstName",
-    "lastName",
-    "email",
-    "phone",
-    "backupContact",
-    "petName",
-    "petBreed",
-  ];
-
-  for (const key of requiredKeys) {
+  for (const key of allSubmittableFieldKeys) {
+    if (key === "wechatId") continue;
     const value = data[key];
     if (typeof value !== "string" || !value.trim()) {
       return `Missing required field: ${key}`;
@@ -32,6 +22,10 @@ export function validateSubmission(data: FormValues): string | null {
 
   if (!emailPattern.test(data.email)) {
     return "Invalid email address";
+  }
+
+  if (data.dropoffDate && data.pickupDate && data.pickupDate < data.dropoffDate) {
+    return "Pick-up date must be on or after drop-off date";
   }
 
   if (!data.agreed) {
