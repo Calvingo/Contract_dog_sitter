@@ -89,6 +89,10 @@ export const backupContactOptions: SelectOption[] = [
 
 export const prescreenQuestions: PrescreenQuestion[] = [
   {
+    name: "prescreenSpayedNeutered",
+    label: "Is your dog spayed or neutered?",
+  },
+  {
     name: "prescreenAggression",
     label: "Does your dog show aggression?",
   },
@@ -107,10 +111,6 @@ export const prescreenQuestions: PrescreenQuestion[] = [
   {
     name: "prescreenFrequentBarking",
     label: "Does your dog bark frequently?",
-  },
-  {
-    name: "prescreenSpayedNeutered",
-    label: "Is your dog spayed or neutered?",
   },
   {
     name: "prescreenMedicalHistory",
@@ -262,7 +262,7 @@ export const agreementSections: AgreementSection[] = [
   },
   {
     title: "8. Special Care Fees",
-    body: "Additional fees may apply for repeated indoor accidents, diaper management, excessive cleaning, severe shedding, refusal to eat, or special feeding support.",
+    body: "$10 per day apply for repeated indoor accidents, diaper management, excessive cleaning, severe shedding, refusal to eat, or special feeding support.",
   },
   {
     title: "9. Governing Law",

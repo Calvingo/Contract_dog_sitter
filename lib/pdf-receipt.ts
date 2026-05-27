@@ -1,6 +1,7 @@
 import { PDFDocument, StandardFonts, rgb, type PDFPage, type PDFFont } from "pdf-lib";
 import type { FormValues } from "./form-config";
 import {
+  agreementSections,
   formFields,
   getOptionLabel,
   prescreenQuestions,
@@ -95,6 +96,28 @@ function drawRow(ctx: PdfContext, label: string, value: string): PdfContext {
   return drawLines(ctx, lines, 10, ctx.font);
 }
 
+function drawAgreementTerms(ctx: PdfContext): PdfContext {
+  let next = drawSectionTitle(ctx, "Pet Boarding & Daycare Agreement — Terms");
+  for (const section of agreementSections) {
+    next = ensureSpace(next, MARGIN + 20);
+    next = drawLines(
+      next,
+      wrapLines(section.title, next.bold, 11, CONTENT_WIDTH),
+      11,
+      next.bold,
+      rgb(0.2, 0.2, 0.2)
+    );
+    next = drawLines(
+      next,
+      wrapLines(section.body, next.font, 9, CONTENT_WIDTH),
+      9,
+      next.font
+    );
+    next = { ...next, y: next.y - 8 };
+  }
+  return next;
+}
+
 export async function generateSubmissionPdf(
   data: FormValues,
   quote: PriceBreakdown,
@@ -167,6 +190,8 @@ export async function generateSubmissionPdf(
     if (field.name === "wechatId" && data.backupContact !== "wechat") continue;
     ctx = drawRow(ctx, field.label, fieldDisplayValue(field, data));
   }
+
+  ctx = drawAgreementTerms(ctx);
 
   ctx = drawSectionTitle(ctx, "Owner Acknowledgment");
   ctx = drawLines(
