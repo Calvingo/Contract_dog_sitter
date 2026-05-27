@@ -174,7 +174,6 @@ export default function HomePage() {
                 label={question.label}
                 value={String(formValues[question.name] ?? "")}
                 error={errors[question.name]}
-                selectPlaceholder={ui.selectPlaceholder}
                 onChange={handleFieldChange}
               />
             ))}

@@ -61,16 +61,28 @@ function formatValue(field: FormField, data: FormValues): string {
   return String(rawValue);
 }
 
-function formatAllRows(data: FormValues): string {
-  const prescreenRows = prescreenQuestions.map((q) =>
+function formatTable(rows: string[]): string {
+  return `<table style="border-collapse:collapse;width:100%;max-width:640px;margin-bottom:20px;">${rows.join("")}</table>`;
+}
+
+function formatPrescreenSection(data: FormValues): string {
+  const rows = prescreenQuestions.map((q) =>
     rowHtml(q.label, getOptionLabel(yesNoOptions, String(data[q.name])))
   );
+  return `
+    <h3 style="margin:24px 0 8px;font-size:16px;">Pre-Screening</h3>
+    ${formatTable(rows)}
+  `;
+}
 
-  const formRows = formFields
+function formatFormSection(data: FormValues): string {
+  const rows = formFields
     .filter((f) => f.name !== "wechatId" || data.backupContact === "wechat")
     .map((field) => rowHtml(field.label, formatValue(field, data)));
-
-  return `<table style="border-collapse:collapse;width:100%;max-width:640px;">${[...prescreenRows, ...formRows].join("")}</table>`;
+  return `
+    <h3 style="margin:24px 0 8px;font-size:16px;">Booking &amp; Contact Details</h3>
+    ${formatTable(rows)}
+  `;
 }
 
 function buildCustomerEmailHtml(data: FormValues): string {
@@ -104,7 +116,8 @@ function buildAdminEmailHtml(data: FormValues): string {
       <p><strong>Owner:</strong> ${escapeHtml(ownerName)}</p>
       <p><strong>Pet:</strong> ${escapeHtml(data.petName)}</p>
       <p><strong>Submitted at:</strong> ${escapeHtml(submittedAt)}</p>
-      ${formatAllRows(data)}
+      ${formatPrescreenSection(data)}
+      ${formatFormSection(data)}
       <p>Signature attached as PNG.</p>
     </div>
   `;
