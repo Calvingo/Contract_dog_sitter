@@ -36,6 +36,8 @@ export const ui = {
   priceEstimateTitle: "Estimated boarding price",
   priceEstimateIncomplete:
     "Enter weight, drop-off, and pick-up date & time to see your estimate.",
+  priceEstimateHolidayNote:
+    "Holiday dates (+$10/day): Jun 15 – Sep 1 each year.",
   prescreenNotesLabel: "Additional notes (optional)",
   prescreenNotesPlaceholder:
     "Special habits, health conditions, behavior concerns, etc.",

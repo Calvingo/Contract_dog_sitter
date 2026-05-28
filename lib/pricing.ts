@@ -1,8 +1,19 @@
+import {
+  countHolidayDaysInStay,
+  formatHolidayRangesForDisplay,
+  HOLIDAY_FEE_PER_DAY,
+} from "./holidays";
+
 export type PriceBreakdown = {
   dailyRate: number;
   weightTier: string;
   billableDays: number;
   totalHours: number;
+  boardingSubtotal: number;
+  holidayDays: number;
+  holidayFeePerDay: number;
+  holidayFee: number;
+  holidayDates: string[];
   totalPrice: number;
   summary: string;
 };
@@ -50,6 +61,24 @@ export function calculateBillableDays(totalHours: number): number {
   return billableDays;
 }
 
+function buildSummary(
+  billableDays: number,
+  dailyRate: number,
+  boardingSubtotal: number,
+  holidayDays: number,
+  holidayFee: number,
+  totalPrice: number
+): string {
+  const daysLabel = billableDays === 1 ? "1 day" : `${billableDays} days`;
+  let summary = `${daysLabel} × $${dailyRate}/day = $${boardingSubtotal.toFixed(2)}`;
+  if (holidayFee > 0) {
+    const holLabel = holidayDays === 1 ? "1 holiday day" : `${holidayDays} holiday days`;
+    summary += ` + ${holLabel} × $${HOLIDAY_FEE_PER_DAY} = $${holidayFee.toFixed(2)}`;
+  }
+  summary += ` → Total $${totalPrice.toFixed(2)}`;
+  return summary;
+}
+
 export function calculatePrice(
   weightLb: number,
   dropoffDate: string,
@@ -67,18 +96,37 @@ export function calculatePrice(
   const totalHours = totalMs / (1000 * 60 * 60);
   const billableDays = calculateBillableDays(totalHours);
   const dailyRate = getDailyRate(weightLb);
-  const totalPrice = Math.round(billableDays * dailyRate * 100) / 100;
+  const boardingSubtotal =
+    Math.round(billableDays * dailyRate * 100) / 100;
 
-  const daysLabel =
-    billableDays === 1 ? "1 day" : `${billableDays} days`;
+  const { holidayDays, holidayDates } = countHolidayDaysInStay(
+    dropoffDate,
+    pickupDate
+  );
+  const holidayFee =
+    Math.round(holidayDays * HOLIDAY_FEE_PER_DAY * 100) / 100;
+  const totalPrice =
+    Math.round((boardingSubtotal + holidayFee) * 100) / 100;
 
   return {
     dailyRate,
     weightTier: getWeightTierLabel(weightLb),
     billableDays,
     totalHours: Math.round(totalHours * 10) / 10,
+    boardingSubtotal,
+    holidayDays,
+    holidayFeePerDay: HOLIDAY_FEE_PER_DAY,
+    holidayFee,
+    holidayDates,
     totalPrice,
-    summary: `${daysLabel} × $${dailyRate}/day = $${totalPrice.toFixed(2)}`,
+    summary: buildSummary(
+      billableDays,
+      dailyRate,
+      boardingSubtotal,
+      holidayDays,
+      holidayFee,
+      totalPrice
+    ),
   };
 }
 
@@ -92,3 +140,5 @@ export function formatDateTime(date: string, time: string): string {
     hour12: false,
   });
 }
+
+export { formatHolidayRangesForDisplay, HOLIDAY_FEE_PER_DAY };

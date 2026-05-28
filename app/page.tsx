@@ -229,6 +229,7 @@ export default function HomePage() {
               values={formValues}
               title={ui.priceEstimateTitle}
               incompleteHint={ui.priceEstimateIncomplete}
+              holidayNote={ui.priceEstimateHolidayNote}
             />
           </FormSection>
 

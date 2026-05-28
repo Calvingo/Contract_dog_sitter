@@ -5,9 +5,10 @@ type Props = {
   values: FormValues;
   title: string;
   incompleteHint: string;
+  holidayNote: string;
 };
 
-export function PriceEstimate({ values, title, incompleteHint }: Props) {
+export function PriceEstimate({ values, title, incompleteHint, holidayNote }: Props) {
   const weight = Number(values.petWeightLb);
   const quote = calculatePrice(
     weight,
@@ -50,6 +51,24 @@ export function PriceEstimate({ values, title, incompleteHint }: Props) {
           <dt>Billable days</dt>
           <dd className="text-right font-medium">{quote.billableDays}</dd>
         </div>
+        <div className="flex justify-between gap-4">
+          <dt>Boarding subtotal</dt>
+          <dd className="text-right font-medium">
+            ${quote.boardingSubtotal.toFixed(2)}
+          </dd>
+        </div>
+        {quote.holidayFee > 0 ? (
+          <div className="flex justify-between gap-4">
+            <dt>
+              Holiday fee ({quote.holidayDays}{" "}
+              {quote.holidayDays === 1 ? "day" : "days"} × $
+              {quote.holidayFeePerDay})
+            </dt>
+            <dd className="text-right font-medium">
+              ${quote.holidayFee.toFixed(2)}
+            </dd>
+          </div>
+        ) : null}
         <div className="flex justify-between gap-4 border-t border-orange-200 pt-2 text-base">
           <dt className="font-semibold text-stone-900">Estimated total</dt>
           <dd className="font-bold text-orange-700">
@@ -58,6 +77,7 @@ export function PriceEstimate({ values, title, incompleteHint }: Props) {
         </div>
       </dl>
       <p className="mt-2 text-xs text-stone-500">{quote.summary}</p>
+      <p className="mt-2 text-xs text-stone-500">{holidayNote}</p>
     </div>
   );
 }

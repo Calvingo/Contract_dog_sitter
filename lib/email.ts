@@ -94,15 +94,25 @@ function formatFormSection(data: FormValues): string {
 }
 
 function formatPricingSection(quote: PriceBreakdown): string {
+  const rows = [
+    rowHtml("Weight tier", quote.weightTier),
+    rowHtml("Stay duration", `${quote.totalHours} hours`),
+    rowHtml("Billable days", String(quote.billableDays)),
+    rowHtml("Daily rate", `$${quote.dailyRate}`),
+    rowHtml("Boarding subtotal", `$${quote.boardingSubtotal.toFixed(2)}`),
+  ];
+  if (quote.holidayFee > 0) {
+    rows.push(
+      rowHtml(
+        "Holiday fee",
+        `$${quote.holidayFee.toFixed(2)} (${quote.holidayDays} day(s) × $${quote.holidayFeePerDay})`
+      )
+    );
+  }
+  rows.push(rowHtml("Estimated total", `$${quote.totalPrice.toFixed(2)}`));
   return `
     <h3 style="margin:24px 0 8px;font-size:16px;">Price Estimate</h3>
-    ${formatTable([
-      rowHtml("Weight tier", quote.weightTier),
-      rowHtml("Stay duration", `${quote.totalHours} hours`),
-      rowHtml("Billable days", String(quote.billableDays)),
-      rowHtml("Daily rate", `$${quote.dailyRate}`),
-      rowHtml("Estimated total", `$${quote.totalPrice.toFixed(2)}`),
-    ])}
+    ${formatTable(rows)}
   `;
 }
 

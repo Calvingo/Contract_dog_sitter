@@ -174,6 +174,14 @@ export async function generateSubmissionPdf(
   ctx = drawRow(ctx, "Stay duration", `${quote.totalHours} hours`);
   ctx = drawRow(ctx, "Billable days", String(quote.billableDays));
   ctx = drawRow(ctx, "Daily rate", `$${quote.dailyRate}`);
+  ctx = drawRow(ctx, "Boarding subtotal", `$${quote.boardingSubtotal.toFixed(2)}`);
+  if (quote.holidayFee > 0) {
+    ctx = drawRow(
+      ctx,
+      "Holiday fee",
+      `$${quote.holidayFee.toFixed(2)} (${quote.holidayDays} day(s) × $${quote.holidayFeePerDay})`
+    );
+  }
   ctx = drawRow(ctx, "Estimated total", `$${quote.totalPrice.toFixed(2)}`);
 
   ctx = drawSectionTitle(ctx, "Pre-Screening");
