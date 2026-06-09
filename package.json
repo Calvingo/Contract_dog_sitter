@@ -5,16 +5,24 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "vercel-build": "prisma generate && prisma migrate deploy && next build",
     "start": "next start",
     "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:studio": "prisma studio",
     "test:decision-urls": "node scripts/test-decision.mjs",
     "check:smtp": "node scripts/check-smtp.mjs"
   },
   "dependencies": {
     "@pdf-lib/fontkit": "^1.1.1",
+    "@prisma/client": "^6.19.3",
     "next": "^15.3.3",
     "nodemailer": "^6.10.1",
     "pdf-lib": "^1.17.1",
+    "prisma": "^6.19.3",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-signature-canvas": "^1.0.7"

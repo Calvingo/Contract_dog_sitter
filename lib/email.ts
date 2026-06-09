@@ -1,3 +1,4 @@
+import { EmailStatus, EmailType } from "@prisma/client";
 import type { FormValues } from "./form-config";
 import {
   formFields,
@@ -21,6 +22,7 @@ import {
   getEnv,
   parseAdminEmails,
 } from "./mailer";
+import { logEmail } from "./email-log";
 
 export { sendMail } from "./mailer";
 
@@ -151,17 +153,18 @@ function decisionButtonRow(
   </tr>`;
 }
 
-function buildAdminDecisionButtons(data: FormValues): string {
+function buildAdminDecisionButtons(data: FormValues, submissionId?: string): string {
   const tokenBase = {
+    submissionId,
     email: data.email,
     firstName: data.firstName,
     lastName: data.lastName,
     petName: data.petName,
   };
 
-  const acceptToken = createDecisionToken(tokenBase);
-  const rejectToken = createDecisionToken(tokenBase);
-  const meetToken = createDecisionToken(tokenBase);
+  const acceptToken = createDecisionToken({ ...tokenBase, action: "accept" });
+  const rejectToken = createDecisionToken({ ...tokenBase, action: "reject" });
+  const meetToken = createDecisionToken({ ...tokenBase, action: "meet_greet" });
   const baseUrl = getAppBaseUrl();
 
   return `
@@ -195,7 +198,11 @@ function buildCustomerEmailHtml(data: FormValues, quote: PriceBreakdown): string
   `;
 }
 
-function buildAdminEmailHtml(data: FormValues, quote: PriceBreakdown): string {
+function buildAdminEmailHtml(
+  data: FormValues,
+  quote: PriceBreakdown,
+  submissionId?: string
+): string {
   const ownerName = `${data.firstName} ${data.lastName}`.trim();
   const submittedAt = new Date().toLocaleString("en-US");
 
@@ -206,7 +213,7 @@ function buildAdminEmailHtml(data: FormValues, quote: PriceBreakdown): string {
       <p><strong>Email:</strong> ${escapeHtml(data.email)}</p>
       <p><strong>Pet:</strong> ${escapeHtml(data.petName)}</p>
       <p><strong>Submitted at:</strong> ${escapeHtml(submittedAt)}</p>
-      ${buildAdminDecisionButtons(data)}
+      ${buildAdminDecisionButtons(data, submissionId)}
       ${formatPricingSection(quote)}
       ${formatPrescreenSection(data)}
       ${formatFormSection(data)}
@@ -217,7 +224,8 @@ function buildAdminEmailHtml(data: FormValues, quote: PriceBreakdown): string {
 
 export async function sendSubmissionEmails(
   data: FormValues,
-  signatureBuffer: Buffer
+  signatureBuffer: Buffer,
+  submissionId?: string
 ) {
   const quote = getQuote(data);
   if (!quote) {
@@ -232,36 +240,77 @@ export async function sendSubmissionEmails(
   const ownerName = `${data.firstName} ${data.lastName}`.trim();
   const fromHeader = `"${BRAND_NAME}" <${fromUser}>`;
 
-  await sendMail({
-    from: fromHeader,
-    to: data.email,
-    subject: `[${BRAND_NAME}] Your signed agreement — ${data.petName}`,
-    html: buildCustomerEmailHtml(data, quote),
-    attachments: [
-      {
-        filename: pdfName,
-        content: pdfBuffer,
-        contentType: "application/pdf",
-      },
-    ],
-  });
+  const customerSubject = `[${BRAND_NAME}] Your signed agreement — ${data.petName}`;
+  const adminSubject = `[New Submission] ${ownerName} - ${data.petName} — $${quote.totalPrice.toFixed(2)}`;
 
-  await sendMail({
-    from: fromHeader,
-    to: adminEmails,
-    subject: `[New Submission] ${ownerName} - ${data.petName} — $${quote.totalPrice.toFixed(2)}`,
-    html: buildAdminEmailHtml(data, quote),
-    attachments: [
-      {
-        filename: `signature-${Date.now()}.png`,
-        content: signatureBuffer,
-        contentType: "image/png",
-      },
-      {
-        filename: pdfName,
-        content: pdfBuffer,
-        contentType: "application/pdf",
-      },
-    ],
-  });
+  try {
+    await sendMail({
+      from: fromHeader,
+      to: data.email,
+      subject: customerSubject,
+      html: buildCustomerEmailHtml(data, quote),
+      attachments: [
+        {
+          filename: pdfName,
+          content: pdfBuffer,
+          contentType: "application/pdf",
+        },
+      ],
+    });
+    await logEmail({
+      submissionId,
+      type: EmailType.CUSTOMER_RECEIPT,
+      to: data.email,
+      subject: customerSubject,
+      status: EmailStatus.SENT,
+    });
+  } catch (error) {
+    await logEmail({
+      submissionId,
+      type: EmailType.CUSTOMER_RECEIPT,
+      to: data.email,
+      subject: customerSubject,
+      status: EmailStatus.FAILED,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+
+  try {
+    await sendMail({
+      from: fromHeader,
+      to: adminEmails,
+      subject: adminSubject,
+      html: buildAdminEmailHtml(data, quote, submissionId),
+      attachments: [
+        {
+          filename: `signature-${Date.now()}.png`,
+          content: signatureBuffer,
+          contentType: "image/png",
+        },
+        {
+          filename: pdfName,
+          content: pdfBuffer,
+          contentType: "application/pdf",
+        },
+      ],
+    });
+    await logEmail({
+      submissionId,
+      type: EmailType.ADMIN_NOTIFICATION,
+      to: adminEmails,
+      subject: adminSubject,
+      status: EmailStatus.SENT,
+    });
+  } catch (error) {
+    await logEmail({
+      submissionId,
+      type: EmailType.ADMIN_NOTIFICATION,
+      to: adminEmails,
+      subject: adminSubject,
+      status: EmailStatus.FAILED,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
 }

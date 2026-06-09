@@ -2,6 +2,8 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { getAppBaseUrl } from "./app-url";
 
 export type DecisionTokenPayload = {
+  submissionId?: string;
+  action?: string;
   email: string;
   firstName: string;
   lastName: string;
@@ -58,7 +60,7 @@ export function verifyDecisionToken(token: string): DecisionTokenPayload | null 
     ) as DecisionTokenPayload;
 
     if (!payload.exp || payload.exp < Date.now()) return null;
-    if (!payload.email || !payload.petName) return null;
+    if (!payload.submissionId && (!payload.email || !payload.petName)) return null;
 
     return payload;
   } catch {

@@ -3,25 +3,7 @@ import {
   decisionResultMessage,
   processDecision,
 } from "@/lib/decision-handler";
-
-function resultPage(title: string, message: string, success: boolean): string {
-  const color = success ? "#16a34a" : "#dc2626";
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>${title}</title>
-</head>
-<body style="font-family:Arial,sans-serif;background:#fff5f0;margin:0;padding:40px 20px;">
-  <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:16px;padding:32px;box-shadow:0 1px 3px rgba(0,0,0,.08);text-align:center;">
-    <div style="font-size:48px;color:${color};margin-bottom:16px;">${success ? "✓" : "✕"}</div>
-    <h1 style="font-size:22px;color:#1c1917;margin:0 0 12px;">${title}</h1>
-    <p style="color:#57534e;line-height:1.6;margin:0;">${message}</p>
-  </div>
-</body>
-</html>`;
-}
+import { resultPage, schedulePage } from "@/lib/decision-result-html";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -45,6 +27,21 @@ export async function GET(request: Request) {
         action: result.action,
         to: result.email,
       });
+    }
+
+    if (result.ok && result.requiresScheduling) {
+      return new NextResponse(
+        schedulePage({
+          title,
+          message,
+          token: result.token,
+          alreadySent: result.alreadySent,
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        }
+      );
     }
 
     return new NextResponse(resultPage(title, message, success), {

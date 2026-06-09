@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { FormValues } from "@/lib/form-config";
 import { sendSubmissionEmails } from "@/lib/email";
+import { createSubmissionRecord } from "@/lib/services/submission-service";
 import { signatureToBuffer, validateSubmission } from "@/lib/validate";
 
 export async function POST(request: Request) {
@@ -13,9 +14,10 @@ export async function POST(request: Request) {
     }
 
     const signatureBuffer = signatureToBuffer(data.signature);
-    await sendSubmissionEmails(data, signatureBuffer);
+    const { submission } = await createSubmissionRecord(data);
+    await sendSubmissionEmails(data, signatureBuffer, submission.id);
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, submissionId: submission.id });
   } catch (error) {
     console.error("Submit error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

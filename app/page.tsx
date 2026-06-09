@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AgreementPanel } from "@/components/AgreementPanel";
 import { FormFieldInput } from "@/components/FormFieldInput";
@@ -18,6 +18,27 @@ import {
 } from "@/lib/form-config";
 import { ui } from "@/lib/i18n";
 
+type PrefillPet = {
+  id: string;
+  name: string;
+  breed: string;
+  weightLb: number;
+  lastSubmittedAt?: string | null;
+};
+
+type PrefillResponse = {
+  authenticated: boolean;
+  customer: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    backupContact: string;
+    wechatId: string;
+  };
+  pets: PrefillPet[];
+};
+
 export default function HomePage() {
   const router = useRouter();
   const [formValues, setFormValues] = useState<FormValues>(initialFormValues);
@@ -27,6 +48,10 @@ export default function HomePage() {
   const [submitError, setSubmitError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasReadAgreement, setHasReadAgreement] = useState(false);
+  const [returningEmail, setReturningEmail] = useState("");
+  const [returningStatus, setReturningStatus] = useState("");
+  const [prefill, setPrefill] = useState<PrefillResponse | null>(null);
+  const [selectedPetId, setSelectedPetId] = useState("");
 
   const today = new Date().toLocaleDateString("en-US", {
     year: "numeric",
@@ -36,6 +61,55 @@ export default function HomePage() {
 
   const ownerName = `${formValues.firstName} ${formValues.lastName}`.trim();
   const needsWechatId = formValues.backupContact === "wechat";
+
+  const applyCustomerPrefill = useCallback(
+    (customer: PrefillResponse["customer"]) => {
+      setFormValues((current) => ({
+        ...current,
+        firstTimeBooking: "no",
+        firstName: customer.firstName,
+        lastName: customer.lastName,
+        email: customer.email,
+        phone: customer.phone,
+        backupContact: customer.backupContact,
+        wechatId: customer.wechatId,
+      }));
+    },
+    []
+  );
+
+  const applyPetPrefill = useCallback((pet: PrefillPet) => {
+    setSelectedPetId(pet.id);
+    setFormValues((current) => ({
+      ...current,
+      petName: pet.name,
+      petBreed: pet.breed,
+      petWeightLb: String(pet.weightLb),
+    }));
+  }, []);
+
+  const loadPrefill = useCallback(async () => {
+    try {
+      const response = await fetch("/api/me/prefill");
+      if (!response.ok) return;
+
+      const data = (await response.json()) as PrefillResponse;
+      if (!data.authenticated) return;
+
+      setPrefill(data);
+      applyCustomerPrefill(data.customer);
+      if (data.pets.length === 1) {
+        applyPetPrefill(data.pets[0]);
+      }
+      setReturningStatus("Saved profile loaded.");
+    } catch {
+      // Prefill is optional; leave the blank form usable.
+    }
+  }, [applyCustomerPrefill, applyPetPrefill]);
+
+  useEffect(() => {
+    void loadPrefill();
+  }, [loadPrefill]);
 
   const handleFieldChange = (name: keyof FormValues, value: string) => {
     setFormValues((current) => {
@@ -52,6 +126,31 @@ export default function HomePage() {
   const handleReachBottom = useCallback(() => {
     setHasReadAgreement(true);
   }, []);
+
+  const handleReturningLoginRequest = async (
+    event: React.FormEvent<HTMLFormElement>
+  ) => {
+    event.preventDefault();
+    setReturningStatus("Sending secure link...");
+
+    try {
+      const response = await fetch("/api/auth/request-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: returningEmail }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Login request failed");
+      }
+
+      setReturningStatus(
+        "If we have a saved profile for that email, a secure link has been sent."
+      );
+    } catch {
+      setReturningStatus("Could not send the secure link. Please try again.");
+    }
+  };
 
   const validateClient = (): boolean => {
     const nextErrors: Partial<Record<keyof FormValues, string>> = {};
@@ -147,6 +246,72 @@ export default function HomePage() {
           <h1 className="text-3xl font-bold text-stone-900">{ui.siteTitle}</h1>
           <p className="mt-1 text-stone-600">{ui.siteSubtitle}</p>
         </header>
+
+        <section className="space-y-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-orange-100">
+          <div>
+            <h2 className="text-lg font-semibold text-stone-800">
+              Returning customer
+            </h2>
+            <p className="mt-1 text-sm text-stone-600">
+              Use your email to load saved owner and pet details.
+            </p>
+          </div>
+
+          {prefill ? (
+            <div className="space-y-3">
+              <p className="text-sm font-medium text-green-700">
+                Welcome back, {prefill.customer.firstName}.
+              </p>
+              {prefill.pets.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-stone-700">
+                    Choose a saved pet
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {prefill.pets.map((pet) => (
+                      <button
+                        key={pet.id}
+                        type="button"
+                        onClick={() => applyPetPrefill(pet)}
+                        className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${
+                          selectedPetId === pet.id
+                            ? "border-orange-500 bg-orange-600 text-white"
+                            : "border-orange-200 bg-white text-stone-700 hover:bg-orange-50"
+                        }`}
+                      >
+                        {pet.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <form
+              onSubmit={handleReturningLoginRequest}
+              className="grid gap-3 sm:grid-cols-[1fr_auto]"
+            >
+              <input
+                type="email"
+                value={returningEmail}
+                onChange={(event) => setReturningEmail(event.target.value)}
+                placeholder="Email address"
+                className="w-full rounded-xl border border-orange-100 bg-white px-4 py-3 text-stone-800 outline-none transition placeholder:text-stone-400 focus:border-orange-300 focus:ring-2 focus:ring-orange-100"
+                required
+              />
+              <button
+                type="submit"
+                className="rounded-xl bg-stone-900 px-5 py-3 text-sm font-semibold text-white hover:bg-stone-800"
+              >
+                Send link
+              </button>
+            </form>
+          )}
+
+          {returningStatus ? (
+            <p className="text-sm text-stone-600">{returningStatus}</p>
+          ) : null}
+        </section>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <input

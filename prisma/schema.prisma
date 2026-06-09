@@ -1,0 +1,138 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum SubmissionStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  MEET_GREET_REQUESTED
+  CANCELLED
+}
+
+enum DecisionAction {
+  ACCEPT
+  REJECT
+  MEET_GREET
+}
+
+enum EmailType {
+  CUSTOMER_RECEIPT
+  ADMIN_NOTIFICATION
+  DECISION_ACCEPT
+  DECISION_REJECT
+  DECISION_MEET_GREET
+  LOGIN_LINK
+}
+
+enum EmailStatus {
+  SENT
+  FAILED
+}
+
+model Customer {
+  id            String       @id @default(cuid())
+  firstName     String
+  lastName      String
+  email         String       @unique
+  phone         String
+  backupContact String
+  wechatId      String?
+  lastSeenAt    DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  pets          Pet[]
+  submissions   Submission[]
+
+  @@index([email])
+}
+
+model Pet {
+  id          String       @id @default(cuid())
+  customerId  String
+  name        String
+  breed       String
+  weightLb    Float
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  customer    Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  submissions Submission[]
+
+  @@unique([customerId, name])
+  @@index([customerId])
+}
+
+model Submission {
+  id                 String           @id @default(cuid())
+  customerId         String
+  petId              String
+  status             SubmissionStatus @default(PENDING)
+  firstTimeBooking   String
+  dropoffAt          DateTime
+  pickupAt           DateTime
+  quotedTotal        Decimal          @db.Decimal(10, 2)
+  quotedBreakdown    Json
+  prescreenAnswers   Json
+  prescreenNotes     String?          @db.Text
+  agreementVersion   String           @default("2026-05")
+  agreedAt           DateTime
+  signatureData      String           @db.Text
+  customerSnapshot   Json
+  petSnapshot        Json
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  customer           Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  pet                Pet              @relation(fields: [petId], references: [id], onDelete: Restrict)
+  decisionEvents     DecisionEvent[]
+  emailLogs          EmailLog[]
+
+  @@index([customerId])
+  @@index([petId])
+  @@index([status, createdAt])
+}
+
+model DecisionEvent {
+  id           String         @id @default(cuid())
+  submissionId String
+  action       DecisionAction
+  actorEmail   String?
+  message      String?        @db.Text
+  emailSentAt  DateTime?
+  createdAt    DateTime       @default(now())
+  submission   Submission     @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId])
+}
+
+model EmailLog {
+  id           String      @id @default(cuid())
+  submissionId String?
+  type         EmailType
+  to           String
+  subject      String
+  status       EmailStatus
+  error        String?     @db.Text
+  createdAt    DateTime    @default(now())
+  submission   Submission? @relation(fields: [submissionId], references: [id], onDelete: SetNull)
+
+  @@index([submissionId])
+  @@index([type, createdAt])
+}
+
+model LoginToken {
+  id        String    @id @default(cuid())
+  email     String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([email])
+  @@index([expiresAt])
+}

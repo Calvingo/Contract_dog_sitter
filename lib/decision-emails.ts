@@ -4,8 +4,20 @@ import type { DecisionTokenPayload } from "./token";
 
 export type DecisionAction = "accept" | "reject" | "meet_greet";
 
+export type DecisionEmailOptions = {
+  meetGreetAt?: string;
+};
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
 function ownerName(payload: DecisionTokenPayload): string {
-  return `${payload.firstName} ${payload.lastName}`.trim();
+  return escapeHtml(`${payload.firstName} ${payload.lastName}`.trim());
 }
 
 function contactsHtml(): string {
@@ -19,14 +31,16 @@ function contactsHtml(): string {
 
 function buildDecisionEmail(
   payload: DecisionTokenPayload,
-  action: DecisionAction
+  action: DecisionAction,
+  options: DecisionEmailOptions = {}
 ): { subject: string; html: string } {
   const name = ownerName(payload);
-  const pet = payload.petName;
+  const pet = escapeHtml(payload.petName);
+  const petSubject = payload.petName;
 
   if (action === "accept") {
     return {
-      subject: `[${BRAND_NAME}] Your booking request has been accepted — ${pet}`,
+      subject: `[${BRAND_NAME}] Your booking request has been accepted — ${petSubject}`,
       html: `
         <div style="font-family:Arial,sans-serif;line-height:1.6;color:#333;">
           <h2>Booking Accepted</h2>
@@ -42,7 +56,7 @@ function buildDecisionEmail(
 
   if (action === "reject") {
     return {
-      subject: `[${BRAND_NAME}] Update on your booking request — ${pet}`,
+      subject: `[${BRAND_NAME}] Update on your booking request — ${petSubject}`,
       html: `
         <div style="font-family:Arial,sans-serif;line-height:1.6;color:#333;">
           <h2>Booking Update</h2>
@@ -56,14 +70,19 @@ function buildDecisionEmail(
     };
   }
 
+  const scheduleLine = options.meetGreetAt
+    ? `<p><strong>Suggested time:</strong> ${escapeHtml(options.meetGreetAt)}</p>`
+    : "";
+
   return {
-    subject: `[${BRAND_NAME}] Let's schedule a meet & greet — ${pet}`,
+    subject: `[${BRAND_NAME}] Let's schedule a meet & greet — ${petSubject}`,
     html: `
       <div style="font-family:Arial,sans-serif;line-height:1.6;color:#333;">
         <h2>Meet &amp; Greet</h2>
         <p>Dear ${name},</p>
         <p>Thank you for submitting your request for <strong>${pet}</strong>. We would like to schedule a <strong>meet &amp; greet</strong> before confirming your booking.</p>
-        <p>Please contact us to arrange a convenient time:</p>
+        ${scheduleLine}
+        <p>Please contact us if this time does not work for you:</p>
         ${contactsHtml()}
         <p>We look forward to meeting you and ${pet}!<br/>${BRAND_NAME}</p>
       </div>
@@ -73,10 +92,11 @@ function buildDecisionEmail(
 
 export async function sendDecisionEmail(
   payload: DecisionTokenPayload,
-  action: DecisionAction
+  action: DecisionAction,
+  options: DecisionEmailOptions = {}
 ) {
   const fromUser = getEnv("GMAIL_USER");
-  const { subject, html } = buildDecisionEmail(payload, action);
+  const { subject, html } = buildDecisionEmail(payload, action, options);
 
   await sendMail({
     from: `"${BRAND_NAME}" <${fromUser}>`,
