@@ -1,11 +1,10 @@
-/** Summer holiday season — applies every year, inclusive */
-export const HOLIDAY_SEASON = {
-  startMonth: 6,
-  startDay: 15,
-  endMonth: 9,
-  endDay: 1,
-  label: "Jun 15 – Sep 1",
-};
+export const HOLIDAY_RANGES = [
+  { start: "2026-06-19", end: "2026-06-21", label: "Jun 19–21, 2026" },
+  { start: "2026-07-03", end: "2026-07-05", label: "Jul 3–5, 2026" },
+  { start: "2026-09-04", end: "2026-09-07", label: "Sep 4–7, 2026" },
+  { start: "2026-11-26", end: "2026-11-29", label: "Nov 26–29, 2026" },
+  { start: "2026-12-24", end: "2027-01-03", label: "Dec 24, 2026 – Jan 3, 2027" },
+] as const;
 
 export const HOLIDAY_FEE_PER_DAY = 10;
 
@@ -21,19 +20,16 @@ function toDateOnlyString(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-function monthDayValue(month: number, day: number): number {
-  return month * 100 + day;
-}
-
 export function isHolidayDate(dateStr: string): boolean {
   const date = parseDateOnly(dateStr);
-  const current = monthDayValue(date.getMonth() + 1, date.getDate());
-  const start = monthDayValue(HOLIDAY_SEASON.startMonth, HOLIDAY_SEASON.startDay);
-  const end = monthDayValue(HOLIDAY_SEASON.endMonth, HOLIDAY_SEASON.endDay);
-  return current >= start && current <= end;
+  return HOLIDAY_RANGES.some((range) => {
+    const start = parseDateOnly(range.start);
+    const end = parseDateOnly(range.end);
+    return date >= start && date <= end;
+  });
 }
 
-/** Calendar days from drop-off through pick-up (inclusive) that fall on a holiday */
+/** Calendar days from drop-off through pick-up (inclusive) that trigger holiday rate. */
 export function countHolidayDaysInStay(
   dropoffDate: string,
   pickupDate: string
@@ -59,5 +55,5 @@ export function countHolidayDaysInStay(
 }
 
 export function formatHolidayRangesForDisplay(): string {
-  return `${HOLIDAY_SEASON.label} (each year)`;
+  return HOLIDAY_RANGES.map((range) => range.label).join("; ");
 }

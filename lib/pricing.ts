@@ -65,15 +65,13 @@ function buildSummary(
   billableDays: number,
   dailyRate: number,
   boardingSubtotal: number,
-  holidayDays: number,
   holidayFee: number,
   totalPrice: number
 ): string {
   const daysLabel = billableDays === 1 ? "1 day" : `${billableDays} days`;
   let summary = `${daysLabel} × $${dailyRate}/day = $${boardingSubtotal.toFixed(2)}`;
   if (holidayFee > 0) {
-    const holLabel = holidayDays === 1 ? "1 holiday day" : `${holidayDays} holiday days`;
-    summary += ` + ${holLabel} × $${HOLIDAY_FEE_PER_DAY} = $${holidayFee.toFixed(2)}`;
+    summary += ` + holiday rate for entire stay (${daysLabel} × $${HOLIDAY_FEE_PER_DAY}/day) = $${holidayFee.toFixed(2)}`;
   }
   summary += ` → Total $${totalPrice.toFixed(2)}`;
   return summary;
@@ -103,8 +101,9 @@ export function calculatePrice(
     dropoffDate,
     pickupDate
   );
+  const holidayBillableDays = holidayDays > 0 ? billableDays : 0;
   const holidayFee =
-    Math.round(holidayDays * HOLIDAY_FEE_PER_DAY * 100) / 100;
+    Math.round(holidayBillableDays * HOLIDAY_FEE_PER_DAY * 100) / 100;
   const totalPrice =
     Math.round((boardingSubtotal + holidayFee) * 100) / 100;
 
@@ -114,7 +113,7 @@ export function calculatePrice(
     billableDays,
     totalHours: Math.round(totalHours * 10) / 10,
     boardingSubtotal,
-    holidayDays,
+    holidayDays: holidayBillableDays,
     holidayFeePerDay: HOLIDAY_FEE_PER_DAY,
     holidayFee,
     holidayDates,
@@ -123,7 +122,6 @@ export function calculatePrice(
       billableDays,
       dailyRate,
       boardingSubtotal,
-      holidayDays,
       holidayFee,
       totalPrice
     ),

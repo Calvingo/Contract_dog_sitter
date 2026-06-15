@@ -179,7 +179,7 @@ export async function generateSubmissionPdf(
     ctx = drawRow(
       ctx,
       "Holiday fee",
-      `$${quote.holidayFee.toFixed(2)} (${quote.holidayDays} day(s) × $${quote.holidayFeePerDay})`
+      `$${quote.holidayFee.toFixed(2)} (entire stay: ${quote.holidayDays} day(s) × $${quote.holidayFeePerDay})`
     );
   }
   ctx = drawRow(ctx, "Estimated total", `$${quote.totalPrice.toFixed(2)}`);

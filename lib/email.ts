@@ -107,7 +107,7 @@ function formatPricingSection(quote: PriceBreakdown): string {
     rows.push(
       rowHtml(
         "Holiday fee",
-        `$${quote.holidayFee.toFixed(2)} (${quote.holidayDays} day(s) × $${quote.holidayFeePerDay})`
+        `$${quote.holidayFee.toFixed(2)} (entire stay: ${quote.holidayDays} day(s) × $${quote.holidayFeePerDay})`
       )
     );
   }

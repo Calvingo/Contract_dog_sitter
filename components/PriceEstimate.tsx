@@ -60,7 +60,7 @@ export function PriceEstimate({ values, title, incompleteHint, holidayNote }: Pr
         {quote.holidayFee > 0 ? (
           <div className="flex justify-between gap-4">
             <dt>
-              Holiday fee ({quote.holidayDays}{" "}
+              Holiday fee, entire stay ({quote.holidayDays}{" "}
               {quote.holidayDays === 1 ? "day" : "days"} × $
               {quote.holidayFeePerDay})
             </dt>

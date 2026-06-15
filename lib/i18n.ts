@@ -37,7 +37,7 @@ export const ui = {
   priceEstimateIncomplete:
     "Enter weight, drop-off, and pick-up date & time to see your estimate.",
   priceEstimateHolidayNote:
-    "Holiday dates (+$10/day): Jun 15 – Sep 1 each year.",
+    "Holiday rate (+$10/day for the entire stay if any listed date is included): Jun 19–21, 2026; Jul 3–5, 2026; Sep 4–7, 2026; Nov 26–29, 2026; Dec 24, 2026 – Jan 3, 2027.",
   prescreenNotesLabel: "Additional notes (optional)",
   prescreenNotesPlaceholder:
     "Special habits, health conditions, behavior concerns, etc.",
