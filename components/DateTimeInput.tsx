@@ -5,6 +5,9 @@ type Props = {
   value: string;
   error?: string;
   emptyHint: string;
+  note?: string;
+  min?: string;
+  max?: string;
   onChange: (name: keyof FormValues, value: string) => void;
 };
 
@@ -13,6 +16,9 @@ export function DateTimeInput({
   value,
   error,
   emptyHint,
+  note,
+  min,
+  max,
   onChange,
 }: Props) {
   const isEmpty = !value;
@@ -28,6 +34,8 @@ export function DateTimeInput({
         <input
           type={inputType}
           required={field.required}
+          min={min}
+          max={max}
           value={value}
           onChange={(event) => onChange(field.name, event.target.value)}
           className={`w-full rounded-xl border border-orange-100 bg-white px-4 py-3 text-stone-800 outline-none transition focus:border-orange-300 focus:ring-2 focus:ring-orange-100 ${
@@ -44,6 +52,7 @@ export function DateTimeInput({
           </span>
         ) : null}
       </div>
+      {note ? <span className="text-xs leading-5 text-stone-500">{note}</span> : null}
       {error ? <span className="text-sm text-red-500">{error}</span> : null}
     </label>
   );

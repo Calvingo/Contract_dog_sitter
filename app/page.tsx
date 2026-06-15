@@ -9,6 +9,7 @@ import { PrescreenField } from "@/components/PrescreenField";
 import { PrescreenNotes } from "@/components/PrescreenNotes";
 import { PriceEstimate } from "@/components/PriceEstimate";
 import { SignaturePad } from "@/components/SignaturePad";
+import { isPickupDropoffTimeAllowed } from "@/lib/booking-time";
 import { parseDateTime } from "@/lib/pricing";
 import {
   formFields,
@@ -181,6 +182,18 @@ export default function HomePage() {
 
     const dropoff = parseDateTime(formValues.dropoffDate, formValues.dropoffTime);
     const pickup = parseDateTime(formValues.pickupDate, formValues.pickupTime);
+    if (
+      formValues.dropoffTime &&
+      !isPickupDropoffTimeAllowed(formValues.dropoffTime)
+    ) {
+      nextErrors.dropoffTime = ui.pickupDropoffTimeRestricted;
+    }
+    if (
+      formValues.pickupTime &&
+      !isPickupDropoffTimeAllowed(formValues.pickupTime)
+    ) {
+      nextErrors.pickupTime = ui.pickupDropoffTimeRestricted;
+    }
     if (dropoff && pickup && pickup <= dropoff) {
       nextErrors.pickupDate = ui.pickupBeforeDropoff;
       nextErrors.pickupTime = ui.pickupBeforeDropoff;

@@ -1,4 +1,8 @@
 import { DateTimeInput } from "@/components/DateTimeInput";
+import {
+  EARLIEST_PICKUP_DROPOFF_TIME,
+  LATEST_PICKUP_DROPOFF_TIME,
+} from "@/lib/booking-time";
 import type { FormField, FormValues } from "@/lib/form-config";
 import { ui } from "@/lib/i18n";
 
@@ -29,6 +33,9 @@ export function FormFieldInput({
         emptyHint={
           field.type === "date" ? ui.dateFieldEmpty : ui.timeFieldEmpty
         }
+        min={field.type === "time" ? EARLIEST_PICKUP_DROPOFF_TIME : undefined}
+        max={field.type === "time" ? LATEST_PICKUP_DROPOFF_TIME : undefined}
+        note={field.type === "time" ? ui.pickupDropoffTimeNote : undefined}
         onChange={onChange}
       />
     );

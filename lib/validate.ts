@@ -1,3 +1,4 @@
+import { isPickupDropoffTimeAllowed } from "./booking-time";
 import type { FormValues } from "./form-config";
 import { allSubmittableFieldKeys } from "./form-config";
 import { calculatePrice, parseDateTime } from "./pricing";
@@ -30,6 +31,12 @@ export function validateSubmission(data: FormValues): string | null {
   const pickup = parseDateTime(data.pickupDate, data.pickupTime);
   if (!dropoff || !pickup) {
     return "Invalid drop-off or pick-up date/time";
+  }
+  if (
+    !isPickupDropoffTimeAllowed(data.dropoffTime) ||
+    !isPickupDropoffTimeAllowed(data.pickupTime)
+  ) {
+    return "Drop-offs and pick-ups are available from 8:30 AM to 9:00 PM";
   }
   if (pickup <= dropoff) {
     return "Pick-up must be after drop-off";
