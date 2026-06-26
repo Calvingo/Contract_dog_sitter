@@ -24,6 +24,7 @@ type PrefillPet = {
   name: string;
   breed: string;
   weightLb: number;
+  ageYears?: number | null;
   lastSubmittedAt?: string | null;
 };
 
@@ -86,6 +87,7 @@ export default function HomePage() {
       petName: pet.name,
       petBreed: pet.breed,
       petWeightLb: String(pet.weightLb),
+      petAgeYears: pet.ageYears == null ? "" : String(pet.ageYears),
     }));
   }, []);
 
@@ -178,6 +180,14 @@ export default function HomePage() {
     const weight = Number(formValues.petWeightLb);
     if (formValues.petWeightLb && (!Number.isFinite(weight) || weight <= 0)) {
       nextErrors.petWeightLb = ui.invalidWeight;
+    }
+
+    const age = Number(formValues.petAgeYears);
+    if (
+      formValues.petAgeYears &&
+      (!Number.isFinite(age) || age < 0)
+    ) {
+      nextErrors.petAgeYears = ui.invalidAge;
     }
 
     const dropoff = parseDateTime(formValues.dropoffDate, formValues.dropoffTime);

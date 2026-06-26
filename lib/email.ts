@@ -62,6 +62,7 @@ function formatValue(field: FormField, data: FormValues): string {
 function getQuote(data: FormValues): PriceBreakdown | null {
   return calculatePrice(
     Number(data.petWeightLb),
+    Number(data.petAgeYears),
     data.dropoffDate,
     data.dropoffTime,
     data.pickupDate,
@@ -103,6 +104,14 @@ function formatPricingSection(quote: PriceBreakdown): string {
     rowHtml("Daily rate", `$${quote.dailyRate}`),
     rowHtml("Boarding subtotal", `$${quote.boardingSubtotal.toFixed(2)}`),
   ];
+  if (quote.seniorDogFee > 0) {
+    rows.push(
+      rowHtml(
+        "Senior dog fee",
+        `$${quote.seniorDogFee.toFixed(2)} (${quote.billableDays} day(s) × $${quote.seniorDogFeePerDay})`
+      )
+    );
+  }
   if (quote.holidayFee > 0) {
     rows.push(
       rowHtml(

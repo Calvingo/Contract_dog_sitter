@@ -37,6 +37,7 @@ export const ui = {
   pickupDropoffTimeNote:
     "Kindly note: To maintain a good relationship with our neighbors and to respect the sitter family's rest time, we are unable to accommodate drop-offs or pick-ups before 8:30 AM or after 9:00 PM.",
   invalidWeight: "Please enter a valid weight in lbs",
+  invalidAge: "Please enter a valid age in years",
   priceEstimateTitle: "Estimated boarding price",
   priceEstimateIncomplete:
     "Enter weight, drop-off, and pick-up date & time to see your estimate.",

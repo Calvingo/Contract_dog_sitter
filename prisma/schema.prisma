@@ -59,6 +59,7 @@ model Pet {
   name        String
   breed       String
   weightLb    Float
+  ageYears    Float?
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   customer    Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)

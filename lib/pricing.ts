@@ -4,12 +4,18 @@ import {
   HOLIDAY_FEE_PER_DAY,
 } from "./holidays";
 
+export const SENIOR_DOG_AGE_YEARS = 10;
+export const SENIOR_DOG_FEE_PER_DAY = 10;
+
 export type PriceBreakdown = {
   dailyRate: number;
   weightTier: string;
   billableDays: number;
   totalHours: number;
   boardingSubtotal: number;
+  seniorDogAgeYears: number;
+  seniorDogFeePerDay: number;
+  seniorDogFee: number;
   holidayDays: number;
   holidayFeePerDay: number;
   holidayFee: number;
@@ -65,11 +71,15 @@ function buildSummary(
   billableDays: number,
   dailyRate: number,
   boardingSubtotal: number,
+  seniorDogFee: number,
   holidayFee: number,
   totalPrice: number
 ): string {
   const daysLabel = billableDays === 1 ? "1 day" : `${billableDays} days`;
   let summary = `${daysLabel} × $${dailyRate}/day = $${boardingSubtotal.toFixed(2)}`;
+  if (seniorDogFee > 0) {
+    summary += ` + senior dog fee (${daysLabel} × $${SENIOR_DOG_FEE_PER_DAY}/day) = $${seniorDogFee.toFixed(2)}`;
+  }
   if (holidayFee > 0) {
     summary += ` + holiday rate for entire stay (${daysLabel} × $${HOLIDAY_FEE_PER_DAY}/day) = $${holidayFee.toFixed(2)}`;
   }
@@ -79,6 +89,7 @@ function buildSummary(
 
 export function calculatePrice(
   weightLb: number,
+  petAgeYears: number,
   dropoffDate: string,
   dropoffTime: string,
   pickupDate: string,
@@ -86,7 +97,14 @@ export function calculatePrice(
 ): PriceBreakdown | null {
   const dropoff = parseDateTime(dropoffDate, dropoffTime);
   const pickup = parseDateTime(pickupDate, pickupTime);
-  if (!dropoff || !pickup || pickup <= dropoff || weightLb <= 0) {
+  if (
+    !dropoff ||
+    !pickup ||
+    pickup <= dropoff ||
+    weightLb <= 0 ||
+    !Number.isFinite(petAgeYears) ||
+    petAgeYears < 0
+  ) {
     return null;
   }
 
@@ -96,6 +114,10 @@ export function calculatePrice(
   const dailyRate = getDailyRate(weightLb);
   const boardingSubtotal =
     Math.round(billableDays * dailyRate * 100) / 100;
+  const seniorDogFee =
+    petAgeYears >= SENIOR_DOG_AGE_YEARS
+      ? Math.round(billableDays * SENIOR_DOG_FEE_PER_DAY * 100) / 100
+      : 0;
 
   const { holidayDays, holidayDates } = countHolidayDaysInStay(
     dropoffDate,
@@ -105,7 +127,7 @@ export function calculatePrice(
   const holidayFee =
     Math.round(holidayBillableDays * HOLIDAY_FEE_PER_DAY * 100) / 100;
   const totalPrice =
-    Math.round((boardingSubtotal + holidayFee) * 100) / 100;
+    Math.round((boardingSubtotal + seniorDogFee + holidayFee) * 100) / 100;
 
   return {
     dailyRate,
@@ -113,6 +135,9 @@ export function calculatePrice(
     billableDays,
     totalHours: Math.round(totalHours * 10) / 10,
     boardingSubtotal,
+    seniorDogAgeYears: SENIOR_DOG_AGE_YEARS,
+    seniorDogFeePerDay: SENIOR_DOG_FEE_PER_DAY,
+    seniorDogFee,
     holidayDays: holidayBillableDays,
     holidayFeePerDay: HOLIDAY_FEE_PER_DAY,
     holidayFee,
@@ -122,6 +147,7 @@ export function calculatePrice(
       billableDays,
       dailyRate,
       boardingSubtotal,
+      seniorDogFee,
       holidayFee,
       totalPrice
     ),

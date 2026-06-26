@@ -15,6 +15,7 @@ export type PetSnapshot = {
   name: string;
   breed: string;
   weightLb: number;
+  ageYears: number;
 };
 
 export function normalizeEmail(email: string): string {
@@ -37,6 +38,7 @@ export function buildPetSnapshot(data: FormValues): PetSnapshot {
     name: data.petName.trim(),
     breed: data.petBreed.trim(),
     weightLb: Number(data.petWeightLb),
+    ageYears: Number(data.petAgeYears),
   };
 }
 
@@ -66,6 +68,7 @@ export function getSubmissionDateTimes(data: FormValues): {
 export function getSubmissionQuote(data: FormValues): PriceBreakdown {
   const quote = calculatePrice(
     Number(data.petWeightLb),
+    Number(data.petAgeYears),
     data.dropoffDate,
     data.dropoffTime,
     data.pickupDate,

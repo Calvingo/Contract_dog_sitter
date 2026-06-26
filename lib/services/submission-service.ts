@@ -47,10 +47,12 @@ export async function createSubmissionRecord(data: FormValues) {
         name: petSnapshot.name,
         breed: petSnapshot.breed,
         weightLb: petSnapshot.weightLb,
+        ageYears: petSnapshot.ageYears,
       },
       update: {
         breed: petSnapshot.breed,
         weightLb: petSnapshot.weightLb,
+        ageYears: petSnapshot.ageYears,
       },
     });
 

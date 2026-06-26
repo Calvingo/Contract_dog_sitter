@@ -10,8 +10,35 @@ type Props = {
 
 export function PriceEstimate({ values, title, incompleteHint, holidayNote }: Props) {
   const weight = Number(values.petWeightLb);
+  const age = Number(values.petAgeYears);
+  const hasPartial =
+    values.petWeightLb ||
+    values.petAgeYears ||
+    values.dropoffDate ||
+    values.dropoffTime ||
+    values.pickupDate ||
+    values.pickupTime;
+  const hasRequiredPricingInputs =
+    values.petWeightLb &&
+    values.petAgeYears &&
+    values.dropoffDate &&
+    values.dropoffTime &&
+    values.pickupDate &&
+    values.pickupTime;
+
+  if (!hasRequiredPricingInputs) {
+    if (!hasPartial) return null;
+
+    return (
+      <div className="rounded-xl border border-dashed border-orange-200 bg-orange-50/50 px-4 py-3 text-sm text-stone-600">
+        {incompleteHint}
+      </div>
+    );
+  }
+
   const quote = calculatePrice(
     weight,
+    age,
     values.dropoffDate,
     values.dropoffTime,
     values.pickupDate,
@@ -19,15 +46,6 @@ export function PriceEstimate({ values, title, incompleteHint, holidayNote }: Pr
   );
 
   if (!quote) {
-    const hasPartial =
-      values.petWeightLb ||
-      values.dropoffDate ||
-      values.dropoffTime ||
-      values.pickupDate ||
-      values.pickupTime;
-
-    if (!hasPartial) return null;
-
     return (
       <div className="rounded-xl border border-dashed border-orange-200 bg-orange-50/50 px-4 py-3 text-sm text-stone-600">
         {incompleteHint}
@@ -57,6 +75,18 @@ export function PriceEstimate({ values, title, incompleteHint, holidayNote }: Pr
             ${quote.boardingSubtotal.toFixed(2)}
           </dd>
         </div>
+        {quote.seniorDogFee > 0 ? (
+          <div className="flex justify-between gap-4">
+            <dt>
+              Senior dog fee ({quote.billableDays}{" "}
+              {quote.billableDays === 1 ? "day" : "days"} × $
+              {quote.seniorDogFeePerDay})
+            </dt>
+            <dd className="text-right font-medium">
+              ${quote.seniorDogFee.toFixed(2)}
+            </dd>
+          </div>
+        ) : null}
         {quote.holidayFee > 0 ? (
           <div className="flex justify-between gap-4">
             <dt>

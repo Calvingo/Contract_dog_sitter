@@ -27,6 +27,11 @@ export function validateSubmission(data: FormValues): string | null {
     return "Invalid weight";
   }
 
+  const age = Number(data.petAgeYears);
+  if (!Number.isFinite(age) || age < 0) {
+    return "Invalid age";
+  }
+
   const dropoff = parseDateTime(data.dropoffDate, data.dropoffTime);
   const pickup = parseDateTime(data.pickupDate, data.pickupTime);
   if (!dropoff || !pickup) {
@@ -44,6 +49,7 @@ export function validateSubmission(data: FormValues): string | null {
 
   const quote = calculatePrice(
     weight,
+    age,
     data.dropoffDate,
     data.dropoffTime,
     data.pickupDate,

@@ -23,6 +23,8 @@ export function FormFieldInput({
 }: Props) {
   const commonClass =
     "w-full rounded-xl border border-orange-100 bg-white px-4 py-3 text-stone-800 outline-none transition focus:border-orange-300 focus:ring-2 focus:ring-orange-100";
+  const numberMin =
+    field.type === "number" ? (field.name === "petAgeYears" ? 0 : 1) : undefined;
 
   if (field.type === "date" || field.type === "time") {
     return (
@@ -64,7 +66,7 @@ export function FormFieldInput({
       ) : (
         <input
           type={field.type === "number" ? "number" : field.type}
-          min={field.type === "number" ? 1 : undefined}
+          min={numberMin}
           step={field.type === "number" ? 1 : undefined}
           required={field.required}
           value={value}

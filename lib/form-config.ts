@@ -17,6 +17,7 @@ export type FormValues = {
   petName: string;
   petBreed: string;
   petWeightLb: string;
+  petAgeYears: string;
   dropoffDate: string;
   dropoffTime: string;
   pickupDate: string;
@@ -65,6 +66,7 @@ export const initialFormValues: FormValues = {
   petName: "",
   petBreed: "",
   petWeightLb: "",
+  petAgeYears: "",
   dropoffDate: "",
   dropoffTime: "",
   pickupDate: "",
@@ -197,6 +199,13 @@ export const formFields: FormField[] = [
     section: "pet",
   },
   {
+    name: "petAgeYears",
+    type: "number",
+    label: "Age (years)",
+    required: true,
+    section: "pet",
+  },
+  {
     name: "dropoffDate",
     type: "date",
     label: "Drop-off date",
@@ -294,6 +303,7 @@ export const allSubmittableFieldKeys: (keyof FormValues)[] = [
   "petName",
   "petBreed",
   "petWeightLb",
+  "petAgeYears",
   "dropoffDate",
   "dropoffTime",
   "pickupDate",

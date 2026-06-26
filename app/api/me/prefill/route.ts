@@ -50,6 +50,7 @@ export async function GET() {
         name: pet.name,
         breed: pet.breed,
         weightLb: pet.weightLb,
+        ageYears: pet.ageYears,
         lastPrescreenAnswers: latest?.prescreenAnswers ?? null,
         lastPrescreenNotes: latest?.prescreenNotes ?? "",
         lastSubmittedAt: latest?.createdAt ?? null,
