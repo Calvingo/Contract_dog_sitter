@@ -50,6 +50,7 @@ export function validateSubmission(data: FormValues): string | null {
   const quote = calculatePrice(
     weight,
     age,
+    data.prescreenSpayedNeutered,
     data.dropoffDate,
     data.dropoffTime,
     data.pickupDate,

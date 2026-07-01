@@ -69,6 +69,7 @@ export function getSubmissionQuote(data: FormValues): PriceBreakdown {
   const quote = calculatePrice(
     Number(data.petWeightLb),
     Number(data.petAgeYears),
+    data.prescreenSpayedNeutered,
     data.dropoffDate,
     data.dropoffTime,
     data.pickupDate,

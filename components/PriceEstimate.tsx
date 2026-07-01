@@ -14,6 +14,7 @@ export function PriceEstimate({ values, title, incompleteHint, holidayNote }: Pr
   const hasPartial =
     values.petWeightLb ||
     values.petAgeYears ||
+    values.prescreenSpayedNeutered ||
     values.dropoffDate ||
     values.dropoffTime ||
     values.pickupDate ||
@@ -21,6 +22,7 @@ export function PriceEstimate({ values, title, incompleteHint, holidayNote }: Pr
   const hasRequiredPricingInputs =
     values.petWeightLb &&
     values.petAgeYears &&
+    values.prescreenSpayedNeutered &&
     values.dropoffDate &&
     values.dropoffTime &&
     values.pickupDate &&
@@ -39,6 +41,7 @@ export function PriceEstimate({ values, title, incompleteHint, holidayNote }: Pr
   const quote = calculatePrice(
     weight,
     age,
+    values.prescreenSpayedNeutered,
     values.dropoffDate,
     values.dropoffTime,
     values.pickupDate,
@@ -84,6 +87,18 @@ export function PriceEstimate({ values, title, incompleteHint, holidayNote }: Pr
             </dt>
             <dd className="text-right font-medium">
               ${quote.seniorDogFee.toFixed(2)}
+            </dd>
+          </div>
+        ) : null}
+        {quote.intactDogFee > 0 ? (
+          <div className="flex justify-between gap-4">
+            <dt>
+              Unspayed/unneutered dog fee ({quote.billableDays}{" "}
+              {quote.billableDays === 1 ? "day" : "days"} × $
+              {quote.intactDogFeePerDay})
+            </dt>
+            <dd className="text-right font-medium">
+              ${quote.intactDogFee.toFixed(2)}
             </dd>
           </div>
         ) : null}

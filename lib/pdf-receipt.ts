@@ -182,6 +182,13 @@ export async function generateSubmissionPdf(
       `$${quote.seniorDogFee.toFixed(2)} (${quote.billableDays} day(s) × $${quote.seniorDogFeePerDay})`
     );
   }
+  if (quote.intactDogFee > 0) {
+    ctx = drawRow(
+      ctx,
+      "Unspayed/unneutered dog fee",
+      `$${quote.intactDogFee.toFixed(2)} (${quote.billableDays} day(s) × $${quote.intactDogFeePerDay})`
+    );
+  }
   if (quote.holidayFee > 0) {
     ctx = drawRow(
       ctx,

@@ -6,6 +6,7 @@ import {
 
 export const SENIOR_DOG_AGE_YEARS = 10;
 export const SENIOR_DOG_FEE_PER_DAY = 10;
+export const INTACT_DOG_FEE_PER_DAY = 10;
 
 export type PriceBreakdown = {
   dailyRate: number;
@@ -16,6 +17,8 @@ export type PriceBreakdown = {
   seniorDogAgeYears: number;
   seniorDogFeePerDay: number;
   seniorDogFee: number;
+  intactDogFeePerDay: number;
+  intactDogFee: number;
   holidayDays: number;
   holidayFeePerDay: number;
   holidayFee: number;
@@ -72,6 +75,7 @@ function buildSummary(
   dailyRate: number,
   boardingSubtotal: number,
   seniorDogFee: number,
+  intactDogFee: number,
   holidayFee: number,
   totalPrice: number
 ): string {
@@ -79,6 +83,9 @@ function buildSummary(
   let summary = `${daysLabel} × $${dailyRate}/day = $${boardingSubtotal.toFixed(2)}`;
   if (seniorDogFee > 0) {
     summary += ` + senior dog fee (${daysLabel} × $${SENIOR_DOG_FEE_PER_DAY}/day) = $${seniorDogFee.toFixed(2)}`;
+  }
+  if (intactDogFee > 0) {
+    summary += ` + unspayed/unneutered dog fee (${daysLabel} × $${INTACT_DOG_FEE_PER_DAY}/day) = $${intactDogFee.toFixed(2)}`;
   }
   if (holidayFee > 0) {
     summary += ` + holiday rate for entire stay (${daysLabel} × $${HOLIDAY_FEE_PER_DAY}/day) = $${holidayFee.toFixed(2)}`;
@@ -90,6 +97,7 @@ function buildSummary(
 export function calculatePrice(
   weightLb: number,
   petAgeYears: number,
+  spayedNeuteredAnswer: string,
   dropoffDate: string,
   dropoffTime: string,
   pickupDate: string,
@@ -118,6 +126,10 @@ export function calculatePrice(
     petAgeYears >= SENIOR_DOG_AGE_YEARS
       ? Math.round(billableDays * SENIOR_DOG_FEE_PER_DAY * 100) / 100
       : 0;
+  const intactDogFee =
+    spayedNeuteredAnswer === "no"
+      ? Math.round(billableDays * INTACT_DOG_FEE_PER_DAY * 100) / 100
+      : 0;
 
   const { holidayDays, holidayDates } = countHolidayDaysInStay(
     dropoffDate,
@@ -127,7 +139,7 @@ export function calculatePrice(
   const holidayFee =
     Math.round(holidayBillableDays * HOLIDAY_FEE_PER_DAY * 100) / 100;
   const totalPrice =
-    Math.round((boardingSubtotal + seniorDogFee + holidayFee) * 100) / 100;
+    Math.round((boardingSubtotal + seniorDogFee + intactDogFee + holidayFee) * 100) / 100;
 
   return {
     dailyRate,
@@ -138,6 +150,8 @@ export function calculatePrice(
     seniorDogAgeYears: SENIOR_DOG_AGE_YEARS,
     seniorDogFeePerDay: SENIOR_DOG_FEE_PER_DAY,
     seniorDogFee,
+    intactDogFeePerDay: INTACT_DOG_FEE_PER_DAY,
+    intactDogFee,
     holidayDays: holidayBillableDays,
     holidayFeePerDay: HOLIDAY_FEE_PER_DAY,
     holidayFee,
@@ -148,6 +162,7 @@ export function calculatePrice(
       dailyRate,
       boardingSubtotal,
       seniorDogFee,
+      intactDogFee,
       holidayFee,
       totalPrice
     ),

@@ -63,6 +63,7 @@ function getQuote(data: FormValues): PriceBreakdown | null {
   return calculatePrice(
     Number(data.petWeightLb),
     Number(data.petAgeYears),
+    data.prescreenSpayedNeutered,
     data.dropoffDate,
     data.dropoffTime,
     data.pickupDate,
@@ -109,6 +110,14 @@ function formatPricingSection(quote: PriceBreakdown): string {
       rowHtml(
         "Senior dog fee",
         `$${quote.seniorDogFee.toFixed(2)} (${quote.billableDays} day(s) × $${quote.seniorDogFeePerDay})`
+      )
+    );
+  }
+  if (quote.intactDogFee > 0) {
+    rows.push(
+      rowHtml(
+        "Unspayed/unneutered dog fee",
+        `$${quote.intactDogFee.toFixed(2)} (${quote.billableDays} day(s) × $${quote.intactDogFeePerDay})`
       )
     );
   }
