@@ -11,6 +11,7 @@ datasource db {
 enum SubmissionStatus {
   PENDING
   ACCEPTED
+  NEEDS_REVIEW
   REJECTED
   MEET_GREET_REQUESTED
   CANCELLED
@@ -74,6 +75,7 @@ model Submission {
   customerId         String
   petId              String
   status             SubmissionStatus @default(PENDING)
+  revision           Int              @default(1)
   firstTimeBooking   String
   dropoffAt          DateTime
   pickupAt           DateTime
@@ -86,16 +88,55 @@ model Submission {
   signatureData      String           @db.Text
   customerSnapshot   Json
   petSnapshot        Json
+  lastEditedAt       DateTime?
+  previouslyAcceptedAt DateTime?
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
   customer           Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
   pet                Pet              @relation(fields: [petId], references: [id], onDelete: Restrict)
   decisionEvents     DecisionEvent[]
   emailLogs          EmailLog[]
+  editTokens         SubmissionEditToken[]
+  revisions          SubmissionRevision[]
 
   @@index([customerId])
   @@index([petId])
   @@index([status, createdAt])
+  @@index([revision])
+}
+
+model SubmissionEditToken {
+  id           String     @id @default(cuid())
+  submissionId String
+  tokenHash    String     @unique
+  expiresAt    DateTime
+  usedAt       DateTime?
+  createdAt    DateTime   @default(now())
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId])
+  @@index([expiresAt])
+}
+
+model SubmissionRevision {
+  id                 String           @id @default(cuid())
+  submissionId       String
+  revision           Int
+  status             SubmissionStatus
+  quotedBreakdown    Json
+  quotedTotal        Decimal          @db.Decimal(10, 2)
+  prescreenAnswers   Json
+  prescreenNotes     String?          @db.Text
+  signatureData      String           @db.Text
+  customerSnapshot   Json
+  petSnapshot        Json
+  dropoffAt          DateTime
+  pickupAt           DateTime
+  createdAt          DateTime         @default(now())
+  submission         Submission       @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@unique([submissionId, revision])
+  @@index([submissionId])
 }
 
 model DecisionEvent {

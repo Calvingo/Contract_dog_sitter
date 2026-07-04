@@ -3,6 +3,7 @@ import { getAppBaseUrl } from "./app-url";
 
 export type DecisionTokenPayload = {
   submissionId?: string;
+  revision?: number;
   action?: string;
   email: string;
   firstName: string;

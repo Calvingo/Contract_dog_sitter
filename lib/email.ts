@@ -17,6 +17,10 @@ import { generateSubmissionPdf, pdfFilename } from "./pdf-receipt";
 import { getAppBaseUrl } from "./app-url";
 import { buildDecisionUrl, createDecisionToken } from "./token";
 import {
+  buildSubmissionEditUrl,
+  createSubmissionEditToken,
+} from "./submission-edit-token";
+import {
   BRAND_NAME,
   sendMail,
   getEnv,
@@ -171,9 +175,14 @@ function decisionButtonRow(
   </tr>`;
 }
 
-function buildAdminDecisionButtons(data: FormValues, submissionId?: string): string {
+function buildAdminDecisionButtons(
+  data: FormValues,
+  submissionId?: string,
+  revision?: number
+): string {
   const tokenBase = {
     submissionId,
+    revision,
     email: data.email,
     firstName: data.firstName,
     lastName: data.lastName,
@@ -199,16 +208,27 @@ function buildAdminDecisionButtons(data: FormValues, submissionId?: string): str
   `;
 }
 
-function buildCustomerEmailHtml(data: FormValues, quote: PriceBreakdown): string {
+function buildCustomerEmailHtml(
+  data: FormValues,
+  quote: PriceBreakdown,
+  editUrl?: string,
+  isUpdate = false
+): string {
   const ownerName = `${data.firstName} ${data.lastName}`.trim();
+  const editBlock = editUrl
+    ? `<p style="margin-top:20px;"><strong>Need to make changes?</strong><br/>
+        You can edit this request here while it remains eligible for changes:<br/>
+        <a href="${escapeHtml(editUrl)}" style="color:#ea580c;">Edit your submission</a></p>`
+    : "";
 
   return `
     <div style="font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:640px;">
-      <h2>[${BRAND_NAME}] Your signed agreement receipt</h2>
+      <h2>[${BRAND_NAME}] ${isUpdate ? "Your updated agreement receipt" : "Your signed agreement receipt"}</h2>
       <p>Dear ${escapeHtml(ownerName)},</p>
-      <p>Thank you for submitting your pet boarding agreement with ${BRAND_NAME}.</p>
+      <p>Thank you for ${isUpdate ? "updating" : "submitting"} your pet boarding agreement with ${BRAND_NAME}.</p>
       <p><strong>Please find your signed submission attached as a PDF.</strong> It includes all information you provided, the price estimate ($${quote.totalPrice.toFixed(2)}), and your signature. Please save it for your records.</p>
-      <p>We will review your request and follow up soon.</p>
+      <p>${isUpdate ? "We will review the updated request and follow up soon." : "We will review your request and follow up soon."}</p>
+      ${editBlock}
       ${formatContactsSection()}
       <p style="margin-top:24px;">We look forward to caring for ${escapeHtml(data.petName)}!</p>
       <p>${BRAND_NAME}</p>
@@ -219,19 +239,27 @@ function buildCustomerEmailHtml(data: FormValues, quote: PriceBreakdown): string
 function buildAdminEmailHtml(
   data: FormValues,
   quote: PriceBreakdown,
-  submissionId?: string
+  submissionId?: string,
+  revision?: number,
+  isUpdate = false,
+  previousStatus?: string
 ): string {
   const ownerName = `${data.firstName} ${data.lastName}`.trim();
   const submittedAt = new Date().toLocaleString("en-US");
+  const title = isUpdate ? "Updated Agreement Submission" : "New Agreement Submission";
+  const updateNote = isUpdate
+    ? `<p style="padding:12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;color:#9a3412;"><strong>This customer updated a previous request.</strong> Previous admin decision links are no longer valid. Please use the buttons in this latest email.${previousStatus ? ` Previous status: ${escapeHtml(previousStatus)}.` : ""}</p>`
+    : "";
 
   return `
     <div style="font-family:Arial,sans-serif;line-height:1.6;color:#333;">
-      <h2>New Agreement Submission</h2>
+      <h2>${title}</h2>
+      ${updateNote}
       <p><strong>Owner:</strong> ${escapeHtml(ownerName)}</p>
       <p><strong>Email:</strong> ${escapeHtml(data.email)}</p>
       <p><strong>Pet:</strong> ${escapeHtml(data.petName)}</p>
       <p><strong>Submitted at:</strong> ${escapeHtml(submittedAt)}</p>
-      ${buildAdminDecisionButtons(data, submissionId)}
+      ${buildAdminDecisionButtons(data, submissionId, revision)}
       ${formatPricingSection(quote)}
       ${formatPrescreenSection(data)}
       ${formatFormSection(data)}
@@ -243,7 +271,12 @@ function buildAdminEmailHtml(
 export async function sendSubmissionEmails(
   data: FormValues,
   signatureBuffer: Buffer,
-  submissionId?: string
+  submissionId?: string,
+  options: {
+    revision?: number;
+    isUpdate?: boolean;
+    previousStatus?: string;
+  } = {}
 ) {
   const quote = getQuote(data);
   if (!quote) {
@@ -257,16 +290,23 @@ export async function sendSubmissionEmails(
   const adminEmails = parseAdminEmails();
   const ownerName = `${data.firstName} ${data.lastName}`.trim();
   const fromHeader = `"${BRAND_NAME}" <${fromUser}>`;
+  const editUrl = submissionId
+    ? buildSubmissionEditUrl(await createSubmissionEditToken(submissionId))
+    : undefined;
 
-  const customerSubject = `[${BRAND_NAME}] Your signed agreement — ${data.petName}`;
-  const adminSubject = `[New Submission] ${ownerName} - ${data.petName} — $${quote.totalPrice.toFixed(2)}`;
+  const customerSubject = options.isUpdate
+    ? `[${BRAND_NAME}] Your updated agreement — ${data.petName}`
+    : `[${BRAND_NAME}] Your signed agreement — ${data.petName}`;
+  const adminSubject = options.isUpdate
+    ? `[Updated Submission - Needs Review] ${ownerName} - ${data.petName} — $${quote.totalPrice.toFixed(2)}`
+    : `[New Submission] ${ownerName} - ${data.petName} — $${quote.totalPrice.toFixed(2)}`;
 
   try {
     await sendMail({
       from: fromHeader,
       to: data.email,
       subject: customerSubject,
-      html: buildCustomerEmailHtml(data, quote),
+      html: buildCustomerEmailHtml(data, quote, editUrl, options.isUpdate),
       attachments: [
         {
           filename: pdfName,
@@ -299,7 +339,14 @@ export async function sendSubmissionEmails(
       from: fromHeader,
       to: adminEmails,
       subject: adminSubject,
-      html: buildAdminEmailHtml(data, quote, submissionId),
+      html: buildAdminEmailHtml(
+        data,
+        quote,
+        submissionId,
+        options.revision,
+        options.isUpdate,
+        options.previousStatus
+      ),
       attachments: [
         {
           filename: `signature-${Date.now()}.png`,

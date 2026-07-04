@@ -15,7 +15,9 @@ export async function POST(request: Request) {
 
     const signatureBuffer = signatureToBuffer(data.signature);
     const { submission } = await createSubmissionRecord(data);
-    await sendSubmissionEmails(data, signatureBuffer, submission.id);
+    await sendSubmissionEmails(data, signatureBuffer, submission.id, {
+      revision: submission.revision,
+    });
 
     return NextResponse.json({ ok: true, submissionId: submission.id });
   } catch (error) {

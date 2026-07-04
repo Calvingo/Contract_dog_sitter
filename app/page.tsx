@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AgreementPanel } from "@/components/AgreementPanel";
 import { FormFieldInput } from "@/components/FormFieldInput";
 import { FormSection } from "@/components/FormSection";
@@ -42,7 +42,17 @@ type PrefillResponse = {
 };
 
 export default function HomePage() {
+  return (
+    <Suspense fallback={<main className="min-h-screen px-4 py-8" />}>
+      <HomePageContent />
+    </Suspense>
+  );
+}
+
+function HomePageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editToken = searchParams.get("editToken");
   const [formValues, setFormValues] = useState<FormValues>(initialFormValues);
   const [errors, setErrors] = useState<Partial<Record<keyof FormValues, string>>>(
     {}
@@ -54,6 +64,7 @@ export default function HomePage() {
   const [returningStatus, setReturningStatus] = useState("");
   const [prefill, setPrefill] = useState<PrefillResponse | null>(null);
   const [selectedPetId, setSelectedPetId] = useState("");
+  const [editNotice, setEditNotice] = useState("");
 
   const today = new Date().toLocaleDateString("en-US", {
     year: "numeric",
@@ -111,8 +122,44 @@ export default function HomePage() {
   }, [applyCustomerPrefill, applyPetPrefill]);
 
   useEffect(() => {
+    if (editToken) return;
     void loadPrefill();
-  }, [loadPrefill]);
+  }, [editToken, loadPrefill]);
+
+  useEffect(() => {
+    if (!editToken) return;
+
+    const loadEditSubmission = async () => {
+      try {
+        const response = await fetch(
+          `/api/submission/edit?token=${encodeURIComponent(editToken)}`
+        );
+        const data = (await response.json()) as {
+          values?: FormValues;
+          notice?: string;
+          error?: string;
+        };
+
+        if (!response.ok || !data.values) {
+          setSubmitError(data.error || "This edit link is no longer available.");
+          return;
+        }
+
+        setFormValues({
+          ...data.values,
+          agreed: false,
+          signature: "",
+          honeypot: "",
+        });
+        setHasReadAgreement(false);
+        setEditNotice(data.notice || "You are editing a submitted request.");
+      } catch {
+        setSubmitError("Could not load this edit link. Please try again.");
+      }
+    };
+
+    void loadEditSubmission();
+  }, [editToken]);
 
   const handleFieldChange = (name: keyof FormValues, value: string) => {
     setFormValues((current) => {
@@ -231,11 +278,16 @@ export default function HomePage() {
     setSubmitError("");
 
     try {
-      const response = await fetch("/api/submit", {
+      const response = await fetch(
+        editToken ? "/api/submission/edit" : "/api/submit",
+        {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formValues),
-      });
+          body: JSON.stringify(
+            editToken ? { token: editToken, values: formValues } : formValues
+          ),
+        }
+      );
 
       if (!response.ok) {
         throw new Error("Submit failed");
@@ -335,6 +387,12 @@ export default function HomePage() {
             <p className="text-sm text-stone-600">{returningStatus}</p>
           ) : null}
         </section>
+
+        {editNotice ? (
+          <section className="rounded-2xl bg-amber-50 p-5 text-sm leading-6 text-amber-900 ring-1 ring-amber-200">
+            {editNotice}
+          </section>
+        ) : null}
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <input

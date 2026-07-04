@@ -6,6 +6,7 @@ export type DecisionAction = "accept" | "reject" | "meet_greet";
 
 export type DecisionEmailOptions = {
   meetGreetAt?: string;
+  editUrl?: string;
 };
 
 function escapeHtml(value: string): string {
@@ -39,6 +40,11 @@ function buildDecisionEmail(
   const petSubject = payload.petName;
 
   if (action === "accept") {
+    const editBlock = options.editUrl
+      ? `<p style="margin-top:20px;"><strong>Need to make changes?</strong><br/>
+          You can edit your request here. Changes will need to be reviewed again:<br/>
+          <a href="${escapeHtml(options.editUrl)}" style="color:#ea580c;">Edit your submission</a></p>`
+      : "";
     return {
       subject: `[${BRAND_NAME}] Your booking request has been accepted — ${petSubject}`,
       html: `
@@ -47,6 +53,7 @@ function buildDecisionEmail(
           <p>Dear ${name},</p>
           <p>Great news! Your boarding request for <strong>${pet}</strong> has been <strong>accepted</strong> by ${BRAND_NAME}.</p>
           <p>We will contact you shortly with next steps. If you have any questions in the meantime, please reach out:</p>
+          ${editBlock}
           ${contactsHtml()}
           <p>Thank you,<br/>${BRAND_NAME}</p>
         </div>
@@ -73,6 +80,11 @@ function buildDecisionEmail(
   const scheduleLine = options.meetGreetAt
     ? `<p><strong>Suggested time:</strong> ${escapeHtml(options.meetGreetAt)}</p>`
     : "";
+  const editBlock = options.editUrl
+    ? `<p style="margin-top:20px;"><strong>Need to make changes?</strong><br/>
+        You can edit your request here. Changes will need to be reviewed again:<br/>
+        <a href="${escapeHtml(options.editUrl)}" style="color:#ea580c;">Edit your submission</a></p>`
+    : "";
 
   return {
     subject: `[${BRAND_NAME}] Let's schedule a meet & greet — ${petSubject}`,
@@ -82,6 +94,7 @@ function buildDecisionEmail(
         <p>Dear ${name},</p>
         <p>Thank you for submitting your request for <strong>${pet}</strong>. We would like to schedule a <strong>meet &amp; greet</strong> before confirming your booking.</p>
         ${scheduleLine}
+        ${editBlock}
         <p>Please contact us if this time does not work for you:</p>
         ${contactsHtml()}
         <p>We look forward to meeting you and ${pet}!<br/>${BRAND_NAME}</p>

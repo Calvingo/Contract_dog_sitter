@@ -11,6 +11,10 @@ import {
 } from "./decision-emails";
 import { prisma } from "./db";
 import { logEmail } from "./email-log";
+import {
+  buildSubmissionEditUrl,
+  createSubmissionEditToken,
+} from "./submission-edit-token";
 import { verifyDecisionToken } from "./token";
 
 const VALID_ACTIONS: DecisionAction[] = ["accept", "reject", "meet_greet"];
@@ -126,6 +130,16 @@ export async function processDecision(
       };
     }
 
+    if (payload.revision && payload.revision !== submission.revision) {
+      return {
+        ok: false,
+        status: 409,
+        title: "Submission updated",
+        message:
+          "This submission has been updated. Please use the latest admin email.",
+      };
+    }
+
     if (
       submission.status === SubmissionStatus.MEET_GREET_REQUESTED &&
       decisionAction === "meet_greet"
@@ -151,7 +165,10 @@ export async function processDecision(
       };
     }
 
-    if (submission.status !== SubmissionStatus.PENDING) {
+    if (
+      submission.status !== SubmissionStatus.PENDING &&
+      submission.status !== SubmissionStatus.NEEDS_REVIEW
+    ) {
       return {
         ok: false,
         status: 409,
@@ -214,7 +231,11 @@ export async function processDecision(
     const subjectLabel = decisionActionLabel(decisionAction);
 
     try {
-      await sendDecisionEmail(decisionPayload, decisionAction);
+      const editUrl =
+        decisionAction === "reject"
+          ? undefined
+          : buildSubmissionEditUrl(await createSubmissionEditToken(submission.id));
+      await sendDecisionEmail(decisionPayload, decisionAction, { editUrl });
       await prisma.decisionEvent.update({
         where: { id: decisionEvent.id },
         data: { emailSentAt: new Date() },
@@ -312,6 +333,16 @@ export async function processMeetGreetSchedule(options: {
     };
   }
 
+  if (payload.revision && payload.revision !== submission.revision) {
+    return {
+      ok: false,
+      status: 409,
+      title: "Submission updated",
+      message:
+        "This submission has been updated. Please use the latest admin email.",
+    };
+  }
+
   if (submission.status !== SubmissionStatus.MEET_GREET_REQUESTED) {
     return {
       ok: false,
@@ -361,8 +392,12 @@ export async function processMeetGreetSchedule(options: {
   const message = `Meet & greet proposed for ${displayTime}.`;
 
   try {
+    const editUrl = buildSubmissionEditUrl(
+      await createSubmissionEditToken(submission.id)
+    );
     await sendDecisionEmail(decisionPayload, "meet_greet", {
       meetGreetAt: displayTime,
+      editUrl,
     });
     await prisma.decisionEvent.update({
       where: { id: decisionEvent.id },
