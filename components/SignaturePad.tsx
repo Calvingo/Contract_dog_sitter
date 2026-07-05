@@ -17,6 +17,11 @@ export function SignaturePad({
   disabledMessage,
 }: Props) {
   const canvasRef = useRef<SignatureCanvas | null>(null);
+  const onChangeRef = useRef(onChange);
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -24,10 +29,10 @@ export function SignaturePad({
 
     const handleEnd = () => {
       if (canvas.isEmpty()) {
-        onChange("");
+        onChangeRef.current("");
         return;
       }
-      onChange(canvas.toDataURL("image/png"));
+      onChangeRef.current(canvas.toDataURL("image/png"));
     };
 
     const pad = canvas.getCanvas();
@@ -38,18 +43,18 @@ export function SignaturePad({
       pad.removeEventListener("mouseup", handleEnd);
       pad.removeEventListener("touchend", handleEnd);
     };
-  }, [onChange]);
+  }, []);
 
   useEffect(() => {
     if (disabled) {
       canvasRef.current?.clear();
-      onChange("");
+      onChangeRef.current("");
     }
-  }, [disabled, onChange]);
+  }, [disabled]);
 
   const handleClear = () => {
     canvasRef.current?.clear();
-    onChange("");
+    onChangeRef.current("");
   };
 
   return (

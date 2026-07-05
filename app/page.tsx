@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AgreementPanel } from "@/components/AgreementPanel";
 import { FormFieldInput } from "@/components/FormFieldInput";
@@ -317,9 +318,17 @@ function HomePageContent() {
   return (
     <main className="min-h-screen px-4 py-8">
       <div className="mx-auto flex max-w-2xl flex-col gap-6">
-        <header>
-          <h1 className="text-3xl font-bold text-stone-900">{ui.siteTitle}</h1>
-          <p className="mt-1 text-stone-600">{ui.siteSubtitle}</p>
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-stone-900">{ui.siteTitle}</h1>
+            <p className="mt-1 text-stone-600">{ui.siteSubtitle}</p>
+          </div>
+          <Link
+            href="/admin/login"
+            className="inline-flex w-fit rounded-xl border border-orange-200 bg-white px-4 py-2 text-sm font-semibold text-stone-800 shadow-sm transition hover:bg-orange-50"
+          >
+            Admin Login
+          </Link>
         </header>
 
         <section className="space-y-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-orange-100">
