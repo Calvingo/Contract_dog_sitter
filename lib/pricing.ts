@@ -7,6 +7,7 @@ import {
 export const SENIOR_DOG_AGE_YEARS = 10;
 export const SENIOR_DOG_FEE_PER_DAY = 10;
 export const INTACT_DOG_FEE_PER_DAY = 10;
+export const DEPOSIT_PERCENT = 20;
 
 export type PriceBreakdown = {
   dailyRate: number;
@@ -24,6 +25,7 @@ export type PriceBreakdown = {
   holidayFee: number;
   holidayDates: string[];
   totalPrice: number;
+  depositAmount: number;
   summary: string;
 };
 
@@ -140,6 +142,7 @@ export function calculatePrice(
     Math.round(holidayBillableDays * HOLIDAY_FEE_PER_DAY * 100) / 100;
   const totalPrice =
     Math.round((boardingSubtotal + seniorDogFee + intactDogFee + holidayFee) * 100) / 100;
+  const depositAmount = Math.round(totalPrice * (DEPOSIT_PERCENT / 100) * 100) / 100;
 
   return {
     dailyRate,
@@ -157,6 +160,7 @@ export function calculatePrice(
     holidayFee,
     holidayDates,
     totalPrice,
+    depositAmount,
     summary: buildSummary(
       billableDays,
       dailyRate,

@@ -1,5 +1,5 @@
 import type { FormValues } from "@/lib/form-config";
-import { calculatePrice } from "@/lib/pricing";
+import { calculatePrice, DEPOSIT_PERCENT } from "@/lib/pricing";
 
 type Props = {
   values: FormValues;
@@ -118,6 +118,14 @@ export function PriceEstimate({ values, title, incompleteHint, holidayNote }: Pr
           <dt className="font-semibold text-stone-900">Estimated total</dt>
           <dd className="font-bold text-orange-700">
             ${quote.totalPrice.toFixed(2)}
+          </dd>
+        </div>
+        <div className="flex justify-between gap-4">
+          <dt className="font-semibold text-stone-900">
+            Deposit ({DEPOSIT_PERCENT}% of total)
+          </dt>
+          <dd className="text-right font-bold text-orange-700">
+            ${quote.depositAmount.toFixed(2)}
           </dd>
         </div>
       </dl>

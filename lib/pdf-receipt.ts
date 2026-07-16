@@ -9,7 +9,11 @@ import {
   yesNoOptions,
   type FormField,
 } from "./form-config";
-import { formatDateTime, type PriceBreakdown } from "./pricing";
+import {
+  DEPOSIT_PERCENT,
+  formatDateTime,
+  type PriceBreakdown,
+} from "./pricing";
 
 const BRAND_NAME = "Silicon Paws Retreat";
 const PAGE_WIDTH = 612;
@@ -197,6 +201,11 @@ export async function generateSubmissionPdf(
     );
   }
   ctx = drawRow(ctx, "Estimated total", `$${quote.totalPrice.toFixed(2)}`);
+  ctx = drawRow(
+    ctx,
+    `Deposit (${DEPOSIT_PERCENT}% of total)`,
+    `$${quote.depositAmount.toFixed(2)}`
+  );
 
   ctx = drawSectionTitle(ctx, "Pre-Screening");
   for (const q of prescreenQuestions) {

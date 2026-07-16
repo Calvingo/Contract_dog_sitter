@@ -10,6 +10,7 @@ import {
 import { teamContacts } from "./contacts";
 import {
   calculatePrice,
+  DEPOSIT_PERCENT,
   formatDateTime,
   type PriceBreakdown,
 } from "./pricing";
@@ -134,6 +135,12 @@ function formatPricingSection(quote: PriceBreakdown): string {
     );
   }
   rows.push(rowHtml("Estimated total", `$${quote.totalPrice.toFixed(2)}`));
+  rows.push(
+    rowHtml(
+      `Deposit (${DEPOSIT_PERCENT}% of total)`,
+      `$${quote.depositAmount.toFixed(2)}`
+    )
+  );
   return `
     <h3 style="margin:24px 0 8px;font-size:16px;">Price Estimate</h3>
     ${formatTable(rows)}
@@ -226,8 +233,17 @@ function buildCustomerEmailHtml(
       <h2>[${BRAND_NAME}] ${isUpdate ? "Your updated agreement receipt" : "Your signed agreement receipt"}</h2>
       <p>Dear ${escapeHtml(ownerName)},</p>
       <p>Thank you for ${isUpdate ? "updating" : "submitting"} your pet boarding agreement with ${BRAND_NAME}.</p>
-      <p><strong>Please find your signed submission attached as a PDF.</strong> It includes all information you provided, the price estimate ($${quote.totalPrice.toFixed(2)}), and your signature. Please save it for your records.</p>
+      <p><strong>Please find your signed submission attached as a PDF.</strong> It includes all information you provided, the price estimate ($${quote.totalPrice.toFixed(2)}), the required deposit ($${quote.depositAmount.toFixed(2)}, which is ${DEPOSIT_PERCENT}% of the total), and your signature. Please save it for your records.</p>
       <p>${isUpdate ? "We will review the updated request and follow up soon." : "We will review your request and follow up soon."}</p>
+      <div style="margin:20px 0;padding:16px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;">
+        <p style="margin:0 0 8px;"><strong>What to bring for your dog's stay:</strong></p>
+        <ol style="margin:0;padding-left:24px;line-height:1.8;">
+          <li>Enough of your dog's regular food for the entire stay</li>
+          <li>Waste bags</li>
+          <li>Pet-safe wet wipes</li>
+          <li>Any other items you believe your dog may need</li>
+        </ol>
+      </div>
       ${editBlock}
       ${formatContactsSection()}
       <p style="margin-top:24px;">We look forward to caring for ${escapeHtml(data.petName)}!</p>
