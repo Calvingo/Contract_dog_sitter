@@ -14,6 +14,11 @@ import {
   formatDateTime,
   type PriceBreakdown,
 } from "./pricing";
+import {
+  BOARDING_CHECKLIST_INTRO,
+  BOARDING_CHECKLIST_ITEMS,
+  BOARDING_CHECKLIST_TITLE,
+} from "./boarding-checklist";
 
 const BRAND_NAME = "Silicon Paws Retreat";
 const PAGE_WIDTH = 612;
@@ -128,6 +133,25 @@ function drawAgreementTerms(ctx: PdfContext): PdfContext {
   return next;
 }
 
+function drawBoardingChecklist(ctx: PdfContext): PdfContext {
+  let next = drawSectionTitle(ctx, BOARDING_CHECKLIST_TITLE);
+  next = drawLines(
+    next,
+    wrapLines(BOARDING_CHECKLIST_INTRO, next.font, 10, CONTENT_WIDTH),
+    10,
+    next.font
+  );
+  for (const item of BOARDING_CHECKLIST_ITEMS) {
+    next = drawLines(
+      next,
+      wrapLines(`- ${item}`, next.font, 10, CONTENT_WIDTH),
+      10,
+      next.font
+    );
+  }
+  return { ...next, y: next.y - 6 };
+}
+
 export async function generateSubmissionPdf(
   data: FormValues,
   quote: PriceBreakdown,
@@ -172,6 +196,8 @@ export async function generateSubmissionPdf(
     rgb(0.34, 0.33, 0.31)
   );
   ctx = { ...ctx, y: ctx.y - 10 };
+
+  ctx = drawBoardingChecklist(ctx);
 
   ctx = drawSectionTitle(ctx, "Price Estimate");
   ctx = drawRow(ctx, "Weight tier", quote.weightTier);
@@ -251,8 +277,8 @@ export async function generateSubmissionPdf(
 
   try {
     const png = await doc.embedPng(signatureBuffer);
-    const sigHeight = 80;
-    const sigWidth = 220;
+    const sigHeight = 60;
+    const sigWidth = 180;
     ctx = ensureSpace(ctx, MARGIN + sigHeight + 20);
     ctx.page.drawImage(png, {
       x: MARGIN,
@@ -260,7 +286,7 @@ export async function generateSubmissionPdf(
       width: sigWidth,
       height: sigHeight,
     });
-    ctx = { ...ctx, y: ctx.y - sigHeight - 16 };
+    ctx = { ...ctx, y: ctx.y - sigHeight - 14 };
   } catch {
     ctx = drawLines(ctx, ["[Signature image unavailable]"], 10, font);
   }

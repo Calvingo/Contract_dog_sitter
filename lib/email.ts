@@ -28,6 +28,11 @@ import {
   parseAdminEmails,
 } from "./mailer";
 import { logEmail } from "./email-log";
+import {
+  BOARDING_CHECKLIST_INTRO,
+  BOARDING_CHECKLIST_ITEMS,
+  BOARDING_CHECKLIST_TITLE,
+} from "./boarding-checklist";
 
 export { sendMail } from "./mailer";
 
@@ -163,6 +168,20 @@ function formatContactsSection(): string {
   `;
 }
 
+function formatBoardingChecklistSection(): string {
+  const items = BOARDING_CHECKLIST_ITEMS.map(
+    (item) => `<li>${escapeHtml(item)}</li>`
+  ).join("");
+
+  return `
+    <div style="margin:20px 0;padding:16px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;">
+      <p style="margin:0 0 6px;"><strong>${escapeHtml(BOARDING_CHECKLIST_TITLE)}</strong></p>
+      <p style="margin:0 0 8px;">${escapeHtml(BOARDING_CHECKLIST_INTRO)}</p>
+      <ol style="margin:0;padding-left:24px;line-height:1.8;">${items}</ol>
+    </div>
+  `;
+}
+
 function decisionButtonRow(
   label: string,
   action: string,
@@ -233,17 +252,9 @@ function buildCustomerEmailHtml(
       <h2>[${BRAND_NAME}] ${isUpdate ? "Your updated agreement receipt" : "Your signed agreement receipt"}</h2>
       <p>Dear ${escapeHtml(ownerName)},</p>
       <p>Thank you for ${isUpdate ? "updating" : "submitting"} your pet boarding agreement with ${BRAND_NAME}.</p>
+      ${formatBoardingChecklistSection()}
       <p><strong>Please find your signed submission attached as a PDF.</strong> It includes all information you provided, the price estimate ($${quote.totalPrice.toFixed(2)}), the required deposit ($${quote.depositAmount.toFixed(2)}, which is ${DEPOSIT_PERCENT}% of the total), and your signature. Please save it for your records.</p>
       <p>${isUpdate ? "We will review the updated request and follow up soon." : "We will review your request and follow up soon."}</p>
-      <div style="margin:20px 0;padding:16px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;">
-        <p style="margin:0 0 8px;"><strong>What to bring for your dog's stay:</strong></p>
-        <ol style="margin:0;padding-left:24px;line-height:1.8;">
-          <li>Enough of your dog's regular food for the entire stay</li>
-          <li>Waste bags</li>
-          <li>Pet-safe wet wipes</li>
-          <li>Any other items you believe your dog may need</li>
-        </ol>
-      </div>
       ${editBlock}
       ${formatContactsSection()}
       <p style="margin-top:24px;">We look forward to caring for ${escapeHtml(data.petName)}!</p>
@@ -275,6 +286,7 @@ function buildAdminEmailHtml(
       <p><strong>Email:</strong> ${escapeHtml(data.email)}</p>
       <p><strong>Pet:</strong> ${escapeHtml(data.petName)}</p>
       <p><strong>Submitted at:</strong> ${escapeHtml(submittedAt)}</p>
+      ${formatBoardingChecklistSection()}
       ${buildAdminDecisionButtons(data, submissionId, revision)}
       ${formatPricingSection(quote)}
       ${formatPrescreenSection(data)}
