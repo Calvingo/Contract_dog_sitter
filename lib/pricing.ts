@@ -30,17 +30,13 @@ export type PriceBreakdown = {
 };
 
 export function getDailyRate(weightLb: number): number {
-  if (weightLb < 20) return 49;
-  if (weightLb <= 39) return 49;
-  if (weightLb <= 69) return 59;
+  if (weightLb <= 69) return 65;
   if (weightLb <= 89) return 69;
   return 79;
 }
 
 export function getWeightTierLabel(weightLb: number): string {
-  if (weightLb < 20) return "Under 20 lb (20–39 lb rate applies)";
-  if (weightLb <= 39) return "20–39 lb — $49/day";
-  if (weightLb <= 69) return "40–69 lb — $59/day";
+  if (weightLb <= 69) return "0–69 lb — $65/day";
   if (weightLb <= 89) return "70–89 lb — $69/day";
   return "90+ lb — $79/day";
 }

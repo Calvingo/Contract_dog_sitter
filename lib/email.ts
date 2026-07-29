@@ -321,13 +321,15 @@ export async function sendSubmissionEmails(
   const editUrl = submissionId
     ? buildSubmissionEditUrl(await createSubmissionEditToken(submissionId))
     : undefined;
+  const bookingDates = `${data.dropoffDate} to ${data.pickupDate}`;
+  const bookingSummary = `${data.petName} — $${quote.totalPrice.toFixed(2)} — ${bookingDates}`;
 
   const customerSubject = options.isUpdate
-    ? `[${BRAND_NAME}] Your updated agreement — ${data.petName}`
-    : `[${BRAND_NAME}] Your signed agreement — ${data.petName}`;
+    ? `[${BRAND_NAME}] Updated booking confirmation — ${bookingSummary}`
+    : `[${BRAND_NAME}] Booking confirmation — ${bookingSummary}`;
   const adminSubject = options.isUpdate
-    ? `[Updated Submission - Needs Review] ${ownerName} - ${data.petName} — $${quote.totalPrice.toFixed(2)}`
-    : `[New Submission] ${ownerName} - ${data.petName} — $${quote.totalPrice.toFixed(2)}`;
+    ? `[Updated Submission - Needs Review] ${bookingSummary} — ${ownerName}`
+    : `[New Submission] ${bookingSummary} — ${ownerName}`;
 
   try {
     await sendMail({

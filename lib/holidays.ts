@@ -1,9 +1,10 @@
 export const HOLIDAY_RANGES = [
-  { start: "2026-06-19", end: "2026-06-21", label: "Jun 19–21, 2026" },
+  { start: "2026-05-22", end: "2026-05-25", label: "May 22–25, 2026" },
   { start: "2026-07-03", end: "2026-07-05", label: "Jul 3–5, 2026" },
   { start: "2026-09-04", end: "2026-09-07", label: "Sep 4–7, 2026" },
-  { start: "2026-11-26", end: "2026-11-29", label: "Nov 26–29, 2026" },
-  { start: "2026-12-24", end: "2027-01-03", label: "Dec 24, 2026 – Jan 3, 2027" },
+  { start: "2026-11-25", end: "2026-11-29", label: "Nov 25–29, 2026" },
+  { start: "2026-12-24", end: "2026-12-27", label: "Dec 24–27, 2026" },
+  { start: "2026-12-31", end: "2027-01-03", label: "Dec 31, 2026 – Jan 3, 2027" },
 ] as const;
 
 export const HOLIDAY_FEE_PER_DAY = 10;
