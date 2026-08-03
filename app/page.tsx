@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AgreementPanel } from "@/components/AgreementPanel";
+import { BoardingChecklist } from "@/components/BoardingChecklist";
 import { FormFieldInput } from "@/components/FormFieldInput";
 import { FormSection } from "@/components/FormSection";
 import { PrescreenField } from "@/components/PrescreenField";
@@ -330,6 +331,8 @@ function HomePageContent() {
             Admin Login
           </Link>
         </header>
+
+        <BoardingChecklist />
 
         <section className="space-y-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-orange-100">
           <div>
