@@ -6,6 +6,8 @@ import {
 
 export const SENIOR_DOG_AGE_YEARS = 10;
 export const SENIOR_DOG_FEE_PER_DAY = 10;
+export const PUPPY_AGE_LIMIT_YEARS = 1;
+export const PUPPY_FEE_PER_DAY = 10;
 export const INTACT_DOG_FEE_PER_DAY = 10;
 export const DEPOSIT_PERCENT = 20;
 
@@ -15,6 +17,9 @@ export type PriceBreakdown = {
   billableDays: number;
   totalHours: number;
   boardingSubtotal: number;
+  puppyAgeLimitYears: number;
+  puppyFeePerDay: number;
+  puppyFee: number;
   seniorDogAgeYears: number;
   seniorDogFeePerDay: number;
   seniorDogFee: number;
@@ -72,6 +77,7 @@ function buildSummary(
   billableDays: number,
   dailyRate: number,
   boardingSubtotal: number,
+  puppyFee: number,
   seniorDogFee: number,
   intactDogFee: number,
   holidayFee: number,
@@ -79,6 +85,9 @@ function buildSummary(
 ): string {
   const daysLabel = billableDays === 1 ? "1 day" : `${billableDays} days`;
   let summary = `${daysLabel} × $${dailyRate}/day = $${boardingSubtotal.toFixed(2)}`;
+  if (puppyFee > 0) {
+    summary += ` + puppy fee (${daysLabel} × $${PUPPY_FEE_PER_DAY}/day) = $${puppyFee.toFixed(2)}`;
+  }
   if (seniorDogFee > 0) {
     summary += ` + senior dog fee (${daysLabel} × $${SENIOR_DOG_FEE_PER_DAY}/day) = $${seniorDogFee.toFixed(2)}`;
   }
@@ -120,6 +129,10 @@ export function calculatePrice(
   const dailyRate = getDailyRate(weightLb);
   const boardingSubtotal =
     Math.round(billableDays * dailyRate * 100) / 100;
+  const puppyFee =
+    petAgeYears < PUPPY_AGE_LIMIT_YEARS
+      ? Math.round(billableDays * PUPPY_FEE_PER_DAY * 100) / 100
+      : 0;
   const seniorDogFee =
     petAgeYears >= SENIOR_DOG_AGE_YEARS
       ? Math.round(billableDays * SENIOR_DOG_FEE_PER_DAY * 100) / 100
@@ -137,7 +150,9 @@ export function calculatePrice(
   const holidayFee =
     Math.round(holidayBillableDays * HOLIDAY_FEE_PER_DAY * 100) / 100;
   const totalPrice =
-    Math.round((boardingSubtotal + seniorDogFee + intactDogFee + holidayFee) * 100) / 100;
+    Math.round(
+      (boardingSubtotal + puppyFee + seniorDogFee + intactDogFee + holidayFee) * 100
+    ) / 100;
   const depositAmount = Math.round(totalPrice * (DEPOSIT_PERCENT / 100) * 100) / 100;
 
   return {
@@ -146,6 +161,9 @@ export function calculatePrice(
     billableDays,
     totalHours: Math.round(totalHours * 10) / 10,
     boardingSubtotal,
+    puppyAgeLimitYears: PUPPY_AGE_LIMIT_YEARS,
+    puppyFeePerDay: PUPPY_FEE_PER_DAY,
+    puppyFee,
     seniorDogAgeYears: SENIOR_DOG_AGE_YEARS,
     seniorDogFeePerDay: SENIOR_DOG_FEE_PER_DAY,
     seniorDogFee,
@@ -161,6 +179,7 @@ export function calculatePrice(
       billableDays,
       dailyRate,
       boardingSubtotal,
+      puppyFee,
       seniorDogFee,
       intactDogFee,
       holidayFee,

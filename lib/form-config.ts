@@ -201,7 +201,7 @@ export const formFields: FormField[] = [
   {
     name: "petAgeYears",
     type: "number",
-    label: "Age (years)",
+    label: "Age (years; e.g. 0.5 for 6 months)",
     required: true,
     section: "pet",
   },

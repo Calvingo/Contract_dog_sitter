@@ -78,6 +78,18 @@ export function PriceEstimate({ values, title, incompleteHint, holidayNote }: Pr
             ${quote.boardingSubtotal.toFixed(2)}
           </dd>
         </div>
+        {quote.puppyFee > 0 ? (
+          <div className="flex justify-between gap-4">
+            <dt>
+              Puppy fee ({quote.billableDays}{" "}
+              {quote.billableDays === 1 ? "day" : "days"} × $
+              {quote.puppyFeePerDay})
+            </dt>
+            <dd className="text-right font-medium">
+              ${quote.puppyFee.toFixed(2)}
+            </dd>
+          </div>
+        ) : null}
         {quote.seniorDogFee > 0 ? (
           <div className="flex justify-between gap-4">
             <dt>

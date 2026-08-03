@@ -67,7 +67,13 @@ export function FormFieldInput({
         <input
           type={field.type === "number" ? "number" : field.type}
           min={numberMin}
-          step={field.type === "number" ? 1 : undefined}
+          step={
+            field.type === "number"
+              ? field.name === "petAgeYears"
+                ? "any"
+                : 1
+              : undefined
+          }
           required={field.required}
           value={value}
           onChange={(event) => onChange(field.name, event.target.value)}

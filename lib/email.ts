@@ -115,6 +115,14 @@ function formatPricingSection(quote: PriceBreakdown): string {
     rowHtml("Daily rate", `$${quote.dailyRate}`),
     rowHtml("Boarding subtotal", `$${quote.boardingSubtotal.toFixed(2)}`),
   ];
+  if (quote.puppyFee > 0) {
+    rows.push(
+      rowHtml(
+        "Puppy fee",
+        `$${quote.puppyFee.toFixed(2)} (${quote.billableDays} day(s) × $${quote.puppyFeePerDay})`
+      )
+    );
+  }
   if (quote.seniorDogFee > 0) {
     rows.push(
       rowHtml(

@@ -205,6 +205,13 @@ export async function generateSubmissionPdf(
   ctx = drawRow(ctx, "Billable days", String(quote.billableDays));
   ctx = drawRow(ctx, "Daily rate", `$${quote.dailyRate}`);
   ctx = drawRow(ctx, "Boarding subtotal", `$${quote.boardingSubtotal.toFixed(2)}`);
+  if (quote.puppyFee > 0) {
+    ctx = drawRow(
+      ctx,
+      "Puppy fee",
+      `$${quote.puppyFee.toFixed(2)} (${quote.billableDays} day(s) × $${quote.puppyFeePerDay})`
+    );
+  }
   if (quote.seniorDogFee > 0) {
     ctx = drawRow(
       ctx,
