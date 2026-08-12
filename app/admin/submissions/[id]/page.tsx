@@ -2,6 +2,7 @@ import { SubmissionStatus } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
 import { getAdminSession } from "@/lib/auth/admin-session";
 import { prisma } from "@/lib/db";
+import { submissionDogNames } from "@/lib/submission-pets";
 import {
   decideSubmissionAction,
   updateCustomerPetAction,
@@ -39,6 +40,7 @@ export default async function AdminSubmissionDetailPage(props: {
     include: {
       customer: true,
       pet: true,
+      submissionPets: { orderBy: { position: "asc" }, include: { pet: true } },
       decisionEvents: { orderBy: { createdAt: "desc" } },
       emailLogs: { orderBy: { createdAt: "desc" } },
       revisions: { orderBy: { revision: "desc" }, take: 10 },
@@ -50,7 +52,7 @@ export default async function AdminSubmissionDetailPage(props: {
   return (
     <AdminShell
       email={session.email}
-      title={`${submission.pet.name} · ${submission.customer.firstName} ${submission.customer.lastName}`}
+      title={`${submissionDogNames(submission.submissionPets, submission.pet.name)} · ${submission.customer.firstName} ${submission.customer.lastName}`}
       subtitle="Review, decide, and edit this booking request."
     >
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
@@ -175,6 +177,7 @@ export default async function AdminSubmissionDetailPage(props: {
             <input type="hidden" name="submissionId" value={submission.id} />
             <input type="hidden" name="customerId" value={submission.customerId} />
             <input type="hidden" name="petId" value={submission.petId} />
+            {submission.submissionPets[1] ? <input type="hidden" name="secondPetId" value={submission.submissionPets[1].petId} /> : null}
             <h2 className="text-xl font-bold text-stone-950">
               Edit Customer and Dog
             </h2>
@@ -195,6 +198,15 @@ export default async function AdminSubmissionDetailPage(props: {
                 type="number"
                 required={false}
               />
+              {submission.submissionPets[1] ? (
+                <>
+                  <div className="sm:col-span-2 mt-2 border-t border-stone-200 pt-4 text-sm font-bold text-stone-800">Second dog</div>
+                  <TextInput name="secondPetName" label="Dog name" value={submission.submissionPets[1].pet.name} />
+                  <TextInput name="secondPetBreed" label="Breed" value={submission.submissionPets[1].pet.breed} />
+                  <TextInput name="secondPetWeightLb" label="Weight lb" value={String(submission.submissionPets[1].pet.weightLb)} type="number" />
+                  <TextInput name="secondPetAgeYears" label="Age years" value={submission.submissionPets[1].pet.ageYears == null ? "" : String(submission.submissionPets[1].pet.ageYears)} type="number" required={false} />
+                </>
+              ) : null}
             </div>
             <button className="mt-5 rounded-xl bg-stone-950 px-5 py-3 text-sm font-semibold text-white hover:bg-stone-800">
               Save customer and dog

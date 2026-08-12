@@ -8,6 +8,15 @@ export type FormValues = {
   prescreenSpayedNeutered: string;
   prescreenMedicalHistory: string;
   prescreenAggressionChildren: string;
+  hasSecondDog: boolean;
+  secondPrescreenAggression: string;
+  secondPrescreenBitten: string;
+  secondPrescreenPottyTraining: string;
+  secondPrescreenSeparationAnxiety: string;
+  secondPrescreenFrequentBarking: string;
+  secondPrescreenSpayedNeutered: string;
+  secondPrescreenMedicalHistory: string;
+  secondPrescreenAggressionChildren: string;
   firstName: string;
   lastName: string;
   email: string;
@@ -18,11 +27,16 @@ export type FormValues = {
   petBreed: string;
   petWeightLb: string;
   petAgeYears: string;
+  secondPetName: string;
+  secondPetBreed: string;
+  secondPetWeightLb: string;
+  secondPetAgeYears: string;
   dropoffDate: string;
   dropoffTime: string;
   pickupDate: string;
   pickupTime: string;
   prescreenNotes: string;
+  secondPrescreenNotes: string;
   agreed: boolean;
   signature: string;
   honeypot?: string;
@@ -57,6 +71,15 @@ export const initialFormValues: FormValues = {
   prescreenSpayedNeutered: "",
   prescreenMedicalHistory: "",
   prescreenAggressionChildren: "",
+  hasSecondDog: false,
+  secondPrescreenAggression: "",
+  secondPrescreenBitten: "",
+  secondPrescreenPottyTraining: "",
+  secondPrescreenSeparationAnxiety: "",
+  secondPrescreenFrequentBarking: "",
+  secondPrescreenSpayedNeutered: "",
+  secondPrescreenMedicalHistory: "",
+  secondPrescreenAggressionChildren: "",
   firstName: "",
   lastName: "",
   email: "",
@@ -67,11 +90,16 @@ export const initialFormValues: FormValues = {
   petBreed: "",
   petWeightLb: "",
   petAgeYears: "",
+  secondPetName: "",
+  secondPetBreed: "",
+  secondPetWeightLb: "",
+  secondPetAgeYears: "",
   dropoffDate: "",
   dropoffTime: "",
   pickupDate: "",
   pickupTime: "",
   prescreenNotes: "",
+  secondPrescreenNotes: "",
   agreed: false,
   signature: "",
   honeypot: "",
@@ -123,6 +151,24 @@ export const prescreenQuestions: PrescreenQuestion[] = [
     name: "prescreenAggressionChildren",
     label: "Does your dog show aggression toward children?",
   },
+];
+
+export const secondPrescreenQuestions: PrescreenQuestion[] = [
+  { name: "secondPrescreenSpayedNeutered", label: "Is your dog spayed or neutered?" },
+  { name: "secondPrescreenAggression", label: "Does your dog show aggression?" },
+  { name: "secondPrescreenBitten", label: "Has your dog ever bitten another dog or person?" },
+  { name: "secondPrescreenPottyTraining", label: "Does your dog have indoor accidents at home?" },
+  { name: "secondPrescreenSeparationAnxiety", label: "Does your dog have severe separation anxiety?" },
+  { name: "secondPrescreenFrequentBarking", label: "Does your dog bark frequently?" },
+  { name: "secondPrescreenMedicalHistory", label: "Does your dog have chronic illness, underlying medical conditions, or a history of surgery?" },
+  { name: "secondPrescreenAggressionChildren", label: "Does your dog show aggression toward children?" },
+];
+
+export const secondPetFields: FormField[] = [
+  { name: "secondPetName", type: "text", label: "Name", required: true, section: "pet" },
+  { name: "secondPetBreed", type: "text", label: "Breed", required: true, section: "pet" },
+  { name: "secondPetWeightLb", type: "number", label: "Weight (lbs)", required: true, section: "pet" },
+  { name: "secondPetAgeYears", type: "number", label: "Age (years; e.g. 0.5 for 6 months)", required: true, section: "pet" },
 ];
 
 export const formFields: FormField[] = [

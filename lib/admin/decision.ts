@@ -77,6 +77,7 @@ export async function processAdminSubmissionDecision(options: {
     include: {
       customer: true,
       pet: true,
+      submissionPets: { orderBy: { position: "asc" }, include: { pet: true } },
     },
   });
 
@@ -109,7 +110,7 @@ export async function processAdminSubmissionDecision(options: {
     email: submission.customer.email,
     firstName: submission.customer.firstName,
     lastName: submission.customer.lastName,
-    petName: submission.pet.name,
+    petName: submission.submissionPets.map((item) => item.pet.name).join(" & ") || submission.pet.name,
     exp: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60,
   };
   const subjectLabel = decisionActionLabel(options.action);

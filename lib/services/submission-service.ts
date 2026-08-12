@@ -3,16 +3,18 @@ import type { FormValues } from "@/lib/form-config";
 import { prisma } from "@/lib/db";
 import {
   buildCustomerSnapshot,
-  buildPetSnapshot,
-  buildPrescreenAnswers,
+  buildPetSnapshots,
+  buildPetPrescreenAnswers,
   getSubmissionDateTimes,
   getSubmissionQuote,
 } from "@/lib/submission-data";
 
 export async function createSubmissionRecord(data: FormValues) {
   const customerSnapshot = buildCustomerSnapshot(data);
-  const petSnapshot = buildPetSnapshot(data);
-  const prescreenAnswers = buildPrescreenAnswers(data);
+  const petSnapshots = buildPetSnapshots(data);
+  const prescreenAnswersByPet = buildPetPrescreenAnswers(data);
+  const petSnapshot = petSnapshots[0];
+  const prescreenAnswers = prescreenAnswersByPet[0];
   const quote = getSubmissionQuote(data);
   const { dropoffAt, pickupAt } = getSubmissionDateTimes(data);
   const now = new Date();
@@ -35,26 +37,15 @@ export async function createSubmissionRecord(data: FormValues) {
       },
     });
 
-    const pet = await tx.pet.upsert({
-      where: {
-        customerId_name: {
-          customerId: customer.id,
-          name: petSnapshot.name,
-        },
-      },
-      create: {
-        customerId: customer.id,
-        name: petSnapshot.name,
-        breed: petSnapshot.breed,
-        weightLb: petSnapshot.weightLb,
-        ageYears: petSnapshot.ageYears,
-      },
-      update: {
-        breed: petSnapshot.breed,
-        weightLb: petSnapshot.weightLb,
-        ageYears: petSnapshot.ageYears,
-      },
-    });
+    const pets = [];
+    for (const snapshot of petSnapshots) {
+      pets.push(await tx.pet.upsert({
+        where: { customerId_name: { customerId: customer.id, name: snapshot.name } },
+        create: { customerId: customer.id, ...snapshot },
+        update: { breed: snapshot.breed, weightLb: snapshot.weightLb, ageYears: snapshot.ageYears },
+      }));
+    }
+    const pet = pets[0];
 
     const submission = await tx.submission.create({
       data: {
@@ -71,10 +62,21 @@ export async function createSubmissionRecord(data: FormValues) {
         signatureData: data.signature,
         customerSnapshot: customerSnapshot as unknown as Prisma.InputJsonValue,
         petSnapshot: petSnapshot as unknown as Prisma.InputJsonValue,
+        submissionPets: {
+          create: pets.map((savedPet, index) => ({
+            petId: savedPet.id,
+            position: index + 1,
+            petSnapshot: petSnapshots[index] as unknown as Prisma.InputJsonValue,
+            prescreenAnswers: prescreenAnswersByPet[index] as Prisma.InputJsonValue,
+            prescreenNotes: index === 0 ? data.prescreenNotes?.trim() || null : data.secondPrescreenNotes?.trim() || null,
+            quotedBreakdown: quote.dogs[index] as unknown as Prisma.InputJsonValue,
+            quotedTotal: quote.dogs[index].totalPrice,
+          })),
+        },
       },
     });
 
-    return { submission, customer, pet, quote };
+    return { submission, customer, pet, pets, quote };
   });
 }
 
@@ -83,8 +85,10 @@ export async function updateSubmissionRecord(options: {
   data: FormValues;
 }) {
   const customerSnapshot = buildCustomerSnapshot(options.data);
-  const petSnapshot = buildPetSnapshot(options.data);
-  const prescreenAnswers = buildPrescreenAnswers(options.data);
+  const petSnapshots = buildPetSnapshots(options.data);
+  const prescreenAnswersByPet = buildPetPrescreenAnswers(options.data);
+  const petSnapshot = petSnapshots[0];
+  const prescreenAnswers = prescreenAnswersByPet[0];
   const quote = getSubmissionQuote(options.data);
   const { dropoffAt, pickupAt } = getSubmissionDateTimes(options.data);
   const now = new Date();
@@ -95,6 +99,7 @@ export async function updateSubmissionRecord(options: {
       include: {
         customer: true,
         pet: true,
+        submissionPets: { orderBy: { position: "asc" } },
       },
     });
 
@@ -127,6 +132,14 @@ export async function updateSubmissionRecord(options: {
         signatureData: current.signatureData,
         customerSnapshot: current.customerSnapshot as Prisma.InputJsonValue,
         petSnapshot: current.petSnapshot as Prisma.InputJsonValue,
+        petsSnapshot: current.submissionPets.map((item) => ({
+          position: item.position,
+          petSnapshot: item.petSnapshot,
+          prescreenAnswers: item.prescreenAnswers,
+          prescreenNotes: item.prescreenNotes,
+          quotedBreakdown: item.quotedBreakdown,
+          quotedTotal: item.quotedTotal.toString(),
+        })) as unknown as Prisma.InputJsonValue,
         dropoffAt: current.dropoffAt,
         pickupAt: current.pickupAt,
       },
@@ -150,26 +163,15 @@ export async function updateSubmissionRecord(options: {
       },
     });
 
-    const pet = await tx.pet.upsert({
-      where: {
-        customerId_name: {
-          customerId: customer.id,
-          name: petSnapshot.name,
-        },
-      },
-      create: {
-        customerId: customer.id,
-        name: petSnapshot.name,
-        breed: petSnapshot.breed,
-        weightLb: petSnapshot.weightLb,
-        ageYears: petSnapshot.ageYears,
-      },
-      update: {
-        breed: petSnapshot.breed,
-        weightLb: petSnapshot.weightLb,
-        ageYears: petSnapshot.ageYears,
-      },
-    });
+    const pets = [];
+    for (const snapshot of petSnapshots) {
+      pets.push(await tx.pet.upsert({
+        where: { customerId_name: { customerId: customer.id, name: snapshot.name } },
+        create: { customerId: customer.id, ...snapshot },
+        update: { breed: snapshot.breed, weightLb: snapshot.weightLb, ageYears: snapshot.ageYears },
+      }));
+    }
+    const pet = pets[0];
 
     const nextStatus =
       current.status === SubmissionStatus.PENDING
@@ -202,10 +204,25 @@ export async function updateSubmissionRecord(options: {
       },
     });
 
+    await tx.submissionPet.deleteMany({ where: { submissionId: current.id } });
+    await tx.submissionPet.createMany({
+      data: pets.map((savedPet, index) => ({
+        submissionId: current.id,
+        petId: savedPet.id,
+        position: index + 1,
+        petSnapshot: petSnapshots[index] as unknown as Prisma.InputJsonValue,
+        prescreenAnswers: prescreenAnswersByPet[index] as Prisma.InputJsonValue,
+        prescreenNotes: index === 0 ? options.data.prescreenNotes?.trim() || null : options.data.secondPrescreenNotes?.trim() || null,
+        quotedBreakdown: quote.dogs[index] as unknown as Prisma.InputJsonValue,
+        quotedTotal: quote.dogs[index].totalPrice,
+      })),
+    });
+
     return {
       submission,
       customer,
       pet,
+      pets,
       quote,
       previousStatus: current.status,
     };

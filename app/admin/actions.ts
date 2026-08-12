@@ -101,6 +101,7 @@ export async function updateCustomerPetAction(formData: FormData) {
   const submissionId = String(formData.get("submissionId") || "");
   const customerId = String(formData.get("customerId") || "");
   const petId = String(formData.get("petId") || "");
+  const secondPetId = String(formData.get("secondPetId") || "");
   const firstName = String(formData.get("firstName") || "").trim();
   const lastName = String(formData.get("lastName") || "").trim();
   const email = String(formData.get("email") || "").trim().toLowerCase();
@@ -112,6 +113,11 @@ export async function updateCustomerPetAction(formData: FormData) {
   const petWeightLb = Number(formData.get("petWeightLb") || "");
   const petAgeYearsRaw = String(formData.get("petAgeYears") || "").trim();
   const petAgeYears = petAgeYearsRaw ? Number(petAgeYearsRaw) : null;
+  const secondPetName = String(formData.get("secondPetName") || "").trim();
+  const secondPetBreed = String(formData.get("secondPetBreed") || "").trim();
+  const secondPetWeightLb = Number(formData.get("secondPetWeightLb") || "");
+  const secondPetAgeYearsRaw = String(formData.get("secondPetAgeYears") || "").trim();
+  const secondPetAgeYears = secondPetAgeYearsRaw ? Number(secondPetAgeYearsRaw) : null;
 
   if (
     !submissionId ||
@@ -127,11 +133,12 @@ export async function updateCustomerPetAction(formData: FormData) {
     !Number.isFinite(petWeightLb) ||
     petWeightLb <= 0 ||
     (petAgeYears !== null && (!Number.isFinite(petAgeYears) || petAgeYears < 0))
+    || (secondPetId && (!secondPetName || !secondPetBreed || !Number.isFinite(secondPetWeightLb) || secondPetWeightLb <= 0 || (secondPetAgeYears !== null && (!Number.isFinite(secondPetAgeYears) || secondPetAgeYears < 0))))
   ) {
     throw new Error("Invalid customer or pet update.");
   }
 
-  await prisma.$transaction([
+  const updates = [
     prisma.customer.update({
       where: { id: customerId },
       data: {
@@ -152,7 +159,14 @@ export async function updateCustomerPetAction(formData: FormData) {
         ageYears: petAgeYears,
       },
     }),
-  ]);
+  ];
+  if (secondPetId) {
+    updates.push(prisma.pet.update({
+      where: { id: secondPetId },
+      data: { name: secondPetName, breed: secondPetBreed, weightLb: secondPetWeightLb, ageYears: secondPetAgeYears },
+    }));
+  }
+  await prisma.$transaction(updates);
 
   revalidatePath("/admin");
   revalidatePath("/admin/requests");

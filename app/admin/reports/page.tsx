@@ -2,6 +2,7 @@ import { SubmissionStatus } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { getAdminSession } from "@/lib/auth/admin-session";
 import { prisma } from "@/lib/db";
+import { submissionDogNames } from "@/lib/submission-pets";
 import { AdminShell, Stat, money } from "../admin-ui";
 
 export default async function AdminReportsPage() {
@@ -12,7 +13,7 @@ export default async function AdminReportsPage() {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const submissions = await prisma.submission.findMany({
     orderBy: { createdAt: "desc" },
-    include: { pet: true, customer: true },
+    include: { pet: true, customer: true, submissionPets: { orderBy: { position: "asc" }, include: { pet: true } } },
   });
 
   const accepted = submissions.filter(
@@ -91,7 +92,7 @@ export default async function AdminReportsPage() {
               >
                 <div>
                   <div className="font-semibold text-stone-950">
-                    {submission.pet.name}
+                    {submissionDogNames(submission.submissionPets, submission.pet.name)}
                   </div>
                   <div className="text-xs text-stone-500">
                     {submission.customer.firstName} {submission.customer.lastName}

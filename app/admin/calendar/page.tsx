@@ -3,6 +3,7 @@ import { SubmissionStatus } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { getAdminSession } from "@/lib/auth/admin-session";
 import { prisma } from "@/lib/db";
+import { submissionDogCount, submissionDogNames } from "@/lib/submission-pets";
 import { AdminShell, StatusBadge, dateOnly, dateTime, money } from "../admin-ui";
 
 export default async function AdminCalendarPage() {
@@ -25,7 +26,7 @@ export default async function AdminCalendarPage() {
       },
     },
     orderBy: { dropoffAt: "asc" },
-    include: { customer: true, pet: true },
+    include: { customer: true, pet: true, submissionPets: { orderBy: { position: "asc" }, include: { pet: true } } },
   });
 
   const activeDogsToday = calendarItems.filter(
@@ -33,7 +34,7 @@ export default async function AdminCalendarPage() {
       submission.status === SubmissionStatus.ACCEPTED &&
       submission.dropoffAt <= now &&
       submission.pickupAt >= now
-  ).length;
+  ).reduce((sum, submission) => sum + submissionDogCount(submission.submissionPets), 0);
 
   return (
     <AdminShell
@@ -54,7 +55,7 @@ export default async function AdminCalendarPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="text-lg font-bold text-stone-950">
-                      {item.pet.name}
+                      {submissionDogNames(item.submissionPets, item.pet.name)}
                     </div>
                     <div className="text-sm text-stone-600">
                       {item.customer.firstName} {item.customer.lastName}

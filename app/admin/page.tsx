@@ -2,6 +2,7 @@ import { SubmissionStatus } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { getAdminSession } from "@/lib/auth/admin-session";
 import { prisma } from "@/lib/db";
+import { submissionDogCount } from "@/lib/submission-pets";
 import { AdminShell, ModuleCard, Stat, money } from "./admin-ui";
 
 export default async function AdminPage() {
@@ -20,7 +21,7 @@ export default async function AdminPage() {
           { status: { in: [SubmissionStatus.PENDING, SubmissionStatus.NEEDS_REVIEW] } },
         ],
       },
-      include: { pet: true },
+      include: { pet: true, submissionPets: true },
     }),
     prisma.customer.count(),
   ]);
@@ -35,7 +36,7 @@ export default async function AdminPage() {
       submission.status === SubmissionStatus.ACCEPTED &&
       submission.dropoffAt <= now &&
       submission.pickupAt >= now
-  ).length;
+  ).reduce((sum, submission) => sum + submissionDogCount(submission.submissionPets), 0);
   const acceptedThisMonth = submissions.filter(
     (submission) =>
       submission.status === SubmissionStatus.ACCEPTED &&

@@ -42,6 +42,7 @@ export async function findValidSubmissionEditToken(token: string | null) {
         include: {
           customer: true,
           pet: true,
+          submissionPets: { orderBy: { position: "asc" } },
         },
       },
     },

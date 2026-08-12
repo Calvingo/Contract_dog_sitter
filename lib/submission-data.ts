@@ -1,5 +1,5 @@
 import type { FormValues } from "./form-config";
-import { prescreenQuestions } from "./form-config";
+import { prescreenQuestions, secondPrescreenQuestions } from "./form-config";
 import { calculatePrice, parseDateTime, type PriceBreakdown } from "./pricing";
 
 export type CustomerSnapshot = {
@@ -16,6 +16,13 @@ export type PetSnapshot = {
   breed: string;
   weightLb: number;
   ageYears: number;
+};
+
+export type SubmissionQuote = {
+  dogs: PriceBreakdown[];
+  totalPrice: number;
+  depositAmount: number;
+  summary: string;
 };
 
 export function normalizeEmail(email: string): string {
@@ -42,6 +49,19 @@ export function buildPetSnapshot(data: FormValues): PetSnapshot {
   };
 }
 
+export function buildPetSnapshots(data: FormValues): PetSnapshot[] {
+  const pets = [buildPetSnapshot(data)];
+  if (data.hasSecondDog) {
+    pets.push({
+      name: data.secondPetName.trim(),
+      breed: data.secondPetBreed.trim(),
+      weightLb: Number(data.secondPetWeightLb),
+      ageYears: Number(data.secondPetAgeYears),
+    });
+  }
+  return pets;
+}
+
 export function buildPrescreenAnswers(data: FormValues): Record<string, string> {
   return Object.fromEntries(
     prescreenQuestions.map((question) => [
@@ -49,6 +69,23 @@ export function buildPrescreenAnswers(data: FormValues): Record<string, string> 
       String(data[question.name] ?? "").trim(),
     ])
   );
+}
+
+export function buildPetPrescreenAnswers(
+  data: FormValues
+): Record<string, string>[] {
+  const answers = [buildPrescreenAnswers(data)];
+  if (data.hasSecondDog) {
+    answers.push(
+      Object.fromEntries(
+        secondPrescreenQuestions.map((question, index) => [
+          prescreenQuestions[index].name,
+          String(data[question.name] ?? "").trim(),
+        ])
+      )
+    );
+  }
+  return answers;
 }
 
 export function getSubmissionDateTimes(data: FormValues): {
@@ -65,8 +102,8 @@ export function getSubmissionDateTimes(data: FormValues): {
   return { dropoffAt, pickupAt };
 }
 
-export function getSubmissionQuote(data: FormValues): PriceBreakdown {
-  const quote = calculatePrice(
+export function getSubmissionQuote(data: FormValues): SubmissionQuote {
+  const firstQuote = calculatePrice(
     Number(data.petWeightLb),
     Number(data.petAgeYears),
     data.prescreenSpayedNeutered,
@@ -76,11 +113,30 @@ export function getSubmissionQuote(data: FormValues): PriceBreakdown {
     data.pickupTime
   );
 
-  if (!quote) {
+  const secondQuote = data.hasSecondDog
+    ? calculatePrice(
+        Number(data.secondPetWeightLb),
+        Number(data.secondPetAgeYears),
+        data.secondPrescreenSpayedNeutered,
+        data.dropoffDate,
+        data.dropoffTime,
+        data.pickupDate,
+        data.pickupTime
+      )
+    : null;
+
+  if (!firstQuote || (data.hasSecondDog && !secondQuote)) {
     throw new Error("Unable to calculate price");
   }
-
-  return quote;
+  const dogs = secondQuote ? [firstQuote, secondQuote] : [firstQuote];
+  const totalPrice = Math.round(dogs.reduce((sum, quote) => sum + quote.totalPrice, 0) * 100) / 100;
+  const depositAmount = Math.round(dogs.reduce((sum, quote) => sum + quote.depositAmount, 0) * 100) / 100;
+  return {
+    dogs,
+    totalPrice,
+    depositAmount,
+    summary: dogs.map((quote, index) => `Dog ${index + 1}: ${quote.summary}`).join(" | "),
+  };
 }
 
 function toDateInputValue(date: Date): string {
@@ -105,12 +161,23 @@ type SubmissionLike = {
   signatureData: string;
   customerSnapshot: unknown;
   petSnapshot: unknown;
+  submissionPets?: Array<{
+    position: number;
+    petSnapshot: unknown;
+    prescreenAnswers: unknown;
+    prescreenNotes: string | null;
+  }>;
 };
 
 export function formValuesFromSubmission(submission: SubmissionLike): FormValues {
   const customer = submission.customerSnapshot as Partial<CustomerSnapshot>;
   const pet = submission.petSnapshot as Partial<PetSnapshot>;
   const prescreen = submission.prescreenAnswers as Partial<Record<keyof FormValues, string>>;
+  const second = submission.submissionPets
+    ?.filter((item) => item.position === 2)
+    .at(0);
+  const secondPet = (second?.petSnapshot ?? {}) as Partial<PetSnapshot>;
+  const secondPrescreen = (second?.prescreenAnswers ?? {}) as Partial<Record<keyof FormValues, string>>;
 
   return {
     firstTimeBooking: submission.firstTimeBooking,
@@ -122,6 +189,15 @@ export function formValuesFromSubmission(submission: SubmissionLike): FormValues
     prescreenSpayedNeutered: prescreen.prescreenSpayedNeutered ?? "",
     prescreenMedicalHistory: prescreen.prescreenMedicalHistory ?? "",
     prescreenAggressionChildren: prescreen.prescreenAggressionChildren ?? "",
+    hasSecondDog: Boolean(second),
+    secondPrescreenAggression: secondPrescreen.prescreenAggression ?? "",
+    secondPrescreenBitten: secondPrescreen.prescreenBitten ?? "",
+    secondPrescreenPottyTraining: secondPrescreen.prescreenPottyTraining ?? "",
+    secondPrescreenSeparationAnxiety: secondPrescreen.prescreenSeparationAnxiety ?? "",
+    secondPrescreenFrequentBarking: secondPrescreen.prescreenFrequentBarking ?? "",
+    secondPrescreenSpayedNeutered: secondPrescreen.prescreenSpayedNeutered ?? "",
+    secondPrescreenMedicalHistory: secondPrescreen.prescreenMedicalHistory ?? "",
+    secondPrescreenAggressionChildren: secondPrescreen.prescreenAggressionChildren ?? "",
     firstName: customer.firstName ?? "",
     lastName: customer.lastName ?? "",
     email: customer.email ?? "",
@@ -132,11 +208,16 @@ export function formValuesFromSubmission(submission: SubmissionLike): FormValues
     petBreed: pet.breed ?? "",
     petWeightLb: pet.weightLb == null ? "" : String(pet.weightLb),
     petAgeYears: pet.ageYears == null ? "" : String(pet.ageYears),
+    secondPetName: secondPet.name ?? "",
+    secondPetBreed: secondPet.breed ?? "",
+    secondPetWeightLb: secondPet.weightLb == null ? "" : String(secondPet.weightLb),
+    secondPetAgeYears: secondPet.ageYears == null ? "" : String(secondPet.ageYears),
     dropoffDate: toDateInputValue(submission.dropoffAt),
     dropoffTime: toTimeInputValue(submission.dropoffAt),
     pickupDate: toDateInputValue(submission.pickupAt),
     pickupTime: toTimeInputValue(submission.pickupAt),
     prescreenNotes: submission.prescreenNotes ?? "",
+    secondPrescreenNotes: second?.prescreenNotes ?? "",
     agreed: false,
     signature: "",
     honeypot: "",

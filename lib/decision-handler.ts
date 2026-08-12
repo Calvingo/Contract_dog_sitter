@@ -117,6 +117,7 @@ export async function processDecision(
       include: {
         customer: true,
         pet: true,
+        submissionPets: { orderBy: { position: "asc" }, include: { pet: true } },
       },
     });
 
@@ -157,7 +158,7 @@ export async function processDecision(
         action: "meet_greet",
         owner: `${submission.customer.firstName} ${submission.customer.lastName}`.trim(),
         email: submission.customer.email,
-        petName: submission.pet.name,
+        petName: submission.submissionPets.map((item) => item.pet.name).join(" & ") || submission.pet.name,
         submissionId: submission.id,
         token,
         requiresScheduling: true,
@@ -198,7 +199,7 @@ export async function processDecision(
         action: "meet_greet",
         owner: `${submission.customer.firstName} ${submission.customer.lastName}`.trim(),
         email: submission.customer.email,
-        petName: submission.pet.name,
+        petName: submission.submissionPets.map((item) => item.pet.name).join(" & ") || submission.pet.name,
         submissionId: submission.id,
         token,
         requiresScheduling: true,
@@ -210,7 +211,7 @@ export async function processDecision(
       email: submission.customer.email,
       firstName: submission.customer.firstName,
       lastName: submission.customer.lastName,
-      petName: submission.pet.name,
+      petName: submission.submissionPets.map((item) => item.pet.name).join(" & ") || submission.pet.name,
       exp: payload.exp,
     };
 
@@ -321,6 +322,7 @@ export async function processMeetGreetSchedule(options: {
     include: {
       customer: true,
       pet: true,
+      submissionPets: { orderBy: { position: "asc" }, include: { pet: true } },
     },
   });
 
@@ -383,7 +385,7 @@ export async function processMeetGreetSchedule(options: {
     email: submission.customer.email,
     firstName: submission.customer.firstName,
     lastName: submission.customer.lastName,
-    petName: submission.pet.name,
+    petName: submission.submissionPets.map((item) => item.pet.name).join(" & ") || submission.pet.name,
     exp: payload.exp,
   };
 

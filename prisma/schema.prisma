@@ -65,6 +65,7 @@ model Pet {
   updatedAt   DateTime     @updatedAt
   customer    Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
   submissions Submission[]
+  submissionPets SubmissionPet[]
 
   @@unique([customerId, name])
   @@index([customerId])
@@ -98,6 +99,7 @@ model Submission {
   emailLogs          EmailLog[]
   editTokens         SubmissionEditToken[]
   revisions          SubmissionRevision[]
+  submissionPets     SubmissionPet[]
 
   @@index([customerId])
   @@index([petId])
@@ -130,6 +132,7 @@ model SubmissionRevision {
   signatureData      String           @db.Text
   customerSnapshot   Json
   petSnapshot        Json
+  petsSnapshot       Json?
   dropoffAt          DateTime
   pickupAt           DateTime
   createdAt          DateTime         @default(now())
@@ -137,6 +140,26 @@ model SubmissionRevision {
 
   @@unique([submissionId, revision])
   @@index([submissionId])
+}
+
+model SubmissionPet {
+  id               String     @id @default(cuid())
+  submissionId     String
+  petId            String
+  position         Int
+  petSnapshot      Json
+  prescreenAnswers Json
+  prescreenNotes   String?    @db.Text
+  quotedBreakdown  Json
+  quotedTotal      Decimal    @db.Decimal(10, 2)
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  submission       Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  pet              Pet        @relation(fields: [petId], references: [id], onDelete: Restrict)
+
+  @@unique([submissionId, position])
+  @@index([submissionId])
+  @@index([petId])
 }
 
 model DecisionEvent {

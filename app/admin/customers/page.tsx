@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getAdminSession } from "@/lib/auth/admin-session";
 import { prisma } from "@/lib/db";
+import { submissionDogNames } from "@/lib/submission-pets";
 import { AdminShell, StatusBadge, dateOnly, money } from "../admin-ui";
 
 export default async function AdminCustomersPage() {
@@ -15,7 +16,7 @@ export default async function AdminCustomersPage() {
       submissions: {
         orderBy: { dropoffAt: "desc" },
         take: 6,
-        include: { pet: true },
+        include: { pet: true, submissionPets: { orderBy: { position: "asc" }, include: { pet: true } } },
       },
     },
   });
@@ -74,7 +75,7 @@ export default async function AdminCustomersPage() {
                     >
                       <div>
                         <div className="font-semibold text-stone-950">
-                          {submission.pet.name}
+                          {submissionDogNames(submission.submissionPets, submission.pet.name)}
                         </div>
                         <div className="text-xs text-stone-500">
                           {dateOnly(submission.dropoffAt)} -{" "}

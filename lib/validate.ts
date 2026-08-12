@@ -1,7 +1,9 @@
 import { isPickupDropoffTimeAllowed } from "./booking-time";
 import type { FormValues } from "./form-config";
 import { allSubmittableFieldKeys } from "./form-config";
-import { calculatePrice, parseDateTime } from "./pricing";
+import { secondPetFields, secondPrescreenQuestions } from "./form-config";
+import { getSubmissionQuote } from "./submission-data";
+import { parseDateTime } from "./pricing";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -32,6 +34,26 @@ export function validateSubmission(data: FormValues): string | null {
     return "Invalid age";
   }
 
+  if (data.hasSecondDog) {
+    for (const field of secondPetFields) {
+      if (!String(data[field.name] ?? "").trim()) {
+        return `Missing required field: ${field.name}`;
+      }
+    }
+    for (const question of secondPrescreenQuestions) {
+      if (!String(data[question.name] ?? "").trim()) {
+        return `Missing required field: ${question.name}`;
+      }
+    }
+    const secondWeight = Number(data.secondPetWeightLb);
+    const secondAge = Number(data.secondPetAgeYears);
+    if (!Number.isFinite(secondWeight) || secondWeight <= 0) return "Invalid second dog weight";
+    if (!Number.isFinite(secondAge) || secondAge < 0) return "Invalid second dog age";
+    if (data.petName.trim().toLowerCase() === data.secondPetName.trim().toLowerCase()) {
+      return "The two dogs must have different names";
+    }
+  }
+
   const dropoff = parseDateTime(data.dropoffDate, data.dropoffTime);
   const pickup = parseDateTime(data.pickupDate, data.pickupTime);
   if (!dropoff || !pickup) {
@@ -47,16 +69,9 @@ export function validateSubmission(data: FormValues): string | null {
     return "Pick-up must be after drop-off";
   }
 
-  const quote = calculatePrice(
-    weight,
-    age,
-    data.prescreenSpayedNeutered,
-    data.dropoffDate,
-    data.dropoffTime,
-    data.pickupDate,
-    data.pickupTime
-  );
-  if (!quote) {
+  try {
+    getSubmissionQuote(data);
+  } catch {
     return "Unable to calculate price";
   }
 

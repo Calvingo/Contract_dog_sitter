@@ -6,14 +6,15 @@ import {
   formFields,
   getOptionLabel,
   prescreenQuestions,
+  secondPrescreenQuestions,
   yesNoOptions,
   type FormField,
 } from "./form-config";
 import {
   DEPOSIT_PERCENT,
   formatDateTime,
-  type PriceBreakdown,
 } from "./pricing";
+import type { SubmissionQuote } from "./submission-data";
 import {
   BOARDING_CHECKLIST_INTRO,
   BOARDING_CHECKLIST_ITEMS,
@@ -154,7 +155,7 @@ function drawBoardingChecklist(ctx: PdfContext): PdfContext {
 
 export async function generateSubmissionPdf(
   data: FormValues,
-  quote: PriceBreakdown,
+  quote: SubmissionQuote,
   signatureBuffer: Buffer
 ): Promise<Buffer> {
   const doc = await PDFDocument.create();
@@ -199,40 +200,57 @@ export async function generateSubmissionPdf(
 
   ctx = drawBoardingChecklist(ctx);
 
-  ctx = drawSectionTitle(ctx, "Price Estimate");
-  ctx = drawRow(ctx, "Weight tier", quote.weightTier);
-  ctx = drawRow(ctx, "Stay duration", `${quote.totalHours} hours`);
-  ctx = drawRow(ctx, "Billable days", String(quote.billableDays));
-  ctx = drawRow(ctx, "Daily rate", `$${quote.dailyRate}`);
-  ctx = drawRow(ctx, "Boarding subtotal", `$${quote.boardingSubtotal.toFixed(2)}`);
-  if (quote.puppyFee > 0) {
+  const firstQuote = quote.dogs[0];
+  ctx = drawSectionTitle(ctx, `${data.petName} — Price Estimate`);
+  ctx = drawRow(ctx, "Weight tier", firstQuote.weightTier);
+  ctx = drawRow(ctx, "Stay duration", `${firstQuote.totalHours} hours`);
+  ctx = drawRow(ctx, "Billable days", String(firstQuote.billableDays));
+  ctx = drawRow(ctx, "Daily rate", `$${firstQuote.dailyRate}`);
+  ctx = drawRow(ctx, "Boarding subtotal", `$${firstQuote.boardingSubtotal.toFixed(2)}`);
+  if (firstQuote.puppyFee > 0) {
     ctx = drawRow(
       ctx,
       "Puppy fee",
-      `$${quote.puppyFee.toFixed(2)} (${quote.billableDays} day(s) × $${quote.puppyFeePerDay})`
+      `$${firstQuote.puppyFee.toFixed(2)} (${firstQuote.billableDays} day(s) × $${firstQuote.puppyFeePerDay})`
     );
   }
-  if (quote.seniorDogFee > 0) {
+  if (firstQuote.seniorDogFee > 0) {
     ctx = drawRow(
       ctx,
       "Senior dog fee",
-      `$${quote.seniorDogFee.toFixed(2)} (${quote.billableDays} day(s) × $${quote.seniorDogFeePerDay})`
+      `$${firstQuote.seniorDogFee.toFixed(2)} (${firstQuote.billableDays} day(s) × $${firstQuote.seniorDogFeePerDay})`
     );
   }
-  if (quote.intactDogFee > 0) {
+  if (firstQuote.intactDogFee > 0) {
     ctx = drawRow(
       ctx,
       "Unspayed/unneutered dog fee",
-      `$${quote.intactDogFee.toFixed(2)} (${quote.billableDays} day(s) × $${quote.intactDogFeePerDay})`
+      `$${firstQuote.intactDogFee.toFixed(2)} (${firstQuote.billableDays} day(s) × $${firstQuote.intactDogFeePerDay})`
     );
   }
-  if (quote.holidayFee > 0) {
+  if (firstQuote.holidayFee > 0) {
     ctx = drawRow(
       ctx,
       "Holiday fee",
-      `$${quote.holidayFee.toFixed(2)} (entire stay: ${quote.holidayDays} day(s) × $${quote.holidayFeePerDay})`
+      `$${firstQuote.holidayFee.toFixed(2)} (entire stay: ${firstQuote.holidayDays} day(s) × $${firstQuote.holidayFeePerDay})`
     );
   }
+  ctx = drawRow(ctx, "Dog subtotal", `$${firstQuote.totalPrice.toFixed(2)}`);
+  if (quote.dogs[1]) {
+    const secondQuote = quote.dogs[1];
+    ctx = drawSectionTitle(ctx, `${data.secondPetName} — Price Estimate`);
+    ctx = drawRow(ctx, "Weight tier", secondQuote.weightTier);
+    ctx = drawRow(ctx, "Stay duration", `${secondQuote.totalHours} hours`);
+    ctx = drawRow(ctx, "Billable days", String(secondQuote.billableDays));
+    ctx = drawRow(ctx, "Daily rate", `$${secondQuote.dailyRate}`);
+    ctx = drawRow(ctx, "Boarding subtotal", `$${secondQuote.boardingSubtotal.toFixed(2)}`);
+    if (secondQuote.puppyFee > 0) ctx = drawRow(ctx, "Puppy fee", `$${secondQuote.puppyFee.toFixed(2)}`);
+    if (secondQuote.seniorDogFee > 0) ctx = drawRow(ctx, "Senior dog fee", `$${secondQuote.seniorDogFee.toFixed(2)}`);
+    if (secondQuote.intactDogFee > 0) ctx = drawRow(ctx, "Unspayed/unneutered dog fee", `$${secondQuote.intactDogFee.toFixed(2)}`);
+    if (secondQuote.holidayFee > 0) ctx = drawRow(ctx, "Holiday fee", `$${secondQuote.holidayFee.toFixed(2)}`);
+    ctx = drawRow(ctx, "Dog subtotal", `$${secondQuote.totalPrice.toFixed(2)}`);
+  }
+  ctx = drawSectionTitle(ctx, "Combined Total");
   ctx = drawRow(ctx, "Estimated total", `$${quote.totalPrice.toFixed(2)}`);
   ctx = drawRow(
     ctx,
@@ -240,7 +258,7 @@ export async function generateSubmissionPdf(
     `$${quote.depositAmount.toFixed(2)}`
   );
 
-  ctx = drawSectionTitle(ctx, "Pre-Screening");
+  ctx = drawSectionTitle(ctx, `Dog 1 — ${data.petName} Pre-Screening`);
   for (const q of prescreenQuestions) {
     ctx = drawRow(
       ctx,
@@ -251,6 +269,13 @@ export async function generateSubmissionPdf(
   if (data.prescreenNotes?.trim()) {
     ctx = drawRow(ctx, "Additional notes", data.prescreenNotes.trim());
   }
+  if (data.hasSecondDog) {
+    ctx = drawSectionTitle(ctx, `Dog 2 — ${data.secondPetName} Pre-Screening`);
+    for (const q of secondPrescreenQuestions) {
+      ctx = drawRow(ctx, q.label, getOptionLabel(yesNoOptions, String(data[q.name])));
+    }
+    if (data.secondPrescreenNotes?.trim()) ctx = drawRow(ctx, "Additional notes", data.secondPrescreenNotes.trim());
+  }
 
   ctx = drawSectionTitle(ctx, "Booking & Contact Details");
   const skipNames = new Set(["dropoffTime", "pickupTime"]);
@@ -258,6 +283,13 @@ export async function generateSubmissionPdf(
     if (skipNames.has(field.name)) continue;
     if (field.name === "wechatId" && data.backupContact !== "wechat") continue;
     ctx = drawRow(ctx, field.label, fieldDisplayValue(field, data));
+  }
+  if (data.hasSecondDog) {
+    ctx = drawSectionTitle(ctx, "Dog 2 Details");
+    ctx = drawRow(ctx, "Name", data.secondPetName);
+    ctx = drawRow(ctx, "Breed", data.secondPetBreed);
+    ctx = drawRow(ctx, "Weight (lbs)", data.secondPetWeightLb);
+    ctx = drawRow(ctx, "Age (years)", data.secondPetAgeYears);
   }
 
   ctx = drawAgreementTerms(ctx);
@@ -275,7 +307,7 @@ export async function generateSubmissionPdf(
     font
   );
   ctx = drawRow(ctx, "Owner name", ownerName);
-  ctx = drawRow(ctx, "Dog name(s)", data.petName);
+  ctx = drawRow(ctx, "Dog name(s)", [data.petName, data.hasSecondDog ? data.secondPetName : ""].filter(Boolean).join(" & "));
   ctx = drawRow(ctx, "Date signed", submittedAt.split(",")[0] ?? submittedAt);
 
   ctx = ensureSpace(ctx, MARGIN + 100);

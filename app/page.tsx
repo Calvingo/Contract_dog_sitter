@@ -17,6 +17,8 @@ import {
   formFields,
   initialFormValues,
   prescreenQuestions,
+  secondPetFields,
+  secondPrescreenQuestions,
   type FormValues,
 } from "@/lib/form-config";
 import { ui } from "@/lib/i18n";
@@ -101,6 +103,17 @@ function HomePageContent() {
       petBreed: pet.breed,
       petWeightLb: String(pet.weightLb),
       petAgeYears: pet.ageYears == null ? "" : String(pet.ageYears),
+    }));
+  }, []);
+
+  const applySecondPetPrefill = useCallback((pet: PrefillPet) => {
+    setFormValues((current) => ({
+      ...current,
+      hasSecondDog: true,
+      secondPetName: pet.name,
+      secondPetBreed: pet.breed,
+      secondPetWeightLb: String(pet.weightLb),
+      secondPetAgeYears: pet.ageYears == null ? "" : String(pet.ageYears),
     }));
   }, []);
 
@@ -237,6 +250,23 @@ function HomePageContent() {
       (!Number.isFinite(age) || age < 0)
     ) {
       nextErrors.petAgeYears = ui.invalidAge;
+    }
+
+    if (formValues.hasSecondDog) {
+      for (const field of secondPetFields) {
+        const value = String(formValues[field.name] ?? "").trim();
+        if (!value) nextErrors[field.name] = ui.required;
+      }
+      for (const question of secondPrescreenQuestions) {
+        if (!String(formValues[question.name] ?? "").trim()) {
+          nextErrors[question.name] = ui.required;
+        }
+      }
+      const secondWeight = Number(formValues.secondPetWeightLb);
+      const secondAge = Number(formValues.secondPetAgeYears);
+      if (formValues.secondPetWeightLb && (!Number.isFinite(secondWeight) || secondWeight <= 0)) nextErrors.secondPetWeightLb = ui.invalidWeight;
+      if (formValues.secondPetAgeYears && (!Number.isFinite(secondAge) || secondAge < 0)) nextErrors.secondPetAgeYears = ui.invalidAge;
+      if (formValues.petName.trim().toLowerCase() === formValues.secondPetName.trim().toLowerCase()) nextErrors.secondPetName = "Please enter a different name for the second dog.";
     }
 
     const dropoff = parseDateTime(formValues.dropoffDate, formValues.dropoffTime);
@@ -430,7 +460,7 @@ function HomePageContent() {
             ))}
           </FormSection>
 
-          <FormSection title={ui.sections.prescreen}>
+          <FormSection title={`Dog 1 — ${ui.sections.prescreen}`}>
             <p className="text-sm text-stone-600">{ui.sections.prescreenIntro}</p>
             {prescreenQuestions.map((question) => (
               <PrescreenField
@@ -473,6 +503,7 @@ function HomePageContent() {
           </FormSection>
 
           <FormSection title={ui.sections.pet}>
+            <h3 className="text-base font-semibold text-stone-800">Dog 1</h3>
             {petFields.map((field) => (
               <FormFieldInput
                 key={field.name}
@@ -489,7 +520,46 @@ function HomePageContent() {
               incompleteHint={ui.priceEstimateIncomplete}
               holidayNote={ui.priceEstimateHolidayNote}
             />
+            {!formValues.hasSecondDog ? (
+              <button
+                type="button"
+                onClick={() => setFormValues((current) => ({ ...current, hasSecondDog: true }))}
+                className="w-full rounded-xl border-2 border-dashed border-orange-300 bg-orange-50 px-4 py-3 text-sm font-semibold text-orange-700 transition hover:bg-orange-100"
+              >
+                + Add a Second Dog
+              </button>
+            ) : null}
           </FormSection>
+
+          {formValues.hasSecondDog ? (
+            <FormSection title="Dog 2 — Information & Pre-Screening">
+              {prefill?.pets.length ? (
+                <div>
+                  <p className="mb-2 text-sm font-medium text-stone-700">Choose a saved dog</p>
+                  <div className="flex flex-wrap gap-2">
+                    {prefill.pets.map((pet) => (
+                      <button key={pet.id} type="button" onClick={() => applySecondPetPrefill(pet)} className="rounded-xl border border-orange-200 bg-white px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-orange-50">{pet.name}</button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {secondPetFields.map((field) => (
+                <FormFieldInput key={field.name} field={field} value={String(formValues[field.name] ?? "")} error={errors[field.name]} selectPlaceholder={ui.selectPlaceholder} onChange={handleFieldChange} />
+              ))}
+              <p className="text-sm text-stone-600">Please answer these questions for the second dog.</p>
+              {secondPrescreenQuestions.map((question) => (
+                <PrescreenField key={question.name} name={question.name} label={question.label} value={String(formValues[question.name] ?? "")} error={errors[question.name]} onChange={handleFieldChange} />
+              ))}
+              <PrescreenNotes value={formValues.secondPrescreenNotes} label="Additional notes for Dog 2" placeholder={ui.prescreenNotesPlaceholder} onChange={handleFieldChange} name="secondPrescreenNotes" />
+              <button
+                type="button"
+                onClick={() => setFormValues((current) => ({ ...current, hasSecondDog: false }))}
+                className="rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50"
+              >
+                Remove Second Dog
+              </button>
+            </FormSection>
+          ) : null}
 
           <FormSection title={ui.sections.agreement}>
             <AgreementPanel
@@ -532,7 +602,7 @@ function HomePageContent() {
               <div className="rounded-xl bg-orange-50/60 px-4 py-3 text-sm">
                 <div className="font-medium text-stone-700">{ui.dogName}</div>
                 <div className="mt-1 text-stone-900">
-                  {formValues.petName || "—"}
+                  {[formValues.petName, formValues.hasSecondDog ? formValues.secondPetName : ""].filter(Boolean).join(" & ") || "—"}
                 </div>
               </div>
             </div>

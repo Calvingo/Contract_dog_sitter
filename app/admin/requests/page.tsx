@@ -3,6 +3,7 @@ import { SubmissionStatus } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { getAdminSession } from "@/lib/auth/admin-session";
 import { prisma } from "@/lib/db";
+import { submissionDogNames } from "@/lib/submission-pets";
 import { decideSubmissionAction } from "../actions";
 import { AdminShell, StatusBadge, dateTime, money } from "../admin-ui";
 
@@ -16,6 +17,7 @@ export default async function AdminRequestsPage() {
     include: {
       customer: true,
       pet: true,
+      submissionPets: { orderBy: { position: "asc" }, include: { pet: true } },
       emailLogs: { orderBy: { createdAt: "desc" }, take: 1 },
     },
   });
@@ -73,10 +75,10 @@ export default async function AdminRequestsPage() {
                   </td>
                   <td className="py-4 pr-4">
                     <div className="font-semibold text-stone-900">
-                      {submission.pet.name}
+                      {submissionDogNames(submission.submissionPets, submission.pet.name)}
                     </div>
                     <div className="text-xs text-stone-500">
-                      {submission.pet.breed}, {submission.pet.weightLb} lb
+                      {submission.submissionPets.map((item) => `${item.pet.breed}, ${item.pet.weightLb} lb`).join(" · ") || `${submission.pet.breed}, ${submission.pet.weightLb} lb`}
                     </div>
                   </td>
                   <td className="py-4 pr-4 text-stone-700">

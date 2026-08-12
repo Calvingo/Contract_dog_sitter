@@ -4,16 +4,17 @@ import {
   formFields,
   getOptionLabel,
   prescreenQuestions,
+  secondPrescreenQuestions,
   yesNoOptions,
   type FormField,
 } from "./form-config";
 import { teamContacts } from "./contacts";
 import {
-  calculatePrice,
   DEPOSIT_PERCENT,
   formatDateTime,
   type PriceBreakdown,
 } from "./pricing";
+import { getSubmissionQuote, type SubmissionQuote } from "./submission-data";
 import { generateSubmissionPdf, pdfFilename } from "./pdf-receipt";
 import { getAppBaseUrl } from "./app-url";
 import { buildDecisionUrl, createDecisionToken } from "./token";
@@ -69,29 +70,31 @@ function formatValue(field: FormField, data: FormValues): string {
   return String(rawValue);
 }
 
-function getQuote(data: FormValues): PriceBreakdown | null {
-  return calculatePrice(
-    Number(data.petWeightLb),
-    Number(data.petAgeYears),
-    data.prescreenSpayedNeutered,
-    data.dropoffDate,
-    data.dropoffTime,
-    data.pickupDate,
-    data.pickupTime
-  );
+function getQuote(data: FormValues): SubmissionQuote | null {
+  try { return getSubmissionQuote(data); } catch { return null; }
 }
 
-function formatPrescreenSection(data: FormValues): string {
-  const rows = prescreenQuestions.map((q) =>
+function formatPrescreenSection(data: FormValues, second = false): string {
+  const questions = second ? secondPrescreenQuestions : prescreenQuestions;
+  const rows = questions.map((q) =>
     rowHtml(q.label, getOptionLabel(yesNoOptions, String(data[q.name])))
   );
-  if (data.prescreenNotes?.trim()) {
-    rows.push(rowHtml("Additional notes", data.prescreenNotes.trim()));
+  const notes = second ? data.secondPrescreenNotes : data.prescreenNotes;
+  if (notes?.trim()) {
+    rows.push(rowHtml("Additional notes", notes.trim()));
   }
   return `
-    <h3 style="margin:24px 0 8px;font-size:16px;">Pre-Screening</h3>
+    <h3 style="margin:24px 0 8px;font-size:16px;">${second ? `Dog 2 — ${escapeHtml(data.secondPetName)}` : `Dog 1 — ${escapeHtml(data.petName)}`} Pre-Screening</h3>
     ${formatTable(rows)}
   `;
+}
+
+function formatSecondDogSection(data: FormValues): string {
+  if (!data.hasSecondDog) return "";
+  return `<h3 style="margin:24px 0 8px;font-size:16px;">Dog 2 Details</h3>${formatTable([
+    rowHtml("Name", data.secondPetName), rowHtml("Breed", data.secondPetBreed),
+    rowHtml("Weight (lbs)", data.secondPetWeightLb), rowHtml("Age (years)", data.secondPetAgeYears),
+  ])}`;
 }
 
 function formatFormSection(data: FormValues): string {
@@ -107,7 +110,7 @@ function formatFormSection(data: FormValues): string {
   `;
 }
 
-function formatPricingSection(quote: PriceBreakdown): string {
+function formatSinglePricingSection(quote: PriceBreakdown, dogName: string): string {
   const rows = [
     rowHtml("Weight tier", quote.weightTier),
     rowHtml("Stay duration", `${quote.totalHours} hours`),
@@ -155,9 +158,19 @@ function formatPricingSection(quote: PriceBreakdown): string {
     )
   );
   return `
-    <h3 style="margin:24px 0 8px;font-size:16px;">Price Estimate</h3>
+    <h3 style="margin:24px 0 8px;font-size:16px;">${escapeHtml(dogName)} — Price Estimate</h3>
     ${formatTable(rows)}
   `;
+}
+
+function formatPricingSection(data: FormValues, quote: SubmissionQuote): string {
+  const parts = [formatSinglePricingSection(quote.dogs[0], data.petName)];
+  if (quote.dogs[1]) parts.push(formatSinglePricingSection(quote.dogs[1], data.secondPetName));
+  parts.push(`<h3 style="margin:24px 0 8px;font-size:16px;">Combined Total</h3>${formatTable([
+    rowHtml("Estimated total", `$${quote.totalPrice.toFixed(2)}`),
+    rowHtml(`Deposit (${DEPOSIT_PERCENT}% of total)`, `$${quote.depositAmount.toFixed(2)}`),
+  ])}`);
+  return parts.join("");
 }
 
 function formatContactsSection(): string {
@@ -220,7 +233,7 @@ function buildAdminDecisionButtons(
     email: data.email,
     firstName: data.firstName,
     lastName: data.lastName,
-    petName: data.petName,
+    petName: [data.petName, data.hasSecondDog ? data.secondPetName : ""].filter(Boolean).join(" & "),
   };
 
   const acceptToken = createDecisionToken({ ...tokenBase, action: "accept" });
@@ -244,7 +257,7 @@ function buildAdminDecisionButtons(
 
 function buildCustomerEmailHtml(
   data: FormValues,
-  quote: PriceBreakdown,
+  quote: SubmissionQuote,
   editUrl?: string,
   isUpdate = false
 ): string {
@@ -265,7 +278,7 @@ function buildCustomerEmailHtml(
       <p>${isUpdate ? "We will review the updated request and follow up soon." : "We will review your request and follow up soon."}</p>
       ${editBlock}
       ${formatContactsSection()}
-      <p style="margin-top:24px;">We look forward to caring for ${escapeHtml(data.petName)}!</p>
+      <p style="margin-top:24px;">We look forward to caring for ${escapeHtml([data.petName, data.hasSecondDog ? data.secondPetName : ""].filter(Boolean).join(" and "))}!</p>
       <p>${BRAND_NAME}</p>
     </div>
   `;
@@ -273,7 +286,7 @@ function buildCustomerEmailHtml(
 
 function buildAdminEmailHtml(
   data: FormValues,
-  quote: PriceBreakdown,
+  quote: SubmissionQuote,
   submissionId?: string,
   revision?: number,
   isUpdate = false,
@@ -292,13 +305,15 @@ function buildAdminEmailHtml(
       ${updateNote}
       <p><strong>Owner:</strong> ${escapeHtml(ownerName)}</p>
       <p><strong>Email:</strong> ${escapeHtml(data.email)}</p>
-      <p><strong>Pet:</strong> ${escapeHtml(data.petName)}</p>
+      <p><strong>Dogs:</strong> ${escapeHtml([data.petName, data.hasSecondDog ? data.secondPetName : ""].filter(Boolean).join(" & "))}</p>
       <p><strong>Submitted at:</strong> ${escapeHtml(submittedAt)}</p>
       ${formatBoardingChecklistSection()}
       ${buildAdminDecisionButtons(data, submissionId, revision)}
-      ${formatPricingSection(quote)}
+      ${formatPricingSection(data, quote)}
       ${formatPrescreenSection(data)}
+      ${data.hasSecondDog ? formatPrescreenSection(data, true) : ""}
       ${formatFormSection(data)}
+      ${formatSecondDogSection(data)}
       <p>Signature attached as PNG. Customer received a PDF receipt.</p>
     </div>
   `;
@@ -320,7 +335,8 @@ export async function sendSubmissionEmails(
   }
 
   const pdfBuffer = await generateSubmissionPdf(data, quote, signatureBuffer);
-  const pdfName = pdfFilename(data.petName);
+  const dogNames = [data.petName, data.hasSecondDog ? data.secondPetName : ""].filter(Boolean).join(" & ");
+  const pdfName = pdfFilename(dogNames);
 
   const fromUser = getEnv("GMAIL_USER");
   const adminEmails = parseAdminEmails();
@@ -330,7 +346,7 @@ export async function sendSubmissionEmails(
     ? buildSubmissionEditUrl(await createSubmissionEditToken(submissionId))
     : undefined;
   const bookingDates = `${data.dropoffDate} to ${data.pickupDate}`;
-  const bookingSummary = `${data.petName} — $${quote.totalPrice.toFixed(2)} — ${bookingDates}`;
+  const bookingSummary = `${dogNames} — $${quote.totalPrice.toFixed(2)} — ${bookingDates}`;
 
   const customerSubject = options.isUpdate
     ? `[${BRAND_NAME}] Updated booking confirmation — ${bookingSummary}`
