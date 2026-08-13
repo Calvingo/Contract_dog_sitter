@@ -127,6 +127,11 @@ export const prescreenQuestions: PrescreenQuestion[] = [
     label: "Is your dog spayed or neutered?",
   },
   {
+    name: "prescreenHighEnergy",
+    label:
+      "Would you describe your dog as high-energy? (Selecting Yes adds a $10/day high-energy care fee.)",
+  },
+  {
     name: "prescreenAggression",
     label: "Does your dog show aggression?",
   },
@@ -147,11 +152,6 @@ export const prescreenQuestions: PrescreenQuestion[] = [
     label: "Does your dog bark frequently?",
   },
   {
-    name: "prescreenHighEnergy",
-    label:
-      "Would you describe your dog as high-energy? (Selecting Yes adds a $10/day high-energy care fee.)",
-  },
-  {
     name: "prescreenMedicalHistory",
     label:
       "Does your dog have chronic illness, underlying medical conditions, or a history of surgery?",
@@ -164,12 +164,12 @@ export const prescreenQuestions: PrescreenQuestion[] = [
 
 export const secondPrescreenQuestions: PrescreenQuestion[] = [
   { name: "secondPrescreenSpayedNeutered", label: "Is your dog spayed or neutered?" },
+  { name: "secondPrescreenHighEnergy", label: "Would you describe your dog as high-energy? (Selecting Yes adds a $10/day high-energy care fee.)" },
   { name: "secondPrescreenAggression", label: "Does your dog show aggression?" },
   { name: "secondPrescreenBitten", label: "Has your dog ever bitten another dog or person?" },
   { name: "secondPrescreenPottyTraining", label: "Does your dog have indoor accidents at home?" },
   { name: "secondPrescreenSeparationAnxiety", label: "Does your dog have severe separation anxiety?" },
   { name: "secondPrescreenFrequentBarking", label: "Does your dog bark frequently?" },
-  { name: "secondPrescreenHighEnergy", label: "Would you describe your dog as high-energy? (Selecting Yes adds a $10/day high-energy care fee.)" },
   { name: "secondPrescreenMedicalHistory", label: "Does your dog have chronic illness, underlying medical conditions, or a history of surgery?" },
   { name: "secondPrescreenAggressionChildren", label: "Does your dog show aggression toward children?" },
 ];
