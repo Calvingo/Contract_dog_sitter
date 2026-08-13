@@ -9,6 +9,7 @@ export const SENIOR_DOG_FEE_PER_DAY = 10;
 export const PUPPY_AGE_LIMIT_YEARS = 1;
 export const PUPPY_FEE_PER_DAY = 10;
 export const INTACT_DOG_FEE_PER_DAY = 10;
+export const HIGH_ENERGY_DOG_FEE_PER_DAY = 10;
 export const DEPOSIT_PERCENT = 20;
 
 export type PriceBreakdown = {
@@ -25,6 +26,8 @@ export type PriceBreakdown = {
   seniorDogFee: number;
   intactDogFeePerDay: number;
   intactDogFee: number;
+  highEnergyDogFeePerDay: number;
+  highEnergyDogFee: number;
   holidayDays: number;
   holidayFeePerDay: number;
   holidayFee: number;
@@ -80,6 +83,7 @@ function buildSummary(
   puppyFee: number,
   seniorDogFee: number,
   intactDogFee: number,
+  highEnergyDogFee: number,
   holidayFee: number,
   totalPrice: number
 ): string {
@@ -94,6 +98,9 @@ function buildSummary(
   if (intactDogFee > 0) {
     summary += ` + unspayed/unneutered dog fee (${daysLabel} × $${INTACT_DOG_FEE_PER_DAY}/day) = $${intactDogFee.toFixed(2)}`;
   }
+  if (highEnergyDogFee > 0) {
+    summary += ` + high-energy care fee (${daysLabel} × $${HIGH_ENERGY_DOG_FEE_PER_DAY}/day) = $${highEnergyDogFee.toFixed(2)}`;
+  }
   if (holidayFee > 0) {
     summary += ` + holiday rate for entire stay (${daysLabel} × $${HOLIDAY_FEE_PER_DAY}/day) = $${holidayFee.toFixed(2)}`;
   }
@@ -105,6 +112,7 @@ export function calculatePrice(
   weightLb: number,
   petAgeYears: number,
   spayedNeuteredAnswer: string,
+  highEnergyAnswer: string,
   dropoffDate: string,
   dropoffTime: string,
   pickupDate: string,
@@ -141,6 +149,10 @@ export function calculatePrice(
     spayedNeuteredAnswer === "no"
       ? Math.round(billableDays * INTACT_DOG_FEE_PER_DAY * 100) / 100
       : 0;
+  const highEnergyDogFee =
+    highEnergyAnswer === "yes"
+      ? Math.round(billableDays * HIGH_ENERGY_DOG_FEE_PER_DAY * 100) / 100
+      : 0;
 
   const { holidayDays, holidayDates } = countHolidayDaysInStay(
     dropoffDate,
@@ -151,7 +163,7 @@ export function calculatePrice(
     Math.round(holidayBillableDays * HOLIDAY_FEE_PER_DAY * 100) / 100;
   const totalPrice =
     Math.round(
-      (boardingSubtotal + puppyFee + seniorDogFee + intactDogFee + holidayFee) * 100
+      (boardingSubtotal + puppyFee + seniorDogFee + intactDogFee + highEnergyDogFee + holidayFee) * 100
     ) / 100;
   const depositAmount = Math.round(totalPrice * (DEPOSIT_PERCENT / 100) * 100) / 100;
 
@@ -169,6 +181,8 @@ export function calculatePrice(
     seniorDogFee,
     intactDogFeePerDay: INTACT_DOG_FEE_PER_DAY,
     intactDogFee,
+    highEnergyDogFeePerDay: HIGH_ENERGY_DOG_FEE_PER_DAY,
+    highEnergyDogFee,
     holidayDays: holidayBillableDays,
     holidayFeePerDay: HOLIDAY_FEE_PER_DAY,
     holidayFee,
@@ -182,6 +196,7 @@ export function calculatePrice(
       puppyFee,
       seniorDogFee,
       intactDogFee,
+      highEnergyDogFee,
       holidayFee,
       totalPrice
     ),

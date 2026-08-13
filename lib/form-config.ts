@@ -6,6 +6,7 @@ export type FormValues = {
   prescreenSeparationAnxiety: string;
   prescreenFrequentBarking: string;
   prescreenSpayedNeutered: string;
+  prescreenHighEnergy: string;
   prescreenMedicalHistory: string;
   prescreenAggressionChildren: string;
   hasSecondDog: boolean;
@@ -15,6 +16,7 @@ export type FormValues = {
   secondPrescreenSeparationAnxiety: string;
   secondPrescreenFrequentBarking: string;
   secondPrescreenSpayedNeutered: string;
+  secondPrescreenHighEnergy: string;
   secondPrescreenMedicalHistory: string;
   secondPrescreenAggressionChildren: string;
   firstName: string;
@@ -69,6 +71,7 @@ export const initialFormValues: FormValues = {
   prescreenSeparationAnxiety: "",
   prescreenFrequentBarking: "",
   prescreenSpayedNeutered: "",
+  prescreenHighEnergy: "",
   prescreenMedicalHistory: "",
   prescreenAggressionChildren: "",
   hasSecondDog: false,
@@ -78,6 +81,7 @@ export const initialFormValues: FormValues = {
   secondPrescreenSeparationAnxiety: "",
   secondPrescreenFrequentBarking: "",
   secondPrescreenSpayedNeutered: "",
+  secondPrescreenHighEnergy: "",
   secondPrescreenMedicalHistory: "",
   secondPrescreenAggressionChildren: "",
   firstName: "",
@@ -143,6 +147,11 @@ export const prescreenQuestions: PrescreenQuestion[] = [
     label: "Does your dog bark frequently?",
   },
   {
+    name: "prescreenHighEnergy",
+    label:
+      "Would you describe your dog as high-energy? (Selecting Yes adds a $10/day high-energy care fee.)",
+  },
+  {
     name: "prescreenMedicalHistory",
     label:
       "Does your dog have chronic illness, underlying medical conditions, or a history of surgery?",
@@ -160,6 +169,7 @@ export const secondPrescreenQuestions: PrescreenQuestion[] = [
   { name: "secondPrescreenPottyTraining", label: "Does your dog have indoor accidents at home?" },
   { name: "secondPrescreenSeparationAnxiety", label: "Does your dog have severe separation anxiety?" },
   { name: "secondPrescreenFrequentBarking", label: "Does your dog bark frequently?" },
+  { name: "secondPrescreenHighEnergy", label: "Would you describe your dog as high-energy? (Selecting Yes adds a $10/day high-energy care fee.)" },
   { name: "secondPrescreenMedicalHistory", label: "Does your dog have chronic illness, underlying medical conditions, or a history of surgery?" },
   { name: "secondPrescreenAggressionChildren", label: "Does your dog show aggression toward children?" },
 ];
@@ -317,7 +327,7 @@ export const agreementSections: AgreementSection[] = [
   },
   {
     title: "8. Special Care Fees",
-    body: "$10 per day apply for repeated indoor accidents, diaper management, excessive cleaning, severe shedding, refusal to eat, or special feeding support.",
+    body: "A high-energy care fee of $10 per day applies when the Owner selects Yes. A $10 per-day special-care fee may also apply for repeated indoor accidents, diaper management, excessive cleaning, severe shedding, refusal to eat, or special feeding support.",
   },
   {
     title: "9. Governing Law",

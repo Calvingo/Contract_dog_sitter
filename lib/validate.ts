@@ -1,11 +1,16 @@
 import { isPickupDropoffTimeAllowed } from "./booking-time";
 import type { FormValues } from "./form-config";
-import { allSubmittableFieldKeys } from "./form-config";
-import { secondPetFields, secondPrescreenQuestions } from "./form-config";
+import {
+  allSubmittableFieldKeys,
+  prescreenQuestions,
+  secondPetFields,
+  secondPrescreenQuestions,
+} from "./form-config";
 import { getSubmissionQuote } from "./submission-data";
 import { parseDateTime } from "./pricing";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const yesNoAnswers = new Set(["yes", "no"]);
 
 export function validateSubmission(data: FormValues): string | null {
   if (data.honeypot) {
@@ -17,6 +22,12 @@ export function validateSubmission(data: FormValues): string | null {
     const value = data[key];
     if (typeof value !== "string" || !value.trim()) {
       return `Missing required field: ${key}`;
+    }
+  }
+
+  for (const question of prescreenQuestions) {
+    if (!yesNoAnswers.has(String(data[question.name] ?? ""))) {
+      return `Invalid answer for field: ${question.name}`;
     }
   }
 
@@ -41,8 +52,12 @@ export function validateSubmission(data: FormValues): string | null {
       }
     }
     for (const question of secondPrescreenQuestions) {
-      if (!String(data[question.name] ?? "").trim()) {
+      const answer = String(data[question.name] ?? "").trim();
+      if (!answer) {
         return `Missing required field: ${question.name}`;
+      }
+      if (!yesNoAnswers.has(answer)) {
+        return `Invalid answer for field: ${question.name}`;
       }
     }
     const secondWeight = Number(data.secondPetWeightLb);

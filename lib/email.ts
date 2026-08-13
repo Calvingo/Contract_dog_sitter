@@ -142,6 +142,14 @@ function formatSinglePricingSection(quote: PriceBreakdown, dogName: string): str
       )
     );
   }
+  if (quote.highEnergyDogFee > 0) {
+    rows.push(
+      rowHtml(
+        "High-energy care fee",
+        `$${quote.highEnergyDogFee.toFixed(2)} (${quote.billableDays} day(s) × $${quote.highEnergyDogFeePerDay})`
+      )
+    );
+  }
   if (quote.holidayFee > 0) {
     rows.push(
       rowHtml(
