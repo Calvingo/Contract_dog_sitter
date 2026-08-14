@@ -24,6 +24,8 @@ export type FormValues = {
   email: string;
   phone: string;
   backupContact: string;
+  emergencyContactName: string;
+  emergencyContactPhone: string;
   wechatId: string;
   petName: string;
   petBreed: string;
@@ -89,6 +91,8 @@ export const initialFormValues: FormValues = {
   email: "",
   phone: "",
   backupContact: "",
+  emergencyContactName: "",
+  emergencyContactPhone: "",
   wechatId: "",
   petName: "",
   petBreed: "",
@@ -227,6 +231,20 @@ export const formFields: FormField[] = [
     section: "owner",
   },
   {
+    name: "emergencyContactName",
+    type: "text",
+    label: "Emergency Contact Name (not the Owner; for use if the Owner is unreachable)",
+    required: true,
+    section: "owner",
+  },
+  {
+    name: "emergencyContactPhone",
+    type: "tel",
+    label: "Emergency Contact Phone (not the Owner; for use if the Owner is unreachable)",
+    required: true,
+    section: "owner",
+  },
+  {
     name: "wechatId",
     type: "text",
     label: "WeChat ID",
@@ -330,11 +348,15 @@ export const agreementSections: AgreementSection[] = [
     body: "A high-energy care fee of $10 per day applies when the Owner selects Yes. A $10 per-day special-care fee may also apply for repeated indoor accidents, diaper management, excessive cleaning, severe shedding, refusal to eat, or special feeding support.",
   },
   {
-    title: "9. Governing Law",
+    title: "9. Behavioral Issues, Early Termination, Late Pickup & Abandonment",
+    body: "The Owner shall fully and truthfully disclose all known behavioral and medical concerns, including aggression, biting, resource guarding, excessive barking, destructive behavior, escape attempts, separation anxiety, and other safety-related issues. Passing a screening or questionnaire does not guarantee the dog’s future behavior or suitability for boarding in a new environment. The Sitter may terminate boarding early if, in the Sitter’s reasonable judgment, the dog presents a safety risk, cannot be safely managed, causes substantial disruption or property damage, or is otherwise unsuitable for continued boarding. Upon notice, the Owner shall retrieve the dog, or arrange for an authorized Emergency Contact to retrieve the dog, within the reasonable time specified by the Sitter. Travel, work, financial, or personal circumstances do not excuse this obligation. The Owner shall provide at least one valid Emergency Contact who is authorized and able to retrieve the dog. If an immediate safety or animal-welfare concern arises and neither the Owner nor the Emergency Contact responds or retrieves the dog, the Sitter may take reasonable temporary safety measures and seek assistance from a licensed veterinarian, animal-control agency, or law-enforcement agency, as permitted by law. This provision does not authorize permanent transfer or disposition of the dog before legally permitted. If the dog is not retrieved at the agreed date and time, boarding charges at the applicable daily rate, together with expressly stated and legally recoverable care, veterinary, and transportation expenses, will continue while the dog remains in the Sitter’s custody. Continued temporary care does not constitute free extended boarding or a waiver of payment. Except for duties required by applicable abandonment laws, the Sitter is not responsible for providing long-term care or rehoming services. IMPORTANT ABANDONMENT NOTICE: IF THE DOG IS NOT RETRIEVED WITHIN 14 CALENDAR DAYS AFTER THE DAY THE DOG WAS INITIALLY DUE TO BE PICKED UP, THE DOG SHALL BE DEEMED ABANDONED UNDER CALIFORNIA CIVIL CODE §1834.5. After the dog is legally deemed abandoned, the Sitter shall, for a period of not less than 10 days, attempt to find a new owner or arrange transfer to a public animal-control agency or shelter, SPCA shelter, humane society shelter, or nonprofit animal-rescue group that has agreed to accept the dog, as required by applicable law. After a lawful transfer, custody, redemption rights, holding periods, fees, adoption, and final disposition will be governed by the receiving organization and applicable law. The Sitter does not guarantee that the Owner will be able to reclaim the dog after transfer. The Owner remains responsible for all unpaid boarding charges and other legally recoverable veterinary, care, transportation, and transfer expenses incurred while the dog remains in the Sitter’s custody. The Sitter may preserve communications, photographs, videos, incident reports, invoices, and records of contacts with emergency contacts, veterinarians, animal-control agencies, shelters, and rescue organizations. Nothing in this Agreement limits the Sitter’s obligation to provide any humane care, nutrition, water, shelter, veterinary attention, notification, or other protection required by applicable law.",
+  },
+  {
+    title: "10. Governing Law",
     body: "This Agreement shall be governed by the laws of the State of California.",
   },
   {
-    title: "10. Owner Acknowledgment",
+    title: "11. Owner Acknowledgment",
     body: "By signing below, the Owner confirms they have read, understood, and agreed to all terms above.",
   },
 ];
@@ -355,6 +377,8 @@ export const allSubmittableFieldKeys: (keyof FormValues)[] = [
   "email",
   "phone",
   "backupContact",
+  "emergencyContactName",
+  "emergencyContactPhone",
   "wechatId",
   "petName",
   "petBreed",
