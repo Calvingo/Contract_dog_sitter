@@ -8,6 +8,8 @@ export type CustomerSnapshot = {
   email: string;
   phone: string;
   backupContact: string;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
   wechatId: string | null;
 };
 
@@ -36,6 +38,8 @@ export function buildCustomerSnapshot(data: FormValues): CustomerSnapshot {
     email: normalizeEmail(data.email),
     phone: data.phone.trim(),
     backupContact: data.backupContact.trim(),
+    emergencyContactName: data.emergencyContactName?.trim() || null,
+    emergencyContactPhone: data.emergencyContactPhone?.trim() || null,
     wechatId: data.wechatId?.trim() || null,
   };
 }
@@ -207,6 +211,8 @@ export function formValuesFromSubmission(submission: SubmissionLike): FormValues
     email: customer.email ?? "",
     phone: customer.phone ?? "",
     backupContact: customer.backupContact ?? "",
+    emergencyContactName: customer.emergencyContactName ?? "",
+    emergencyContactPhone: customer.emergencyContactPhone ?? "",
     wechatId: customer.wechatId ?? "",
     petName: pet.name ?? "",
     petBreed: pet.breed ?? "",
