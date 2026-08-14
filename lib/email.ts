@@ -110,6 +110,16 @@ function formatFormSection(data: FormValues): string {
   `;
 }
 
+function formatEmergencyContactSection(data: FormValues): string {
+  return `
+    <h3 style="margin:24px 0 8px;font-size:16px;">Emergency Contact</h3>
+    ${formatTable([
+      rowHtml("Emergency contact name", data.emergencyContactName || "—"),
+      rowHtml("Emergency contact phone", data.emergencyContactPhone || "—"),
+    ])}
+  `;
+}
+
 function formatSinglePricingSection(quote: PriceBreakdown, dogName: string): string {
   const rows = [
     rowHtml("Weight tier", quote.weightTier),
@@ -320,6 +330,7 @@ function buildAdminEmailHtml(
       ${formatPricingSection(data, quote)}
       ${formatPrescreenSection(data)}
       ${data.hasSecondDog ? formatPrescreenSection(data, true) : ""}
+      ${formatEmergencyContactSection(data)}
       ${formatFormSection(data)}
       ${formatSecondDogSection(data)}
       <p>Signature attached as PNG. Customer received a PDF receipt.</p>

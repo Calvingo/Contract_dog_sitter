@@ -187,6 +187,16 @@ export default async function AdminSubmissionDetailPage(props: {
               <TextInput name="email" label="Email" value={submission.customer.email} type="email" />
               <TextInput name="phone" label="Phone" value={submission.customer.phone} />
               <TextInput name="backupContact" label="Backup contact" value={submission.customer.backupContact} />
+              <TextInput
+                name="emergencyContactName"
+                label="Emergency contact name"
+                value={submission.customer.emergencyContactName || ""}
+              />
+              <TextInput
+                name="emergencyContactPhone"
+                label="Emergency contact phone"
+                value={submission.customer.emergencyContactPhone || ""}
+              />
               <TextInput name="wechatId" label="WeChat ID" value={submission.customer.wechatId || ""} required={false} />
               <TextInput name="petName" label="Dog name" value={submission.pet.name} />
               <TextInput name="petBreed" label="Breed" value={submission.pet.breed} />

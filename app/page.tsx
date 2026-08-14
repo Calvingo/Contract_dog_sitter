@@ -40,6 +40,8 @@ type PrefillResponse = {
     email: string;
     phone: string;
     backupContact: string;
+    emergencyContactName: string;
+    emergencyContactPhone: string;
     wechatId: string;
   };
   pets: PrefillPet[];
@@ -89,6 +91,8 @@ function HomePageContent() {
         email: customer.email,
         phone: customer.phone,
         backupContact: customer.backupContact,
+        emergencyContactName: customer.emergencyContactName,
+        emergencyContactPhone: customer.emergencyContactPhone,
         wechatId: customer.wechatId,
       }));
     },

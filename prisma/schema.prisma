@@ -44,6 +44,8 @@ model Customer {
   email         String       @unique
   phone         String
   backupContact String
+  emergencyContactName String?
+  emergencyContactPhone String?
   wechatId      String?
   lastSeenAt    DateTime?
   createdAt     DateTime     @default(now())

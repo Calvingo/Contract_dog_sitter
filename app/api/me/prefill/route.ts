@@ -41,6 +41,8 @@ export async function GET() {
       email: customer.email,
       phone: customer.phone,
       backupContact: customer.backupContact,
+      emergencyContactName: customer.emergencyContactName ?? "",
+      emergencyContactPhone: customer.emergencyContactPhone ?? "",
       wechatId: customer.wechatId ?? "",
     },
     pets: customer.pets.map((pet) => {

@@ -107,6 +107,8 @@ export async function updateCustomerPetAction(formData: FormData) {
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const phone = String(formData.get("phone") || "").trim();
   const backupContact = String(formData.get("backupContact") || "").trim();
+  const emergencyContactName = String(formData.get("emergencyContactName") || "").trim();
+  const emergencyContactPhone = String(formData.get("emergencyContactPhone") || "").trim();
   const wechatId = String(formData.get("wechatId") || "").trim();
   const petName = String(formData.get("petName") || "").trim();
   const petBreed = String(formData.get("petBreed") || "").trim();
@@ -128,6 +130,8 @@ export async function updateCustomerPetAction(formData: FormData) {
     !email ||
     !phone ||
     !backupContact ||
+    !emergencyContactName ||
+    !emergencyContactPhone ||
     !petName ||
     !petBreed ||
     !Number.isFinite(petWeightLb) ||
@@ -147,6 +151,8 @@ export async function updateCustomerPetAction(formData: FormData) {
         email,
         phone,
         backupContact,
+        emergencyContactName,
+        emergencyContactPhone,
         wechatId: wechatId || null,
       },
     }),
