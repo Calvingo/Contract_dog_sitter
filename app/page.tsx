@@ -29,6 +29,8 @@ type PrefillPet = {
   breed: string;
   weightLb: number;
   ageYears?: number | null;
+  lastPrescreenAnswers?: unknown;
+  lastPrescreenNotes?: string;
   lastSubmittedAt?: string | null;
 };
 
@@ -81,6 +83,72 @@ function HomePageContent() {
   const ownerName = `${formValues.firstName} ${formValues.lastName}`.trim();
   const needsWechatId = formValues.backupContact === "wechat";
 
+  const toRecord = useCallback((value: unknown): Record<string, unknown> => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return {};
+    }
+    return value as Record<string, unknown>;
+  }, []);
+
+  const toTextValue = useCallback((value: unknown): string => {
+    if (typeof value === "string") return value;
+    if (typeof value === "number" || typeof value === "boolean") {
+      return String(value);
+    }
+    return "";
+  }, []);
+
+  const applyPrescreenPrefill = useCallback(
+    (pet: PrefillPet, isSecondDog: boolean) => {
+      const answers = toRecord(pet.lastPrescreenAnswers);
+      setFormValues((current) => {
+        const next = {
+          ...current,
+          prescreenNotes: isSecondDog ? current.prescreenNotes : toTextValue(pet.lastPrescreenNotes),
+          secondPrescreenNotes: isSecondDog ? toTextValue(pet.lastPrescreenNotes) : current.secondPrescreenNotes,
+        };
+
+        if (isSecondDog) {
+          secondPrescreenQuestions.forEach((question, index) => {
+            const sourceKey = prescreenQuestions[index]?.name;
+            const sourceValue =
+              sourceKey && sourceKey in answers ? answers[sourceKey] : undefined;
+            const value = sourceValue ?? (answers[question.name] as unknown);
+            next[question.name] = toTextValue(value);
+          });
+          next.secondPrescreenNotes = toTextValue(pet.lastPrescreenNotes);
+          return next;
+        }
+
+        prescreenQuestions.forEach((question) => {
+          next[question.name] = toTextValue(answers[question.name]);
+        });
+        return next;
+      });
+      setErrors((current) => {
+        const next: Partial<Record<keyof FormValues, string>> = { ...current };
+        const keysToClear: Array<keyof FormValues> = isSecondDog
+          ? [
+              ...secondPrescreenQuestions.map(
+                (question) => question.name as keyof FormValues
+              ),
+              "secondPrescreenNotes" as keyof FormValues,
+            ]
+          : [
+              ...prescreenQuestions.map(
+                (question) => question.name as keyof FormValues
+              ),
+              "prescreenNotes" as keyof FormValues,
+            ];
+        for (const key of keysToClear) {
+          delete next[key];
+        }
+        return next;
+      });
+    },
+    [toRecord, toTextValue]
+  );
+
   const applyCustomerPrefill = useCallback(
     (customer: PrefillResponse["customer"]) => {
       setFormValues((current) => ({
@@ -108,7 +176,8 @@ function HomePageContent() {
       petWeightLb: String(pet.weightLb),
       petAgeYears: pet.ageYears == null ? "" : String(pet.ageYears),
     }));
-  }, []);
+    applyPrescreenPrefill(pet, false);
+  }, [applyPrescreenPrefill]);
 
   const applySecondPetPrefill = useCallback((pet: PrefillPet) => {
     setFormValues((current) => ({
@@ -119,7 +188,8 @@ function HomePageContent() {
       secondPetWeightLb: String(pet.weightLb),
       secondPetAgeYears: pet.ageYears == null ? "" : String(pet.ageYears),
     }));
-  }, []);
+    applyPrescreenPrefill(pet, true);
+  }, [applyPrescreenPrefill]);
 
   const applyPrefill = useCallback(
     (data: PrefillResponse) => {

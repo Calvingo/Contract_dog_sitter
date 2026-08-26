@@ -7,7 +7,7 @@ const includeQuery = {
   pets: {
     orderBy: { updatedAt: "desc" as const },
     include: {
-      submissions: {
+      submissionPets: {
         orderBy: { createdAt: "desc" as const },
         take: 1,
         select: {
@@ -32,7 +32,7 @@ type PrefillPet = {
   breed: string;
   weightLb: number;
   ageYears: number | null;
-  submissions: PrefillSubmission[];
+  submissionPets: PrefillSubmission[];
 };
 
 type PrefillCustomer = {
@@ -61,7 +61,7 @@ function toPrefillResponse(customer: PrefillCustomer) {
       wechatId: customer.wechatId ?? "",
     },
     pets: customer.pets.map((pet) => {
-      const latest = pet.submissions[0];
+      const latest = pet.submissionPets[0];
       return {
         id: pet.id,
         name: pet.name,
