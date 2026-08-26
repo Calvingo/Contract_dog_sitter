@@ -121,6 +121,18 @@ function HomePageContent() {
     }));
   }, []);
 
+  const applyPrefill = useCallback(
+    (data: PrefillResponse) => {
+      setPrefill(data);
+      applyCustomerPrefill(data.customer);
+      if (data.pets.length === 1) {
+        applyPetPrefill(data.pets[0]);
+      }
+      setReturningStatus("Saved profile loaded.");
+    },
+    [applyCustomerPrefill, applyPetPrefill]
+  );
+
   const loadPrefill = useCallback(async () => {
     try {
       const response = await fetch("/api/me/prefill");
@@ -129,16 +141,53 @@ function HomePageContent() {
       const data = (await response.json()) as PrefillResponse;
       if (!data.authenticated) return;
 
-      setPrefill(data);
-      applyCustomerPrefill(data.customer);
-      if (data.pets.length === 1) {
-        applyPetPrefill(data.pets[0]);
-      }
-      setReturningStatus("Saved profile loaded.");
+      applyPrefill(data);
     } catch {
       // Prefill is optional; leave the blank form usable.
     }
-  }, [applyCustomerPrefill, applyPetPrefill]);
+  }, [applyPrefill]);
+
+  const fetchPrefillByEmail = useCallback(
+    async (emailInput: string) => {
+      const normalized = emailInput.trim().toLowerCase();
+      if (!normalized.includes("@")) {
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `/api/me/prefill?email=${encodeURIComponent(normalized)}`
+        );
+        if (!response.ok) {
+          setPrefill(null);
+          setSelectedPetId("");
+          setReturningStatus("No saved profile found for this email.");
+          return;
+        }
+        const data = (await response.json()) as PrefillResponse;
+        if (!data.authenticated) {
+          setPrefill(null);
+          setSelectedPetId("");
+          setReturningStatus("No saved profile found for this email.");
+          return;
+        }
+        applyPrefill(data);
+      } catch {
+        setReturningStatus("Could not load the saved profile. Please try again.");
+      }
+    },
+    [applyPrefill]
+  );
+
+  useEffect(() => {
+    if (editToken) return;
+    const trimmed = returningEmail.trim().toLowerCase();
+    if (!trimmed) return;
+    const timer = setTimeout(() => {
+      void fetchPrefillByEmail(trimmed);
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [editToken, returningEmail, fetchPrefillByEmail]);
 
   useEffect(() => {
     if (editToken) return;
@@ -195,31 +244,6 @@ function HomePageContent() {
   const handleReachBottom = useCallback(() => {
     setHasReadAgreement(true);
   }, []);
-
-  const handleReturningLoginRequest = async (
-    event: React.FormEvent<HTMLFormElement>
-  ) => {
-    event.preventDefault();
-    setReturningStatus("Sending secure link...");
-
-    try {
-      const response = await fetch("/api/auth/request-login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: returningEmail }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Login request failed");
-      }
-
-      setReturningStatus(
-        "If we have a saved profile for that email, a secure link has been sent."
-      );
-    } catch {
-      setReturningStatus("Could not send the secure link. Please try again.");
-    }
-  };
 
   const validateClient = (): boolean => {
     const nextErrors: Partial<Record<keyof FormValues, string>> = {};
@@ -374,9 +398,33 @@ function HomePageContent() {
               Returning customer
             </h2>
             <p className="mt-1 text-sm text-stone-600">
-              Use your email to load saved owner and pet details.
+              Enter your email to load saved owner and pet details automatically.
             </p>
           </div>
+
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+            }}
+            className="grid gap-3"
+          >
+            <input
+              type="email"
+              value={returningEmail}
+              onChange={(event) => {
+                setReturningEmail(event.target.value);
+                setPrefill(null);
+                setSelectedPetId("");
+                setReturningStatus("");
+              }}
+              onBlur={() => {
+                void fetchPrefillByEmail(returningEmail);
+              }}
+              placeholder="Email address"
+              className="w-full rounded-xl border border-orange-100 bg-white px-4 py-3 text-stone-800 outline-none transition placeholder:text-stone-400 focus:border-orange-300 focus:ring-2 focus:ring-orange-100"
+              required
+            />
+          </form>
 
           {prefill ? (
             <div className="space-y-3">
@@ -407,27 +455,7 @@ function HomePageContent() {
                 </div>
               ) : null}
             </div>
-          ) : (
-            <form
-              onSubmit={handleReturningLoginRequest}
-              className="grid gap-3 sm:grid-cols-[1fr_auto]"
-            >
-              <input
-                type="email"
-                value={returningEmail}
-                onChange={(event) => setReturningEmail(event.target.value)}
-                placeholder="Email address"
-                className="w-full rounded-xl border border-orange-100 bg-white px-4 py-3 text-stone-800 outline-none transition placeholder:text-stone-400 focus:border-orange-300 focus:ring-2 focus:ring-orange-100"
-                required
-              />
-              <button
-                type="submit"
-                className="rounded-xl bg-stone-900 px-5 py-3 text-sm font-semibold text-white hover:bg-stone-800"
-              >
-                Send link
-              </button>
-            </form>
-          )}
+          ) : null}
 
           {returningStatus ? (
             <p className="text-sm text-stone-600">{returningStatus}</p>

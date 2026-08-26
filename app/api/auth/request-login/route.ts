@@ -1,6 +1,6 @@
 import { EmailStatus, EmailType } from "@prisma/client";
 import { NextResponse } from "next/server";
-import { getAppBaseUrl } from "@/lib/app-url";
+import { getAppBaseUrlDiagnostics } from "@/lib/app-url";
 import {
   createRawLoginToken,
   hashLoginToken,
@@ -14,6 +14,26 @@ const LOGIN_TOKEN_TTL_MINUTES = Number(
   process.env.LOGIN_TOKEN_TTL_MINUTES || "30"
 );
 
+function getRequestBaseUrl(request: Request): string {
+  const requestedOrigin = new URL(request.url).origin;
+  const configured = getAppBaseUrlDiagnostics();
+  console.info("[request-login] app_base_url", {
+    source: configured.appBaseUrlSource,
+    configured: configured.appBaseUrl,
+    misconfigured: configured.appBaseUrlMisconfigured,
+    requestOrigin: requestedOrigin,
+  });
+  const isLocalFallback =
+    !configured.appBaseUrl ||
+    configured.appBaseUrl.includes("localhost") ||
+    configured.appBaseUrl.includes("127.0.0.1") ||
+    configured.appBaseUrl.includes("0.0.0.0");
+  if (!configured.appBaseUrlMisconfigured && !isLocalFallback) {
+    return configured.appBaseUrl;
+  }
+  return requestedOrigin;
+}
+
 function loginEmailHtml(url: string): string {
   return `
     <div style="font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:640px;">
@@ -26,16 +46,28 @@ function loginEmailHtml(url: string): string {
 }
 
 export async function POST(request: Request) {
-  const body = (await request.json().catch(() => null)) as { email?: string } | null;
-  const email = normalizeEmail(body?.email || "");
+  try {
+    const body = (await request.json().catch(() => null)) as { email?: string } | null;
+    const email = normalizeEmail(body?.email || "");
+    console.info("[request-login] start", { email });
 
-  if (!email || !email.includes("@")) {
-    return NextResponse.json({ error: "Valid email is required" }, { status: 400 });
-  }
+    if (!email || !email.includes("@")) {
+      return NextResponse.json({ error: "Valid email is required" }, { status: 400 });
+    }
 
-  const customer = await prisma.customer.findUnique({ where: { email } });
+    const customer = await prisma.customer.findFirst({
+      where: { email: { equals: email, mode: "insensitive" } },
+    });
 
-  if (customer) {
+    if (!customer) {
+      console.warn("[request-login] customer_not_found", { email });
+      return NextResponse.json({
+        ok: true,
+        message:
+          "If we have a saved profile for that email, a secure link has been sent.",
+      });
+    }
+
     const rawToken = createRawLoginToken();
     const tokenHash = hashLoginToken(rawToken);
     const expiresAt = new Date(
@@ -50,11 +82,11 @@ export async function POST(request: Request) {
       },
     });
 
-    const url = `${getAppBaseUrl()}/api/auth/verify?token=${encodeURIComponent(
+    const url = `${getRequestBaseUrl(request)}/api/auth/verify?token=${encodeURIComponent(
       rawToken
     )}`;
     const subject = `[${BRAND_NAME}] Your secure returning customer link`;
-    const fromUser = getEnv("GMAIL_USER");
+    const fromUser = getEnv("GMAIL_USER").trim();
 
     try {
       await sendMail({
@@ -63,6 +95,7 @@ export async function POST(request: Request) {
         subject,
         html: loginEmailHtml(url),
       });
+      console.info("[request-login] email_sent", { email });
       await logEmail({
         type: EmailType.LOGIN_LINK,
         to: email,
@@ -71,6 +104,10 @@ export async function POST(request: Request) {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      console.error("[request-login] send_failed", {
+        email,
+        message,
+      });
       await logEmail({
         type: EmailType.LOGIN_LINK,
         to: email,
@@ -80,11 +117,18 @@ export async function POST(request: Request) {
       });
       throw error;
     }
-  }
 
-  return NextResponse.json({
-    ok: true,
-    message:
-      "If we have a saved profile for that email, a secure link has been sent.",
-  });
+    return NextResponse.json({
+      ok: true,
+      message:
+        "If we have a saved profile for that email, a secure link has been sent.",
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("Secure link request failed:", message);
+    return NextResponse.json(
+      { error: `Could not send secure link. ${message}` },
+      { status: 500 }
+    );
+  }
 }
