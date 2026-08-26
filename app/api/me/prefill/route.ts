@@ -20,7 +20,34 @@ const includeQuery = {
   },
 };
 
-function toPrefillResponse(customer: { id: string; firstName: string; lastName: string; email: string; phone: string; backupContact: string; emergencyContactName: string | null; emergencyContactPhone: string | null; wechatId: string | null; pets: Array<{ id: string; name: string; breed: string; weightLb: number; ageYears: number | null; submissions: Array<{ prescreenAnswers: object; prescreenNotes: string | null; createdAt: Date }> }>}) {
+type PrefillSubmission = {
+  prescreenAnswers: unknown | null;
+  prescreenNotes: string | null;
+  createdAt: Date;
+};
+
+type PrefillPet = {
+  id: string;
+  name: string;
+  breed: string;
+  weightLb: number;
+  ageYears: number | null;
+  submissions: PrefillSubmission[];
+};
+
+type PrefillCustomer = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  backupContact: string;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
+  wechatId: string | null;
+  pets: PrefillPet[];
+};
+
+function toPrefillResponse(customer: PrefillCustomer) {
   return {
     authenticated: true,
     customer: {
