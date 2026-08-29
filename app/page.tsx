@@ -114,14 +114,16 @@ function HomePageContent() {
             const sourceValue =
               sourceKey && sourceKey in answers ? answers[sourceKey] : undefined;
             const value = sourceValue ?? (answers[question.name] as unknown);
-            next[question.name] = toTextValue(value);
+            Object.assign(next, { [question.name]: toTextValue(value) });
           });
           next.secondPrescreenNotes = toTextValue(pet.lastPrescreenNotes);
           return next;
         }
 
         prescreenQuestions.forEach((question) => {
-          next[question.name] = toTextValue(answers[question.name]);
+          Object.assign(next, {
+            [question.name]: toTextValue(answers[question.name]),
+          });
         });
         return next;
       });

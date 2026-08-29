@@ -74,6 +74,54 @@ function getQuote(data: FormValues): SubmissionQuote | null {
   try { return getSubmissionQuote(data); } catch { return null; }
 }
 
+function normalizeQuote(quote: SubmissionQuote): SubmissionQuote {
+  const dogs = quote.dogs.map((dog) => ({
+    ...dog,
+    dailyRate: Number(dog.dailyRate),
+    billableDays: Number(dog.billableDays),
+    totalHours: Number(dog.totalHours),
+    boardingSubtotal: Number(dog.boardingSubtotal),
+    puppyAgeLimitYears: Number(dog.puppyAgeLimitYears),
+    puppyFeePerDay: Number(dog.puppyFeePerDay),
+    puppyFee: Number(dog.puppyFee),
+    seniorDogAgeYears: Number(dog.seniorDogAgeYears),
+    seniorDogFeePerDay: Number(dog.seniorDogFeePerDay),
+    seniorDogFee: Number(dog.seniorDogFee),
+    intactDogFeePerDay: Number(dog.intactDogFeePerDay),
+    intactDogFee: Number(dog.intactDogFee),
+    highEnergyDogFeePerDay: Number(dog.highEnergyDogFeePerDay),
+    highEnergyDogFee: Number(dog.highEnergyDogFee),
+    holidayDays: Number(dog.holidayDays),
+    holidayFeePerDay: Number(dog.holidayFeePerDay),
+    holidayFee: Number(dog.holidayFee),
+    totalPrice: Number(dog.totalPrice),
+    depositAmount: Number(dog.depositAmount),
+  }));
+
+  return {
+    ...quote,
+    dogs,
+    totalPrice: Number(quote.totalPrice),
+    depositAmount: Number(quote.depositAmount),
+    summary: quote.summary,
+  };
+}
+
+function resolveQuote(data: FormValues, quoteOverride?: SubmissionQuote): SubmissionQuote {
+  const quote = quoteOverride ? normalizeQuote(quoteOverride) : getQuote(data);
+  if (!quote) {
+    throw new Error("Unable to calculate price for email");
+  }
+
+  return {
+    ...quote,
+    depositAmount:
+      quote.depositAmount > 0
+        ? Number(quote.depositAmount.toFixed(2))
+        : Math.round(quote.totalPrice * (DEPOSIT_PERCENT / 100) * 100) / 100,
+  };
+}
+
 function formatPrescreenSection(data: FormValues, second = false): string {
   const questions = second ? secondPrescreenQuestions : prescreenQuestions;
   const rows = questions.map((q) =>
@@ -346,19 +394,17 @@ export async function sendSubmissionEmails(
     revision?: number;
     isUpdate?: boolean;
     previousStatus?: string;
+    quote?: SubmissionQuote;
+    sendAdminNotification?: boolean;
   } = {}
 ) {
-  const quote = getQuote(data);
-  if (!quote) {
-    throw new Error("Unable to calculate price for email");
-  }
+  const quote = resolveQuote(data, options.quote);
 
   const pdfBuffer = await generateSubmissionPdf(data, quote, signatureBuffer);
   const dogNames = [data.petName, data.hasSecondDog ? data.secondPetName : ""].filter(Boolean).join(" & ");
   const pdfName = pdfFilename(dogNames);
 
   const fromUser = getEnv("GMAIL_USER");
-  const adminEmails = parseAdminEmails();
   const ownerName = `${data.firstName} ${data.lastName}`.trim();
   const fromHeader = `"${BRAND_NAME}" <${fromUser}>`;
   const editUrl = submissionId
@@ -406,6 +452,12 @@ export async function sendSubmissionEmails(
     });
     throw error;
   }
+
+  if (options.sendAdminNotification === false) {
+    return;
+  }
+
+  const adminEmails = parseAdminEmails();
 
   try {
     await sendMail({

@@ -6,7 +6,15 @@ import { redirect } from "next/navigation";
 import { clearAdminSession, getAdminSession } from "@/lib/auth/admin-session";
 import { processAdminSubmissionDecision } from "@/lib/admin/decision";
 import { prisma } from "@/lib/db";
+import {
+  formValuesFromSubmission,
+  getSubmissionQuote,
+  type SubmissionQuote,
+} from "@/lib/submission-data";
+import { sendSubmissionEmails } from "@/lib/email";
 import type { DecisionAction } from "@/lib/decision-emails";
+import { signatureToBuffer } from "@/lib/validate";
+import { DEPOSIT_PERCENT } from "@/lib/pricing";
 
 async function requireAdmin() {
   const session = await getAdminSession();
@@ -46,7 +54,61 @@ export async function decideSubmissionAction(formData: FormData) {
   revalidatePath(`/admin/submissions/${submissionId}`);
 }
 
-export async function updateSubmissionAction(formData: FormData) {
+export type AdminFormState = {
+  ok?: boolean;
+  message?: string;
+  error?: string;
+};
+
+function buildAdminReceiptQuote(
+  values: Parameters<typeof getSubmissionQuote>[0],
+  quotedTotal: number
+): SubmissionQuote {
+  const latestQuote = getSubmissionQuote(values);
+  return {
+    ...latestQuote,
+    totalPrice: quotedTotal,
+    depositAmount: Math.round(
+      quotedTotal * (DEPOSIT_PERCENT / 100) * 100
+    ) / 100,
+  };
+}
+
+async function sendLatestSubmissionReceipt(submissionId: string) {
+  const submission = await prisma.submission.findUnique({
+    where: { id: submissionId },
+    include: {
+      submissionPets: { orderBy: { position: "asc" } },
+    },
+  });
+
+  if (!submission) {
+    return;
+  }
+
+  const values = formValuesFromSubmission({
+    firstTimeBooking: submission.firstTimeBooking,
+    dropoffAt: submission.dropoffAt,
+    pickupAt: submission.pickupAt,
+    prescreenAnswers: submission.prescreenAnswers,
+    prescreenNotes: submission.prescreenNotes,
+    signatureData: submission.signatureData,
+    customerSnapshot: submission.customerSnapshot,
+    petSnapshot: submission.petSnapshot,
+    submissionPets: submission.submissionPets,
+  });
+
+  await sendSubmissionEmails(values, signatureToBuffer(submission.signatureData), submission.id, {
+    revision: submission.revision,
+    isUpdate: true,
+    quote: buildAdminReceiptQuote(values, submission.quotedTotal.toNumber()),
+    sendAdminNotification: false,
+  });
+
+  return values.email;
+}
+
+async function updateSubmissionInternal(formData: FormData) {
   await requireAdmin();
 
   const submissionId = String(formData.get("submissionId") || "");
@@ -87,12 +149,58 @@ export async function updateSubmissionAction(formData: FormData) {
     },
   });
 
+  let receiptSentTo: string | undefined;
+  let receiptError = false;
+  try {
+    receiptSentTo = await sendLatestSubmissionReceipt(submissionId);
+  } catch {
+    receiptError = true;
+  }
+
   revalidatePath("/admin");
   revalidatePath("/admin/requests");
   revalidatePath("/admin/calendar");
   revalidatePath("/admin/reports");
   revalidatePath("/admin/customers");
   revalidatePath(`/admin/submissions/${submissionId}`);
+
+  return { submissionId, receiptSentTo, receiptError };
+}
+
+export async function updateSubmissionAction(formData: FormData) {
+  const result = await updateSubmissionInternal(formData);
+  if (result.receiptError) {
+    throw new Error(
+      "Order was saved, but the latest receipt could not be emailed to the customer."
+    );
+  }
+}
+
+export async function updateSubmissionActionWithState(
+  _prevState: AdminFormState | null,
+  formData: FormData
+): Promise<AdminFormState> {
+  try {
+    const result = await updateSubmissionInternal(formData);
+    if (result.receiptError) {
+      return {
+        ok: false,
+        error:
+          "Order was saved, but the latest receipt could not be emailed. Check the email settings or log, then save again to retry.",
+      };
+    }
+    return {
+      ok: true,
+      message: result.receiptSentTo
+        ? `Order updated and the latest receipt was sent to ${result.receiptSentTo}.`
+        : "Order updated and the latest receipt was sent to the customer.",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Unable to update order.",
+    };
+  }
 }
 
 export async function updateCustomerPetAction(formData: FormData) {

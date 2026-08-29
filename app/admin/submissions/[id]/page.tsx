@@ -1,4 +1,3 @@
-import { SubmissionStatus } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
 import { getAdminSession } from "@/lib/auth/admin-session";
 import { prisma } from "@/lib/db";
@@ -6,9 +5,9 @@ import { submissionDogNames } from "@/lib/submission-pets";
 import {
   decideSubmissionAction,
   updateCustomerPetAction,
-  updateSubmissionAction,
 } from "../../actions";
 import { AdminShell } from "../../admin-ui";
+import { EditOrderForm } from "../_edit-order-form";
 
 function moneyValue(value: { toNumber: () => number }): string {
   return value.toNumber().toFixed(2);
@@ -96,79 +95,14 @@ export default async function AdminSubmissionDetailPage(props: {
         </section>
 
         <section className="grid gap-6 lg:grid-cols-2">
-          <form
-            action={updateSubmissionAction}
-            className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-orange-100"
-          >
-            <input type="hidden" name="submissionId" value={submission.id} />
-            <h2 className="text-xl font-bold text-stone-950">Edit Order</h2>
-            <div className="mt-4 grid gap-4">
-              <label className="block">
-                <span className="text-sm font-medium text-stone-700">Status</span>
-                <select
-                  name="status"
-                  defaultValue={submission.status}
-                  className="mt-2 w-full rounded-xl border border-stone-200 px-3 py-3"
-                >
-                  {Object.values(SubmissionStatus).map((status) => (
-                    <option key={status} value={status}>
-                      {status.replaceAll("_", " ")}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <span className="text-sm font-medium text-stone-700">
-                  Dropoff
-                </span>
-                <input
-                  type="datetime-local"
-                  name="dropoffAt"
-                  defaultValue={localDateTimeInputValue(submission.dropoffAt)}
-                  className="mt-2 w-full rounded-xl border border-stone-200 px-3 py-3"
-                  required
-                />
-              </label>
-              <label className="block">
-                <span className="text-sm font-medium text-stone-700">Pickup</span>
-                <input
-                  type="datetime-local"
-                  name="pickupAt"
-                  defaultValue={localDateTimeInputValue(submission.pickupAt)}
-                  className="mt-2 w-full rounded-xl border border-stone-200 px-3 py-3"
-                  required
-                />
-              </label>
-              <label className="block">
-                <span className="text-sm font-medium text-stone-700">
-                  Quoted total
-                </span>
-                <input
-                  type="number"
-                  name="quotedTotal"
-                  min="0"
-                  step="0.01"
-                  defaultValue={moneyValue(submission.quotedTotal)}
-                  className="mt-2 w-full rounded-xl border border-stone-200 px-3 py-3"
-                  required
-                />
-              </label>
-              <label className="block">
-                <span className="text-sm font-medium text-stone-700">
-                  Prescreen notes
-                </span>
-                <textarea
-                  name="prescreenNotes"
-                  defaultValue={submission.prescreenNotes || ""}
-                  rows={5}
-                  className="mt-2 w-full rounded-xl border border-stone-200 px-3 py-3"
-                />
-              </label>
-            </div>
-            <button className="mt-5 rounded-xl bg-stone-950 px-5 py-3 text-sm font-semibold text-white hover:bg-stone-800">
-              Save order changes
-            </button>
-          </form>
+          <EditOrderForm
+            submissionId={submission.id}
+            defaultStatus={submission.status}
+            defaultDropoffAt={localDateTimeInputValue(submission.dropoffAt)}
+            defaultPickupAt={localDateTimeInputValue(submission.pickupAt)}
+            defaultQuotedTotal={moneyValue(submission.quotedTotal)}
+            defaultPrescreenNotes={submission.prescreenNotes || ""}
+          />
 
           <form
             action={updateCustomerPetAction}
