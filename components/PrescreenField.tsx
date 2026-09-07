@@ -13,7 +13,7 @@ export function PrescreenField({ name, label, value, error, onChange }: Props) {
   return (
     <div className="space-y-2 border-b border-orange-100 pb-4 last:border-b-0 last:pb-0">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-        <p className="flex-1 text-sm font-medium leading-snug text-stone-700">
+        <p className="flex-1 whitespace-pre-line text-sm font-medium leading-snug text-stone-700">
           {label}
           <span className="text-red-500"> *</span>
         </p>

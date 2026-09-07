@@ -20,6 +20,7 @@ function DogQuote({ name, quote }: { name: string; quote: PriceBreakdown }) {
         {quote.seniorDogFee > 0 ? <div className="flex justify-between gap-4"><dt>Senior dog fee</dt><dd className="font-medium">${quote.seniorDogFee.toFixed(2)}</dd></div> : null}
         {quote.intactDogFee > 0 ? <div className="flex justify-between gap-4"><dt>Unspayed/unneutered dog fee</dt><dd className="font-medium">${quote.intactDogFee.toFixed(2)}</dd></div> : null}
         {quote.highEnergyDogFee > 0 ? <div className="flex justify-between gap-4"><dt>High-energy care fee</dt><dd className="font-medium">${quote.highEnergyDogFee.toFixed(2)}</dd></div> : null}
+        {quote.specialCareFee > 0 ? <div className="flex justify-between gap-4"><dt>Special-care fee</dt><dd className="font-medium">${quote.specialCareFee.toFixed(2)}</dd></div> : null}
         {quote.holidayFee > 0 ? <div className="flex justify-between gap-4"><dt>Holiday fee</dt><dd className="font-medium">${quote.holidayFee.toFixed(2)}</dd></div> : null}
         <div className="flex justify-between gap-4 border-t border-orange-100 pt-1.5"><dt className="font-semibold">Subtotal</dt><dd className="font-bold">${quote.totalPrice.toFixed(2)}</dd></div>
       </dl>
@@ -30,11 +31,13 @@ function DogQuote({ name, quote }: { name: string; quote: PriceBreakdown }) {
 export function PriceEstimate({ values, title, incompleteHint, holidayNote }: Props) {
   const first = calculatePrice(
     Number(values.petWeightLb), Number(values.petAgeYears), values.prescreenSpayedNeutered, values.prescreenHighEnergy,
+    values.prescreenMedicalHistory,
     values.dropoffDate, values.dropoffTime, values.pickupDate, values.pickupTime
   );
   const second = values.hasSecondDog
     ? calculatePrice(
         Number(values.secondPetWeightLb), Number(values.secondPetAgeYears), values.secondPrescreenSpayedNeutered, values.secondPrescreenHighEnergy,
+        values.secondPrescreenMedicalHistory,
         values.dropoffDate, values.dropoffTime, values.pickupDate, values.pickupTime
       )
     : null;

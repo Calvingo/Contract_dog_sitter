@@ -235,6 +235,13 @@ export async function generateSubmissionPdf(
       `$${firstQuote.highEnergyDogFee.toFixed(2)} (${firstQuote.billableDays} day(s) × $${firstQuote.highEnergyDogFeePerDay})`
     );
   }
+  if (firstQuote.specialCareFee > 0) {
+    ctx = drawRow(
+      ctx,
+      "Special-care fee",
+      `$${firstQuote.specialCareFee.toFixed(2)} (${firstQuote.billableDays} day(s) × $${firstQuote.specialCareFeePerDay})`
+    );
+  }
   if (firstQuote.holidayFee > 0) {
     ctx = drawRow(
       ctx,
@@ -255,6 +262,7 @@ export async function generateSubmissionPdf(
     if (secondQuote.seniorDogFee > 0) ctx = drawRow(ctx, "Senior dog fee", `$${secondQuote.seniorDogFee.toFixed(2)}`);
     if (secondQuote.intactDogFee > 0) ctx = drawRow(ctx, "Unspayed/unneutered dog fee", `$${secondQuote.intactDogFee.toFixed(2)}`);
     if (secondQuote.highEnergyDogFee > 0) ctx = drawRow(ctx, "High-energy care fee", `$${secondQuote.highEnergyDogFee.toFixed(2)}`);
+    if (secondQuote.specialCareFee > 0) ctx = drawRow(ctx, "Special-care fee", `$${secondQuote.specialCareFee.toFixed(2)}`);
     if (secondQuote.holidayFee > 0) ctx = drawRow(ctx, "Holiday fee", `$${secondQuote.holidayFee.toFixed(2)}`);
     ctx = drawRow(ctx, "Dog subtotal", `$${secondQuote.totalPrice.toFixed(2)}`);
   }

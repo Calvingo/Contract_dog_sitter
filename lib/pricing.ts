@@ -8,8 +8,10 @@ export const SENIOR_DOG_AGE_YEARS = 10;
 export const SENIOR_DOG_FEE_PER_DAY = 10;
 export const PUPPY_AGE_LIMIT_YEARS = 1;
 export const PUPPY_FEE_PER_DAY = 10;
-export const INTACT_DOG_FEE_PER_DAY = 10;
+export const INTACT_PUPPY_FEE_PER_DAY = 20;
+export const INTACT_DOG_FEE_PER_DAY = 20;
 export const HIGH_ENERGY_DOG_FEE_PER_DAY = 10;
+export const SPECIAL_CARE_FEE_PER_DAY = 10;
 export const DEPOSIT_PERCENT = 20;
 
 export type PriceBreakdown = {
@@ -28,6 +30,8 @@ export type PriceBreakdown = {
   intactDogFee: number;
   highEnergyDogFeePerDay: number;
   highEnergyDogFee: number;
+  specialCareFeePerDay: number;
+  specialCareFee: number;
   holidayDays: number;
   holidayFeePerDay: number;
   holidayFee: number;
@@ -81,16 +85,18 @@ function buildSummary(
   dailyRate: number,
   boardingSubtotal: number,
   puppyFee: number,
+  puppyFeePerDay: number,
   seniorDogFee: number,
   intactDogFee: number,
   highEnergyDogFee: number,
+  specialCareFee: number,
   holidayFee: number,
   totalPrice: number
 ): string {
   const daysLabel = billableDays === 1 ? "1 day" : `${billableDays} days`;
   let summary = `${daysLabel} × $${dailyRate}/day = $${boardingSubtotal.toFixed(2)}`;
   if (puppyFee > 0) {
-    summary += ` + puppy fee (${daysLabel} × $${PUPPY_FEE_PER_DAY}/day) = $${puppyFee.toFixed(2)}`;
+    summary += ` + puppy fee (${daysLabel} × $${puppyFeePerDay}/day) = $${puppyFee.toFixed(2)}`;
   }
   if (seniorDogFee > 0) {
     summary += ` + senior dog fee (${daysLabel} × $${SENIOR_DOG_FEE_PER_DAY}/day) = $${seniorDogFee.toFixed(2)}`;
@@ -104,6 +110,9 @@ function buildSummary(
   if (holidayFee > 0) {
     summary += ` + holiday rate for entire stay (${daysLabel} × $${HOLIDAY_FEE_PER_DAY}/day) = $${holidayFee.toFixed(2)}`;
   }
+  if (specialCareFee > 0) {
+    summary += ` + special-care fee (${daysLabel} × $${SPECIAL_CARE_FEE_PER_DAY}/day) = $${specialCareFee.toFixed(2)}`;
+  }
   summary += ` → Total $${totalPrice.toFixed(2)}`;
   return summary;
 }
@@ -113,6 +122,7 @@ export function calculatePrice(
   petAgeYears: number,
   spayedNeuteredAnswer: string,
   highEnergyAnswer: string,
+  medicalHistoryAnswer: string,
   dropoffDate: string,
   dropoffTime: string,
   pickupDate: string,
@@ -137,21 +147,29 @@ export function calculatePrice(
   const dailyRate = getDailyRate(weightLb);
   const boardingSubtotal =
     Math.round(billableDays * dailyRate * 100) / 100;
+  const isPuppy = petAgeYears < PUPPY_AGE_LIMIT_YEARS;
+  const puppyFeePerDay = spayedNeuteredAnswer === "no"
+    ? INTACT_PUPPY_FEE_PER_DAY
+    : PUPPY_FEE_PER_DAY;
   const puppyFee =
-    petAgeYears < PUPPY_AGE_LIMIT_YEARS
-      ? Math.round(billableDays * PUPPY_FEE_PER_DAY * 100) / 100
+    isPuppy
+      ? Math.round(billableDays * puppyFeePerDay * 100) / 100
       : 0;
   const seniorDogFee =
     petAgeYears >= SENIOR_DOG_AGE_YEARS
       ? Math.round(billableDays * SENIOR_DOG_FEE_PER_DAY * 100) / 100
       : 0;
   const intactDogFee =
-    spayedNeuteredAnswer === "no"
+    !isPuppy && spayedNeuteredAnswer === "no"
       ? Math.round(billableDays * INTACT_DOG_FEE_PER_DAY * 100) / 100
       : 0;
   const highEnergyDogFee =
     highEnergyAnswer === "yes"
       ? Math.round(billableDays * HIGH_ENERGY_DOG_FEE_PER_DAY * 100) / 100
+      : 0;
+  const specialCareFee =
+    medicalHistoryAnswer === "yes"
+      ? Math.round(billableDays * SPECIAL_CARE_FEE_PER_DAY * 100) / 100
       : 0;
 
   const { holidayDays, holidayDates } = countHolidayDaysInStay(
@@ -163,7 +181,7 @@ export function calculatePrice(
     Math.round(holidayBillableDays * HOLIDAY_FEE_PER_DAY * 100) / 100;
   const totalPrice =
     Math.round(
-      (boardingSubtotal + puppyFee + seniorDogFee + intactDogFee + highEnergyDogFee + holidayFee) * 100
+      (boardingSubtotal + puppyFee + seniorDogFee + intactDogFee + highEnergyDogFee + specialCareFee + holidayFee) * 100
     ) / 100;
   const depositAmount = Math.round(totalPrice * (DEPOSIT_PERCENT / 100) * 100) / 100;
 
@@ -174,7 +192,7 @@ export function calculatePrice(
     totalHours: Math.round(totalHours * 10) / 10,
     boardingSubtotal,
     puppyAgeLimitYears: PUPPY_AGE_LIMIT_YEARS,
-    puppyFeePerDay: PUPPY_FEE_PER_DAY,
+    puppyFeePerDay,
     puppyFee,
     seniorDogAgeYears: SENIOR_DOG_AGE_YEARS,
     seniorDogFeePerDay: SENIOR_DOG_FEE_PER_DAY,
@@ -183,6 +201,8 @@ export function calculatePrice(
     intactDogFee,
     highEnergyDogFeePerDay: HIGH_ENERGY_DOG_FEE_PER_DAY,
     highEnergyDogFee,
+    specialCareFeePerDay: SPECIAL_CARE_FEE_PER_DAY,
+    specialCareFee,
     holidayDays: holidayBillableDays,
     holidayFeePerDay: HOLIDAY_FEE_PER_DAY,
     holidayFee,
@@ -194,9 +214,11 @@ export function calculatePrice(
       dailyRate,
       boardingSubtotal,
       puppyFee,
+      puppyFeePerDay,
       seniorDogFee,
       intactDogFee,
       highEnergyDogFee,
+      specialCareFee,
       holidayFee,
       totalPrice
     ),

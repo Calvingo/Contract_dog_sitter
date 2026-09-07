@@ -14,6 +14,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "test:decision-urls": "node scripts/test-decision.mjs",
+    "test:pricing": "node scripts/test-pricing.mjs",
     "check:smtp": "node scripts/check-smtp.mjs"
   },
   "dependencies": {

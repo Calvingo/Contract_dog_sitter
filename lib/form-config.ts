@@ -158,7 +158,7 @@ export const prescreenQuestions: PrescreenQuestion[] = [
   {
     name: "prescreenMedicalHistory",
     label:
-      "Does your dog have chronic illness, underlying medical conditions, or a history of surgery?",
+      "Does your dog have any chronic illnesses, underlying medical conditions, or a history of surgery?\n(If your dog requires ongoing special care, such as daily medication, injections, or other medical-related care, an additional $10/day care fee will apply.)",
   },
   {
     name: "prescreenAggressionChildren",
@@ -174,7 +174,7 @@ export const secondPrescreenQuestions: PrescreenQuestion[] = [
   { name: "secondPrescreenPottyTraining", label: "Does your dog have indoor accidents at home?" },
   { name: "secondPrescreenSeparationAnxiety", label: "Does your dog have severe separation anxiety?" },
   { name: "secondPrescreenFrequentBarking", label: "Does your dog bark frequently?" },
-  { name: "secondPrescreenMedicalHistory", label: "Does your dog have chronic illness, underlying medical conditions, or a history of surgery?" },
+  { name: "secondPrescreenMedicalHistory", label: "Does your dog have any chronic illnesses, underlying medical conditions, or a history of surgery?\n(If your dog requires ongoing special care, such as daily medication, injections, or other medical-related care, an additional $10/day care fee will apply.)" },
   { name: "secondPrescreenAggressionChildren", label: "Does your dog show aggression toward children?" },
 ];
 

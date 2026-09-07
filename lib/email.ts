@@ -91,6 +91,8 @@ function normalizeQuote(quote: SubmissionQuote): SubmissionQuote {
     intactDogFee: Number(dog.intactDogFee),
     highEnergyDogFeePerDay: Number(dog.highEnergyDogFeePerDay),
     highEnergyDogFee: Number(dog.highEnergyDogFee),
+    specialCareFeePerDay: Number(dog.specialCareFeePerDay ?? 0),
+    specialCareFee: Number(dog.specialCareFee ?? 0),
     holidayDays: Number(dog.holidayDays),
     holidayFeePerDay: Number(dog.holidayFeePerDay),
     holidayFee: Number(dog.holidayFee),
@@ -205,6 +207,14 @@ function formatSinglePricingSection(quote: PriceBreakdown, dogName: string): str
       rowHtml(
         "High-energy care fee",
         `$${quote.highEnergyDogFee.toFixed(2)} (${quote.billableDays} day(s) × $${quote.highEnergyDogFeePerDay})`
+      )
+    );
+  }
+  if (quote.specialCareFee > 0) {
+    rows.push(
+      rowHtml(
+        "Special-care fee",
+        `$${quote.specialCareFee.toFixed(2)} (${quote.billableDays} day(s) × $${quote.specialCareFeePerDay})`
       )
     );
   }
