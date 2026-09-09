@@ -1,6 +1,7 @@
 import {
   countHolidayDaysInStay,
   formatHolidayRangesForDisplay,
+  getHolidayFeeForDate,
   HOLIDAY_FEE_PER_DAY,
 } from "./holidays";
 
@@ -91,6 +92,7 @@ function buildSummary(
   highEnergyDogFee: number,
   specialCareFee: number,
   holidayFee: number,
+  holidayFeePerDay: number,
   totalPrice: number
 ): string {
   const daysLabel = billableDays === 1 ? "1 day" : `${billableDays} days`;
@@ -108,7 +110,7 @@ function buildSummary(
     summary += ` + high-energy care fee (${daysLabel} × $${HIGH_ENERGY_DOG_FEE_PER_DAY}/day) = $${highEnergyDogFee.toFixed(2)}`;
   }
   if (holidayFee > 0) {
-    summary += ` + holiday rate for entire stay (${daysLabel} × $${HOLIDAY_FEE_PER_DAY}/day) = $${holidayFee.toFixed(2)}`;
+    summary += ` + holiday rate for entire stay (${daysLabel} × $${holidayFeePerDay}/day) = $${holidayFee.toFixed(2)}`;
   }
   if (specialCareFee > 0) {
     summary += ` + special-care fee (${daysLabel} × $${SPECIAL_CARE_FEE_PER_DAY}/day) = $${specialCareFee.toFixed(2)}`;
@@ -177,8 +179,13 @@ export function calculatePrice(
     pickupDate
   );
   const holidayBillableDays = holidayDays > 0 ? billableDays : 0;
+  // Keep the entire-stay rule; use the highest applicable holiday rate.
+  const holidayFeePerDay = holidayDates.reduce(
+    (fee, date) => Math.max(fee, getHolidayFeeForDate(date)),
+    HOLIDAY_FEE_PER_DAY
+  );
   const holidayFee =
-    Math.round(holidayBillableDays * HOLIDAY_FEE_PER_DAY * 100) / 100;
+    Math.round(holidayBillableDays * holidayFeePerDay * 100) / 100;
   const totalPrice =
     Math.round(
       (boardingSubtotal + puppyFee + seniorDogFee + intactDogFee + highEnergyDogFee + specialCareFee + holidayFee) * 100
@@ -204,7 +211,7 @@ export function calculatePrice(
     specialCareFeePerDay: SPECIAL_CARE_FEE_PER_DAY,
     specialCareFee,
     holidayDays: holidayBillableDays,
-    holidayFeePerDay: HOLIDAY_FEE_PER_DAY,
+    holidayFeePerDay,
     holidayFee,
     holidayDates,
     totalPrice,
@@ -220,6 +227,7 @@ export function calculatePrice(
       highEnergyDogFee,
       specialCareFee,
       holidayFee,
+      holidayFeePerDay,
       totalPrice
     ),
   };
