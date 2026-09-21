@@ -49,8 +49,14 @@ export function AgreementPanel({
       >
         {agreementSections.map((section) => (
           <div key={section.title} className="mb-5 last:mb-0">
-            <h3 className="font-semibold text-stone-900">{section.title}</h3>
-            <p className="mt-2">{section.body}</p>
+            <h3
+              className={section.highlighted ? "font-bold text-red-600" : "font-semibold text-stone-900"}
+            >
+              {section.title}
+            </h3>
+            <p className={section.highlighted ? "mt-2 font-bold text-red-600" : "mt-2"}>
+              {section.body}
+            </p>
           </div>
         ))}
       </div>

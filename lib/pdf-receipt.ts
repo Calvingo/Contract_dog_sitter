@@ -115,19 +115,22 @@ function drawRow(ctx: PdfContext, label: string, value: string): PdfContext {
 function drawAgreementTerms(ctx: PdfContext): PdfContext {
   let next = drawSectionTitle(ctx, "Pet Boarding & Daycare Agreement — Terms");
   for (const section of agreementSections) {
+    const bodyFont = section.highlighted ? next.bold : next.font;
+    const highlightColor = rgb(0.86, 0.15, 0.15);
     next = ensureSpace(next, MARGIN + 20);
     next = drawLines(
       next,
       wrapLines(section.title, next.bold, 11, CONTENT_WIDTH),
       11,
       next.bold,
-      rgb(0.2, 0.2, 0.2)
+      section.highlighted ? highlightColor : rgb(0.2, 0.2, 0.2)
     );
     next = drawLines(
       next,
-      wrapLines(section.body, next.font, 9, CONTENT_WIDTH),
+      wrapLines(section.body, bodyFont, 9, CONTENT_WIDTH),
       9,
-      next.font
+      bodyFont,
+      section.highlighted ? highlightColor : rgb(0.11, 0.11, 0.11)
     );
     next = { ...next, y: next.y - 8 };
   }
