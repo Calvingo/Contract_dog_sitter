@@ -2,6 +2,7 @@ import { PDFDocument, rgb, type PDFPage, type PDFFont } from "pdf-lib";
 import { embedPdfFonts } from "./pdf-fonts";
 import type { FormValues } from "./form-config";
 import {
+  PAYMENT_EARLY_PICKUP_POLICY,
   agreementSections,
   formFields,
   getOptionLabel,
@@ -276,6 +277,22 @@ export async function generateSubmissionPdf(
     `Deposit (${DEPOSIT_PERCENT}% of total)`,
     `$${quote.depositAmount.toFixed(2)}`
   );
+  ctx = drawRow(
+    ctx,
+    `Remaining balance (${100 - DEPOSIT_PERCENT}% of total, due at drop-off)`,
+    `$${(quote.totalPrice - quote.depositAmount).toFixed(2)}`
+  );
+  ctx = { ...ctx, y: ctx.y - 12 };
+  ctx = ensureSpace(ctx, MARGIN + 36);
+  ctx = drawLines(ctx, [PAYMENT_EARLY_PICKUP_POLICY.title], 11, ctx.bold, rgb(0.86, 0.15, 0.15));
+  ctx = drawLines(
+    ctx,
+    wrapLines(PAYMENT_EARLY_PICKUP_POLICY.body, ctx.bold, 9, CONTENT_WIDTH),
+    9,
+    ctx.bold,
+    rgb(0.86, 0.15, 0.15)
+  );
+  ctx = { ...ctx, y: ctx.y - 8 };
 
   ctx = drawSectionTitle(ctx, `Dog 1 — ${data.petName} Pre-Screening`);
   for (const q of prescreenQuestions) {

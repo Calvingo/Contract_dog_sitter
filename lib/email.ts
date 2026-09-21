@@ -1,6 +1,7 @@
 import { EmailStatus, EmailType } from "@prisma/client";
 import type { FormValues } from "./form-config";
 import {
+  PAYMENT_EARLY_PICKUP_POLICY,
   formFields,
   getOptionLabel,
   prescreenQuestions,
@@ -54,6 +55,13 @@ function rowHtml(label: string, value: string): string {
 
 function formatTable(rows: string[]): string {
   return `<table style="border-collapse:collapse;width:100%;max-width:640px;margin-bottom:20px;">${rows.join("")}</table>`;
+}
+
+function formatPaymentPolicy(): string {
+  return `<div style="max-width:640px;margin:16px 0 24px;color:#dc2626;font-weight:700;">
+    <h3 style="margin:0 0 8px;font-size:16px;color:#dc2626;font-weight:700;">${escapeHtml(PAYMENT_EARLY_PICKUP_POLICY.title)}</h3>
+    <p style="margin:0;color:#dc2626;font-weight:700;">${escapeHtml(PAYMENT_EARLY_PICKUP_POLICY.body)}</p>
+  </div>`;
 }
 
 function formatValue(field: FormField, data: FormValues): string {
@@ -233,6 +241,10 @@ function formatSinglePricingSection(quote: PriceBreakdown, dogName: string): str
       `$${quote.depositAmount.toFixed(2)}`
     )
   );
+  rows.push(rowHtml(
+    `Remaining balance (${100 - DEPOSIT_PERCENT}% of total, due at drop-off)`,
+    `$${(quote.totalPrice - quote.depositAmount).toFixed(2)}`
+  ));
   return `
     <h3 style="margin:24px 0 8px;font-size:16px;">${escapeHtml(dogName)} — Price Estimate</h3>
     ${formatTable(rows)}
@@ -245,7 +257,9 @@ function formatPricingSection(data: FormValues, quote: SubmissionQuote): string 
   parts.push(`<h3 style="margin:24px 0 8px;font-size:16px;">Combined Total</h3>${formatTable([
     rowHtml("Estimated total", `$${quote.totalPrice.toFixed(2)}`),
     rowHtml(`Deposit (${DEPOSIT_PERCENT}% of total)`, `$${quote.depositAmount.toFixed(2)}`),
+    rowHtml(`Remaining balance (${100 - DEPOSIT_PERCENT}% of total, due at drop-off)`, `$${(quote.totalPrice - quote.depositAmount).toFixed(2)}`),
   ])}`);
+  parts.push(formatPaymentPolicy());
   return parts.join("");
 }
 
@@ -351,6 +365,8 @@ function buildCustomerEmailHtml(
       <p>Thank you for ${isUpdate ? "updating" : "submitting"} your pet boarding agreement with ${BRAND_NAME}.</p>
       ${formatBoardingChecklistSection()}
       <p><strong>Please find your signed submission attached as a PDF.</strong> It includes all information you provided, the price estimate ($${quote.totalPrice.toFixed(2)}), the required deposit ($${quote.depositAmount.toFixed(2)}, which is ${DEPOSIT_PERCENT}% of the total), and your signature. Please save it for your records.</p>
+      <p><strong>Remaining balance (${100 - DEPOSIT_PERCENT}% of total, due at drop-off): $${(quote.totalPrice - quote.depositAmount).toFixed(2)}</strong></p>
+      ${formatPaymentPolicy()}
       <p>${isUpdate ? "We will review the updated request and follow up soon." : "We will review your request and follow up soon."}</p>
       ${editBlock}
       ${formatContactsSection()}

@@ -1,4 +1,5 @@
 import type { FormValues } from "@/lib/form-config";
+import { PAYMENT_EARLY_PICKUP_POLICY } from "@/lib/form-config";
 import { calculatePrice, DEPOSIT_PERCENT, type PriceBreakdown } from "@/lib/pricing";
 
 type Props = {
@@ -62,7 +63,12 @@ export function PriceEstimate({ values, title, incompleteHint, holidayNote }: Pr
       <dl className="mt-3 space-y-2 text-sm">
         <div className="flex justify-between border-t border-orange-200 pt-3 text-base"><dt className="font-semibold">Estimated total</dt><dd className="font-bold text-orange-700">${total.toFixed(2)}</dd></div>
         <div className="flex justify-between"><dt className="font-semibold">Deposit ({DEPOSIT_PERCENT}% of total)</dt><dd className="font-bold text-orange-700">${deposit.toFixed(2)}</dd></div>
+        <div className="flex justify-between gap-4"><dt className="font-semibold">Remaining balance ({100 - DEPOSIT_PERCENT}% of total, due at drop-off)</dt><dd className="font-bold text-orange-700">${(total - deposit).toFixed(2)}</dd></div>
       </dl>
+      <div className="mt-4 text-sm font-bold text-red-600">
+        <h4>{PAYMENT_EARLY_PICKUP_POLICY.title}</h4>
+        <p className="mt-2">{PAYMENT_EARLY_PICKUP_POLICY.body}</p>
+      </div>
       <p className="mt-2 text-xs text-stone-500">Each dog is priced independently. {holidayNote}</p>
     </div>
   );

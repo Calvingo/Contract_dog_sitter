@@ -315,6 +315,11 @@ export type AgreementSection = {
   highlighted?: boolean;
 };
 
+export const PAYMENT_EARLY_PICKUP_POLICY = {
+  title: "Payment & Early Pickup Policy",
+  body: "A 20% deposit is required to secure the reservation. The remaining balance is due in full at drop-off. If the Owner picks up the dog earlier than the confirmed reservation end date or time, unused boarding days or hours are non-refundable, as the reserved space has been held exclusively for the booking.",
+};
+
 export const agreementSections: AgreementSection[] = [
   {
     title: "1. Assumption of Risk",
@@ -341,8 +346,8 @@ export const agreementSections: AgreementSection[] = [
     body: "Female dogs in heat are not accepted. Adult dogs that are not spayed or neutered may be refused. The Sitter reserves the right to refuse or terminate services for safety or operational reasons.",
   },
   {
-    title: "7. Payment & Early Pickup Policy",
-    body: "A 20% deposit is required to secure the reservation. The remaining balance is due in full at drop-off. If the Owner picks up the dog earlier than the confirmed reservation end date or time, unused boarding days or hours are non-refundable, as the reserved space has been held exclusively for the booking.",
+    title: `7. ${PAYMENT_EARLY_PICKUP_POLICY.title}`,
+    body: PAYMENT_EARLY_PICKUP_POLICY.body,
     highlighted: true,
   },
   {
