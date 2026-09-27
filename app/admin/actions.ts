@@ -102,7 +102,7 @@ async function sendLatestSubmissionReceipt(submissionId: string) {
     revision: submission.revision,
     isUpdate: true,
     quote: buildAdminReceiptQuote(values, submission.quotedTotal.toNumber()),
-    sendAdminNotification: false,
+    sendAdminNotification: true,
   });
 
   return values.email;
@@ -171,7 +171,7 @@ export async function updateSubmissionAction(formData: FormData) {
   const result = await updateSubmissionInternal(formData);
   if (result.receiptError) {
     throw new Error(
-      "Order was saved, but the latest receipt could not be emailed to the customer."
+      "Order was saved, but one or more customer or admin emails could not be sent."
     );
   }
 }
@@ -186,14 +186,14 @@ export async function updateSubmissionActionWithState(
       return {
         ok: false,
         error:
-          "Order was saved, but the latest receipt could not be emailed. Check the email settings or log, then save again to retry.",
+          "Order was saved, but one or more customer or admin emails could not be sent. Check the email settings or log, then save again to retry.",
       };
     }
     return {
       ok: true,
       message: result.receiptSentTo
-        ? `Order updated and the latest receipt was sent to ${result.receiptSentTo}.`
-        : "Order updated and the latest receipt was sent to the customer.",
+        ? `Order updated. The latest receipt was sent to ${result.receiptSentTo}, and an update notification was sent to the admins.`
+        : "Order updated. The latest receipt was sent to the customer, and an update notification was sent to the admins.",
     };
   } catch (error) {
     return {

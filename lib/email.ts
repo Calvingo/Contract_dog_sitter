@@ -388,7 +388,7 @@ function buildAdminEmailHtml(
   const submittedAt = new Date().toLocaleString("en-US");
   const title = isUpdate ? "Updated Agreement Submission" : "New Agreement Submission";
   const updateNote = isUpdate
-    ? `<p style="padding:12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;color:#9a3412;"><strong>This customer updated a previous request.</strong> Previous admin decision links are no longer valid. Please use the buttons in this latest email.${previousStatus ? ` Previous status: ${escapeHtml(previousStatus)}.` : ""}</p>`
+    ? `<p style="padding:12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;color:#9a3412;"><strong>This request has been updated.</strong> Previous admin decision links are no longer valid. Please use the buttons in this latest email.${previousStatus ? ` Previous status: ${escapeHtml(previousStatus)}.` : ""}</p>`
     : "";
 
   return `
