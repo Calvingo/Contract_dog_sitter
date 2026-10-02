@@ -330,6 +330,8 @@ model MarketingCampaign {
   name        String
   subject     String
   body        String @db.Text
+  allCustomers Boolean @default(false)
+  imagePath String?
   excludeStart String
   excludeEnd   String
   scheduledAt DateTime
@@ -399,4 +401,11 @@ model AdminLoginChallenge {
 
   @@index([email, createdAt])
   @@index([expiresAt])
+}
+
+model MarketingImage {
+  id String @id @default(cuid())
+  data Bytes
+  mimeType String
+  createdAt DateTime @default(now())
 }

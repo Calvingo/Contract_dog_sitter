@@ -848,6 +848,7 @@ summary:focus-visible {
 }
 @media (max-width: 600px) {
   .public-nav {
+    flex-wrap: wrap;
     padding: 22px 0;
     gap: 12px;
   }

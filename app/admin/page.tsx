@@ -110,7 +110,7 @@ export default async function AdminPage() {
           href="/admin/marketing"
           title="Marketing"
           meta="Email campaigns"
-          description="Schedule holiday emails, preview eligible subscribers, and review campaign delivery records."
+          description="Edit a ready-made email, add a photo, and send to your saved customers."
         />
         <ModuleCard
           href="/admin/settings"

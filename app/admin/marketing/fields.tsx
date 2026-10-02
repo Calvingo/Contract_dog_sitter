@@ -1,9 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  holidays,
-  holidaySchedule,
-  type Holiday,
+  DEFAULT_MARKETING_IMAGE,
+  returningGuestTemplate,
 } from "@/lib/marketing/templates";
 import { todayKey } from "@/lib/platform/rules";
 export function CampaignFields({
@@ -13,55 +12,39 @@ export function CampaignFields({
     name: string;
     subject: string;
     body: string;
-    excludeStart: string;
-    excludeEnd: string;
+    imagePath?: string | null;
     scheduledAt: Date;
   };
 }) {
   const [fields, setFields] = useState({
-    name: campaign?.name || "",
-    subject: campaign?.subject || "",
-    body: campaign?.body || "",
-    excludeStart: campaign?.excludeStart || "",
-    excludeEnd: campaign?.excludeEnd || "",
-    sendDate: campaign?.scheduledAt.toISOString().slice(0, 10) || "",
+    name: campaign?.name ?? returningGuestTemplate.name,
+    subject: campaign?.subject ?? returningGuestTemplate.subject,
+    body: campaign?.body ?? returningGuestTemplate.body,
+    sendDate: campaign?.scheduledAt.toISOString().slice(0, 10) || todayKey(),
   });
+  const [imagePath, setImagePath] = useState(
+    campaign ? campaign.imagePath || "" : DEFAULT_MARKETING_IMAGE,
+  );
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState("");
+  const [imageError, setImageError] = useState("");
+  useEffect(() => {
+    if (!file) {
+      setPreview("");
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
   const change = (key: keyof typeof fields, value: string) =>
     setFields((current) => ({ ...current, [key]: value }));
-  function template(value: string) {
-    if (!(value in holidays)) return;
-    const holiday = value as Holiday;
-    let year = Number(todayKey().slice(0, 4));
-    if (holidaySchedule(holiday, year).scheduledAt < new Date()) year++;
-    const schedule = holidaySchedule(holiday, year);
-    setFields({
-      name: `${holidays[holiday].name} ${year}`,
-      subject: holidays[holiday].subject,
-      body: holidays[holiday].body,
-      excludeStart: schedule.excludeStart,
-      excludeEnd: schedule.excludeEnd,
-      sendDate: schedule.scheduledAt.toISOString().slice(0, 10),
-    });
-  }
   return (
     <>
-      {!campaign && (
-        <label>
-          Start with a template
-          <select defaultValue="" onChange={(e) => template(e.target.value)}>
-            <option value="">Custom email</option>
-            {Object.entries(holidays).map(([key, t]) => (
-              <option key={key} value={key}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-          <span className="small">
-            Templates use the next future date three months before the holiday.
-            Dates and copy are editable.
-          </span>
-        </label>
-      )}
+      <p className="notice">
+        To: all saved customer emails. Unsubscribed and blocked addresses are
+        excluded automatically.
+      </p>
       <label>
         Campaign name
         <input
@@ -70,7 +53,6 @@ export function CampaignFields({
           value={fields.name}
           onChange={(e) => change("name", e.target.value)}
           required
-          placeholder="Thanksgiving 2027"
         />
       </label>
       <label>
@@ -87,48 +69,95 @@ export function CampaignFields({
         Email message
         <textarea
           name="body"
-          rows={6}
+          rows={18}
           minLength={10}
           maxLength={10000}
           value={fields.body}
           onChange={(e) => change("body", e.target.value)}
           required
-          placeholder="Write your promotion. The booking button, mailing address and unsubscribe link are added automatically."
         />
       </label>
-      <div className="grid gap-4 md:grid-cols-3">
-        <label>
-          Send on
-          <input
-            name="sendDate"
-            type="date"
-            required
-            value={fields.sendDate}
-            onChange={(e) => change("sendDate", e.target.value)}
+      <p className="small">
+        Use {"{{firstName}}"} and {"{{petName}}"} for each customer.{" "}
+        {"{{bookingLink}}"} adds the reservation link, {"{{image}}"} places your
+        photo, and **text** adds bold text. Please update seasonal availability
+        before sending.
+      </p>
+      <input name="imagePath" type="hidden" value={imagePath} />
+      <label>
+        Upload / replace email image
+        <input
+          name="image"
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          onChange={(e) => {
+            const selected = e.target.files?.[0] || null;
+            if (
+              selected &&
+              (selected.size > 2 * 1024 * 1024 ||
+                !["image/png", "image/jpeg", "image/webp"].includes(
+                  selected.type,
+                ))
+            ) {
+              setImageError(
+                "Choose a PNG, JPEG or WebP image smaller than 2 MB.",
+              );
+              e.target.value = "";
+              setFile(null);
+              return;
+            }
+            setImageError("");
+            setFile(selected);
+          }}
+        />
+      </label>
+      <p className="small">
+        PNG, JPEG or WebP, up to 2 MB. The image is saved with your draft and
+        included in the email.
+      </p>
+      {imageError && (
+        <p role="alert" className="notice error">
+          {imageError}
+        </p>
+      )}
+      {(preview || imagePath) && (
+        <>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={preview || imagePath}
+            alt="Campaign image preview"
+            style={{ maxWidth: 480, width: "100%", height: "auto" }}
           />
-        </label>
-        <label>
-          Exclude stays from
-          <input
-            name="excludeStart"
-            type="date"
-            required
-            value={fields.excludeStart}
-            onChange={(e) => change("excludeStart", e.target.value)}
-          />
-        </label>
-        <label>
-          Through (inclusive)
-          <input
-            name="excludeEnd"
-            type="date"
-            required
-            min={fields.excludeStart}
-            value={fields.excludeEnd}
-            onChange={(e) => change("excludeEnd", e.target.value)}
-          />
-        </label>
-      </div>
+          <button
+            className="button secondary"
+            type="button"
+            onClick={(e) => {
+              const input = e.currentTarget.form?.elements.namedItem(
+                "image",
+              ) as HTMLInputElement | null;
+              if (input) input.value = "";
+              setFile(null);
+              setImagePath("");
+            }}
+          >
+            Remove image
+          </button>
+        </>
+      )}
+      <label>
+        Send on
+        <input
+          name="sendDate"
+          type="date"
+          required
+          value={fields.sendDate}
+          onChange={(e) => change("sendDate", e.target.value)}
+        />
+      </label>
+      <p className="small">
+        After saving, review your email and choose Send now or schedule it for
+        this date.
+      </p>
     </>
   );
 }

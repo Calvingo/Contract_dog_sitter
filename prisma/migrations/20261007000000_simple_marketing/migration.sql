@@ -1,0 +1,8 @@
+ALTER TABLE "MarketingCampaign" ADD COLUMN "allCustomers" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN "imagePath" TEXT;
+CREATE TABLE "MarketingImage" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "data" BYTEA NOT NULL,
+  "mimeType" TEXT NOT NULL,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

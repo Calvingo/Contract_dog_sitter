@@ -11,7 +11,8 @@ import {
   validateCampaign,
   type Holiday,
 } from "@/lib/marketing/templates";
-import { syncHolidayCampaigns } from "@/lib/marketing/worker";
+import { saveMarketingImage } from "@/lib/marketing/images";
+import { runMarketing, syncHolidayCampaigns } from "@/lib/marketing/worker";
 const text = (form: FormData, key: string) =>
   String(form.get(key) || "").trim();
 
@@ -83,7 +84,11 @@ export async function updateSubscriber(
     };
   await prisma.$transaction(async (tx) => {
     const customer = await tx.customer.findUniqueOrThrow({ where: { id } });
-    if (customer.emailMarketingOptIn === enabled) return;
+    if (
+      customer.emailMarketingOptIn === enabled &&
+      customer.marketingConsentUpdatedAt
+    )
+      return;
     await tx.customer.update({
       where: { id },
       data: {
@@ -134,16 +139,18 @@ export async function saveCampaign(
       name: text(form, "name"),
       subject: text(form, "subject"),
       body: text(form, "body"),
-      excludeStart: text(form, "excludeStart"),
-      excludeEnd: text(form, "excludeEnd"),
+      allCustomers: true,
+      excludeStart: "",
+      excludeEnd: "",
       scheduledAt: new Date(`${text(form, "sendDate")}T17:00:00Z`),
     };
     validateCampaign(data);
+    const imagePath = await saveMarketingImage(form);
     const id = text(form, "id");
     if (id) {
       const result = await prisma.marketingCampaign.updateMany({
         where: { id, status: "DRAFT" },
-        data,
+        data: { ...data, imagePath },
       });
       if (!result.count)
         throw new Error(
@@ -153,7 +160,7 @@ export async function saveCampaign(
     } else
       savedId = (
         await prisma.marketingCampaign.create({
-          data: { ...data, createdBy: admin.email },
+          data: { ...data, imagePath, createdBy: admin.email },
         })
       ).id;
     refresh();
@@ -174,25 +181,35 @@ export async function campaignAction(
       const campaign = await tx.marketingCampaign.findUniqueOrThrow({
         where: { id },
       });
-      if (action === "schedule" || action === "resume") {
+      if (action === "schedule" || action === "send" || action === "resume") {
         await readiness();
         if (form.get("confirmed") !== "on")
           throw new Error(
             "Confirm the email content, eligible audience and sending date before scheduling.",
           );
         if (
-          action === "schedule"
+          action !== "resume"
             ? campaign.status !== "DRAFT"
             : campaign.status !== "PAUSED"
         )
           throw new Error("Campaign status changed. Refresh the page.");
-        if (campaign.excludeStart <= new Date().toISOString().slice(0, 10))
+        if (
+          !campaign.allCustomers &&
+          campaign.excludeStart <= new Date().toISOString().slice(0, 10)
+        )
           throw new Error("The stay period has already started.");
-        if (action === "schedule" && campaign.scheduledAt < new Date())
+        if (
+          action === "schedule" &&
+          campaign.scheduledAt.toISOString().slice(0, 10) <
+            new Date().toISOString().slice(0, 10)
+        )
           throw new Error("Choose a future sending date before scheduling.");
         const updated = await tx.marketingCampaign.updateMany({
           where: { id, status: campaign.status },
-          data: { status: campaign.startedAt ? "RUNNING" : "SCHEDULED" },
+          data: {
+            status: campaign.startedAt ? "RUNNING" : "SCHEDULED",
+            ...(action === "send" ? { scheduledAt: new Date() } : {}),
+          },
         });
         if (!updated.count)
           throw new Error("Campaign status changed. Refresh the page.");
@@ -215,6 +232,7 @@ export async function campaignAction(
         });
       } else throw new Error("Unknown action.");
     });
+    if (action === "send") await runMarketing();
     refresh();
     return {
       message:
@@ -332,7 +350,8 @@ export async function resolveDelivery(
     if (
       item.status !== "FAILED" ||
       ["CANCELLED", "PAUSED"].includes(item.campaign.status) ||
-      item.campaign.excludeStart <= new Date().toISOString().slice(0, 10)
+      (!item.campaign.allCustomers &&
+        item.campaign.excludeStart <= new Date().toISOString().slice(0, 10))
     )
       return {
         error:

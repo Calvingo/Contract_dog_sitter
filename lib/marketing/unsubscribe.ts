@@ -32,7 +32,13 @@ export async function unsubscribe(token: string) {
   if (!customer) return false;
   await prisma.$transaction(async (tx) => {
     const changed = await tx.customer.updateMany({
-      where: { id: customer.id, emailMarketingOptIn: true },
+      where: {
+        id: customer.id,
+        OR: [
+          { emailMarketingOptIn: true },
+          { marketingConsentUpdatedAt: null },
+        ],
+      },
       data: {
         emailMarketingOptIn: false,
         marketingConsentUpdatedAt: new Date(),

@@ -11,8 +11,9 @@ import {
   sendTestEmail,
 } from "../../actions";
 import { CampaignFields } from "../../fields";
-import { emailContent } from "@/lib/marketing/templates";
+import { BOOKING_WEBSITE, emailContent } from "@/lib/marketing/templates";
 import { getMarketingConfig } from "@/lib/marketing/config";
+export const maxDuration = 60;
 export default async function CampaignPage({
   params,
 }: {
@@ -25,9 +26,10 @@ export default async function CampaignPage({
   if (!campaign) notFound();
   const [audience, counts, deliveries, lastTest] = await Promise.all([
     customerAudience({
-      channel: "email",
-      start: campaign.excludeStart,
-      end: campaign.excludeEnd,
+      channel: campaign.allCustomers ? "saved" : "email",
+      ...(campaign.allCustomers
+        ? {}
+        : { start: campaign.excludeStart, end: campaign.excludeEnd }),
     }),
     prisma.marketingDelivery.groupBy({
       by: ["status"],
@@ -47,43 +49,56 @@ export default async function CampaignPage({
   const config = await getMarketingConfig();
   const preview = emailContent(
     campaign.body,
-    `${config.baseUrl || ""}/book`,
+    BOOKING_WEBSITE,
     "#unsubscribe-preview",
     config.address || "Your business mailing address",
+    { firstName: "Chieh", petName: "pocky", imageUrl: campaign.imagePath },
   );
   return (
     <AdminShell
       email={admin.email}
       title={campaign.name}
-      subtitle={`${campaign.status} · Send on ${campaign.scheduledAt.toISOString().slice(0, 10)} · Exclude stays ${campaign.excludeStart} – ${campaign.excludeEnd}`}
+      subtitle={`${campaign.status} · Send on ${campaign.scheduledAt.toISOString().slice(0, 10)} · ${campaign.allCustomers ? "All customers" : `Legacy audience · Exclude stays ${campaign.excludeStart} – ${campaign.excludeEnd}`}`}
     >
       <a href="/admin/marketing">← All campaigns</a>
-      <section className="grid gap-4 md:grid-cols-3">
+      <section
+        className={`grid gap-4 ${campaign.allCustomers ? "md:grid-cols-2" : "md:grid-cols-3"}`}
+      >
         <Stat label="Eligible now" value={String(audience.customers.length)} />
-        <Stat
-          label="Already booked — excluded"
-          value={String(audience.excludedCount)}
-        />
+        {!campaign.allCustomers && (
+          <Stat
+            label="Excluded by stay dates"
+            value={String(audience.excludedCount)}
+          />
+        )}
         <Stat label="Current status" value={campaign.status} />
       </section>
       <div className="notice">
-        Only subscribed customers are included. Reservations, opt-outs and
-        suppressed addresses are checked again before each email. The daily
-        queue runs around 9–10 AM Pacific; larger audiences can continue on
-        following days. Exclusions currently use website bookings; Notion is not
-        connected.
+        {campaign.allCustomers
+          ? "This email goes to all saved customer emails, excluding unsubscribed and blocked addresses."
+          : "This older campaign uses its original subscriber and stay-date filters. Saving a draft switches it to all customers."}{" "}
+        Each run processes up to 40 recipients. Remaining emails continue
+        through the daily queue.
       </div>
       {campaign.status === "DRAFT" && (
         <section className="panel">
-          <h2>Edit draft</h2>
-          <ActionForm action={saveCampaign} label="Save draft">
-            <input type="hidden" name="id" value={campaign.id} />
-            <CampaignFields campaign={campaign} />
-          </ActionForm>
+          <details>
+            <summary className="cursor-pointer font-semibold">
+              Edit email and image
+            </summary>
+            <ActionForm action={saveCampaign} label="Save draft">
+              <input type="hidden" name="id" value={campaign.id} />
+              <CampaignFields campaign={campaign} />
+            </ActionForm>
+          </details>
         </section>
       )}
       <section className="panel">
         <h2>Saved email preview</h2>
+        <p className="small">
+          Example: Chieh and pocky. Each email uses that customer’s name and dog
+          names.
+        </p>
         <p>
           <strong>From:</strong> {config.from || "Not configured"}
         </p>
@@ -125,7 +140,11 @@ export default async function CampaignPage({
         <h2>Audience preview</h2>
         <a
           className="button secondary"
-          href={`/api/admin/customers/export?channel=email&start=${campaign.excludeStart}&end=${campaign.excludeEnd}`}
+          href={
+            campaign.allCustomers
+              ? "/api/admin/customers/export?channel=saved"
+              : `/api/admin/customers/export?channel=email&start=${campaign.excludeStart}&end=${campaign.excludeEnd}`
+          }
         >
           Export eligible audience ↓
         </a>
@@ -157,20 +176,21 @@ export default async function CampaignPage({
         </div>
         {!audience.customers.length && (
           <p className="notice">
-            No eligible subscribers for this campaign yet. Manage subscriber
-            preferences before scheduling.
+            No eligible customer emails for this campaign yet.
           </p>
         )}
-        <details className="mt-4">
-          <summary className="cursor-pointer">
-            Already booked — excluded ({audience.excludedCount})
-          </summary>
-          {audience.excludedCustomers.slice(0, 50).map((c) => (
-            <p key={c.id}>
-              {c.firstName} {c.lastName} · {c.email}
-            </p>
-          ))}
-        </details>
+        {!campaign.allCustomers && (
+          <details className="mt-4">
+            <summary className="cursor-pointer">
+              Already booked — excluded ({audience.excludedCount})
+            </summary>
+            {audience.excludedCustomers.slice(0, 50).map((c) => (
+              <p key={c.id}>
+                {c.firstName} {c.lastName} · {c.email}
+              </p>
+            ))}
+          </details>
+        )}
       </section>
       {!["COMPLETED", "CANCELLED"].includes(campaign.status) && (
         <section className="panel">
@@ -190,7 +210,15 @@ export default async function CampaignPage({
               Action
               <select name="action">
                 {campaign.status === "DRAFT" && (
-                  <option value="schedule">Schedule email campaign</option>
+                  <>
+                    <option value="send">
+                      Send now to{" "}
+                      {campaign.allCustomers
+                        ? "all eligible customers"
+                        : "this audience"}
+                    </option>
+                    <option value="schedule">Schedule email campaign</option>
+                  </>
                 )}
                 {campaign.status === "PAUSED" && (
                   <option value="resume">Resume campaign</option>
@@ -203,8 +231,8 @@ export default async function CampaignPage({
             </label>
             <label className="checkbox-label">
               <input type="checkbox" name="confirmed" />I reviewed the email,
-              audience and sending date. Scheduling or resuming authorizes real
-              promotional emails.
+              audience and sending date. Sending, scheduling or resuming
+              authorizes real promotional emails.
             </label>
           </ActionForm>
         </section>

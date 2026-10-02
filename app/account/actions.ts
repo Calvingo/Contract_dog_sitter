@@ -77,7 +77,7 @@ export async function saveProfile(
           ),
           emailMarketingOptIn: emailOptIn,
           smsMarketingOptIn: smsOptIn,
-          ...(changed ? { marketingConsentUpdatedAt: new Date() } : {}),
+          marketingConsentUpdatedAt: new Date(),
         },
       });
       if (changed)

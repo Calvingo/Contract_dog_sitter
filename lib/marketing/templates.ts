@@ -47,8 +47,9 @@ export function validateCampaign(input: {
   excludeStart: string;
   excludeEnd: string;
   scheduledAt: Date;
+  allCustomers?: boolean;
 }) {
-  dateRange(input.excludeStart, input.excludeEnd);
+  if (!input.allCustomers) dateRange(input.excludeStart, input.excludeEnd);
   if (
     !input.name ||
     input.name.length > 120 ||
@@ -63,7 +64,10 @@ export function validateCampaign(input: {
     );
   if (!Number.isFinite(input.scheduledAt.getTime()))
     throw new Error("Choose a valid sending date.");
-  if (input.scheduledAt >= new Date(`${input.excludeStart}T00:00:00Z`))
+  if (
+    !input.allCustomers &&
+    input.scheduledAt >= new Date(`${input.excludeStart}T00:00:00Z`)
+  )
     throw new Error("Send the promotion before the stay period starts.");
 }
 export function escapeHtml(value: string) {
@@ -74,13 +78,90 @@ export function escapeHtml(value: string) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
 }
+export const DEFAULT_MARKETING_IMAGE = "/images/silicon-paws-marketing.png";
+export const BOOKING_WEBSITE = "https://contract-dog-sitter.vercel.app/";
+export const returningGuestTemplate = {
+  name: "November–January returning guests",
+  subject: "November–January Boarding: Priority Booking for Returning Guests",
+  body: `Hi {{firstName}},
+
+Thank you for trusting us to care for {{petName}} at Silicon Paws Retreat! We’d love to welcome {{petName}} back this holiday season.
+
+Our November and December spots are filling up quickly, with just **one spot left for Christmas**. We’re also accepting **January reservations**. If you’re planning a trip between November and January, we’d love to give our returning guests priority.
+
+{{bookingLink}}
+
+For future boarding questions, please reach me at christine.qi.zhang@gmail.com. You’re also welcome to contact me on WeChat or by phone anytime.
+
+We look forward to seeing you and {{petName}} again!
+
+Warmly,
+Qi (Christine) Zhang
+
+{{image}}
+
+Email: christine.qi.zhang@gmail.com
+WeChat: **LYSX6989**
+Phone: **669-269-4827**`,
+};
+export type EmailPersonalization = {
+  firstName?: string;
+  petName?: string;
+  imageUrl?: string | null;
+};
+export function personalizeText(
+  value: string,
+  recipient: EmailPersonalization = {},
+) {
+  return value.replace(/\{\{(firstName|petName)\}\}/g, (_, key) =>
+    key === "firstName"
+      ? recipient.firstName?.trim() || "there"
+      : recipient.petName?.trim() || "your dog",
+  );
+}
 export function emailContent(
   body: string,
   bookingUrl: string,
   unsubscribeUrl: string,
   address: string,
+  recipient: EmailPersonalization = {},
 ) {
-  const text = `${body}\n\nView availability and book: ${bookingUrl}\n\nSilicon Paws Retreat\n${address}\nYou subscribed to boarding promotions. Unsubscribe: ${unsubscribeUrl}`;
-  const html = `<div style="font-family:Arial,sans-serif;line-height:1.7;max-width:600px;margin:auto;color:#263d31"><h2>Silicon Paws Retreat</h2><p>${escapeHtml(body).replaceAll("\n", "<br>")}</p><p><a href="${escapeHtml(bookingUrl)}" style="display:inline-block;padding:12px 20px;background:#345b46;color:white;border-radius:8px">View availability &amp; book</a></p><hr><p style="font-size:12px">Silicon Paws Retreat<br>${escapeHtml(address)}<br>You subscribed to boarding promotions. <a href="${escapeHtml(unsubscribeUrl)}">Unsubscribe</a></p></div>`;
+  const reserveLabel = `Reserve ${recipient.petName?.trim() ? `${recipient.petName.trim()}’s` : "your dog’s"} next stay here`;
+  const bookingLink = `<a href="${escapeHtml(bookingUrl)}" style="color:#286347;font-weight:700;text-decoration:underline">${escapeHtml(reserveLabel)}</a>`;
+  const safeImage =
+    recipient.imageUrl &&
+    /^(https:\/\/|\/(?:images|api\/marketing\/images)\/)/.test(
+      recipient.imageUrl,
+    )
+      ? recipient.imageUrl
+      : null;
+  const image = safeImage
+    ? `<img src="${escapeHtml(safeImage)}" alt="Silicon Paws Retreat — a home away from home" width="640" style="display:block;width:100%;max-width:640px;height:auto;border:0;" />`
+    : "";
+  // Escape both the template and customer values before adding our limited formatting.
+  const formatted = escapeHtml(body)
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replaceAll(
+      "christine.qi.zhang@gmail.com",
+      '<a href="mailto:christine.qi.zhang@gmail.com">christine.qi.zhang@gmail.com</a>',
+    )
+    .replace(/\{\{(firstName|petName|bookingLink|image)\}\}/g, (_, key) => {
+      if (key === "bookingLink") return bookingLink;
+      if (key === "image") return image;
+      return escapeHtml(personalizeText(`{{${key}}}`, recipient));
+    });
+  const content = formatted
+    .split(/\n\s*\n/)
+    .map(
+      (paragraph) =>
+        `<p style="margin:0 0 24px">${paragraph.replaceAll("\n", "<br>")}</p>`,
+    )
+    .join("");
+  const textBody = personalizeText(body, recipient)
+    .replaceAll("{{bookingLink}}", `${reserveLabel}: ${bookingUrl}`)
+    .replaceAll("{{image}}", safeImage ? `Photo: ${safeImage}` : "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1");
+  const text = `${textBody}${body.includes("{{bookingLink}}") ? "" : `\n\n${reserveLabel}: ${bookingUrl}`}\n\nSilicon Paws Retreat\n${address}\nUnsubscribe: ${unsubscribeUrl}`;
+  const html = `<div style="font-family:Arial,sans-serif;font-size:18px;line-height:1.7;max-width:640px;margin:auto;color:#293d34">${content}${body.includes("{{bookingLink}}") ? "" : `<p>${bookingLink}</p>`}${body.includes("{{image}}") ? "" : image}<hr><p style="font-size:12px">Silicon Paws Retreat<br>${escapeHtml(address)}<br><a href="${escapeHtml(unsubscribeUrl)}">Unsubscribe</a></p></div>`;
   return { text, html };
 }

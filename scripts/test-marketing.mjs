@@ -29,6 +29,8 @@ const {
   holidaySchedule,
   emailContent,
   validateCampaign,
+  returningGuestTemplate,
+  BOOKING_WEBSITE,
 } = require("../lib/marketing/templates.ts");
 assert.equal(
   holidaySchedule("thanksgiving", 2026).scheduledAt.toISOString(),
@@ -64,6 +66,26 @@ assert.throws(() =>
     scheduledAt: new Date("2027-08-01"),
   }),
 );
+const personalized = emailContent(returningGuestTemplate.body, BOOKING_WEBSITE, "https://example.test/unsubscribe", "Test address", {
+  firstName: "Alice <script>", petName: "Milo & Luna", imageUrl: "https://example.test/image.png",
+});
+assert.ok(personalized.html.includes("Hi Alice &lt;script&gt;"));
+assert.ok(personalized.html.includes("Reserve Milo &amp; Luna’s next stay here"));
+assert.ok(personalized.html.includes(`href="${BOOKING_WEBSITE}"`));
+assert.ok(personalized.html.includes('<img src="https://example.test/image.png"'));
+assert.ok(!personalized.html.includes("{{"));
+assert.ok(!personalized.html.includes("<script>"));
+assert.ok(personalized.text.includes("Reserve Milo & Luna’s next stay here"));
+assert.ok(!emailContent("custom message", BOOKING_WEBSITE, "#", "", { imageUrl: 'javascript:alert(1)' }).html.includes("<img"));
+validateCampaign({ name: "All", subject: "Hello", body: "Hello everyone", allCustomers: true, excludeStart: "", excludeEnd: "", scheduledAt: new Date() });
+const { canReceiveMarketing } = require("../lib/marketing/audience.ts");
+assert.equal(canReceiveMarketing({ emailMarketingOptIn: false, marketingConsentUpdatedAt: null }, true), true);
+assert.equal(canReceiveMarketing({ emailMarketingOptIn: false, marketingConsentUpdatedAt: new Date() }, true), false);
+assert.equal(canReceiveMarketing({ emailMarketingOptIn: false, marketingConsentUpdatedAt: null }, false), false);
+const { validateMarketingImage } = require("../lib/marketing/images.ts");
+validateMarketingImage(Buffer.from([137,80,78,71,13,10,26,10]), "image/png");
+assert.throws(() => validateMarketingImage(Buffer.from("<svg onload='alert(1)'/>"), "image/png"));
+assert.throws(() => validateMarketingImage(Buffer.alloc(2 * 1024 * 1024 + 1), "image/png"));
 console.log("PASS holiday dates, email escaping and validation");
 if (!process.env.TEST_DATABASE_URL) {
   console.log("SKIP local database checks (set TEST_DATABASE_URL)");
@@ -77,6 +99,7 @@ assert.ok(
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
 process.env.DIRECT_URL = process.env.TEST_DATABASE_URL;
 Object.assign(process.env, {
+  APP_SECRET: "marketing-local-test-session-secret",
   MARKETING_ENABLED: "true",
   MARKETING_FROM: "Local Test <sender@example.test>",
   GMAIL_USER: "sender@example.test",
@@ -328,7 +351,7 @@ try {
   assert.deepEqual(testCalls[0].payload.to, [testAdmin]);
   assert.equal(testCalls[0].payload.subject, "[TEST] Test promotion");
   assert.ok(testCalls[0].payload.text.includes("Local test mailing address"));
-  assert.ok(testCalls[0].payload.text.includes("https://example.test/book"));
+  assert.ok(testCalls[0].payload.text.includes(BOOKING_WEBSITE));
   assert.equal(
     (
       await prisma.marketingTest.findFirst({
@@ -362,6 +385,47 @@ try {
     "Deployment pause overrides admin setting",
   );
   process.env.MARKETING_ENABLED = "true";
+  // The simplified audience includes historical customers and existing reservations.
+  await prisma.marketingCampaign.updateMany({ where: { id: { in: campaigns.map((c) => c.id) }, status: { in: ["RUNNING", "SCHEDULED"] } }, data: { status: "CANCELLED" } });
+  const historical = await customer("historical");
+  await prisma.customer.update({ where: { id: historical.id }, data: { emailMarketingOptIn: false, marketingConsentUpdatedAt: null } });
+  const optedOut = await customer("opted-out");
+  await prisma.customer.update({ where: { id: optedOut.id }, data: { emailMarketingOptIn: false, marketingConsentUpdatedAt: new Date() } });
+  const { customerAudience } = require("../lib/platform/customers.ts");
+  const savedAudience = await customerAudience({ channel: "saved" });
+  assert.ok(savedAudience.customers.some((c) => c.id === historical.id));
+  assert.ok(savedAudience.customers.some((c) => c.id === d.id), "Already booked customer is still included");
+  for (const excluded of [a, c, optedOut]) assert.ok(!savedAudience.customers.some((u) => u.id === excluded.id));
+  const broadcast = await campaign("SCHEDULED");
+  await prisma.marketingCampaign.update({ where: { id: broadcast.id }, data: {
+    allCustomers: true, excludeStart: "", excludeEnd: "", body: returningGuestTemplate.body, imagePath: "/images/silicon-paws-marketing.png",
+  } });
+  await runMarketing({ send, limit: 0 });
+  const queued = await prisma.marketingDelivery.findMany({ where: { campaignId: broadcast.id } });
+  assert.ok(queued.some((item) => item.customerId === historical.id));
+  // Unsubscribing also works for customers whose opt-in was never true.
+  assert.equal(await unsubscribe(unsubscribeToken(historical.id, historical.email)), true);
+  assert.equal(await unsubscribe(unsubscribeToken(historical.id, historical.email)), true);
+  assert.equal(await prisma.marketingConsentEvent.count({ where: { customerId: historical.id } }), 1);
+  const broadcastCalls = [];
+  await runMarketing({ send: async (payload, key) => { broadcastCalls.push(payload); return key; } });
+  assert.deepEqual(broadcastCalls.map((p) => p.to[0]).sort(), [b.email, d.email].sort());
+  const dogEmail = broadcastCalls.find((p) => p.to[0] === d.email);
+  assert.ok(dogEmail.html.includes("Reserve Test dog’s next stay here"));
+  assert.ok(dogEmail.html.includes(`href="${BOOKING_WEBSITE}"`));
+  assert.ok(dogEmail.html.includes('src="https://example.test/images/silicon-paws-marketing.png"'));
+  const { saveMarketingImage } = require("../lib/marketing/images.ts");
+  const uploadForm = new FormData();
+  uploadForm.set("image", new File([readFileSync(resolve(root, "public/images/silicon-paws-marketing.png"))], "photo.png", { type: "image/png" }));
+  const imagePath = await saveMarketingImage(uploadForm);
+  const imageId = imagePath.split("/").at(-1);
+  const { GET: getImage } = require("../app/api/marketing/images/[id]/route.ts");
+  const imageResponse = await getImage(new Request(`https://example.test${imagePath}`), { params: Promise.resolve({ id: imageId }) });
+  assert.equal(imageResponse.status, 200);
+  assert.equal(imageResponse.headers.get("content-type"), "image/png");
+  assert.ok((await imageResponse.arrayBuffer()).byteLength > 1000);
+  await prisma.marketingImage.delete({ where: { id: imageId } });
+  console.log("PASS all-customer audience, existing reservations, explicit opt-outs, queued unsubscribe, personalized links and persistent image uploads");
   console.log(
     "PASS authenticated cron, consent, suppression, booking exclusion, concurrency, deduplication, SMTP failure handling, pause, recipient snapshot, global settings, admin-only test emails and rate limits (zero actual emails)",
   );

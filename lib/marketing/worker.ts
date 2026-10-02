@@ -2,11 +2,14 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { createCustomerEmailUrl } from "@/lib/auth/customer-email-link";
 import { reservesCapacity } from "@/lib/platform/rules";
+import { marketingAudienceWhere, canReceiveMarketing } from "./audience";
 import { getMarketingConfig } from "./config";
 import {
   holidays,
   holidaySchedule,
   emailContent,
+  BOOKING_WEBSITE,
+  personalizeText,
   type Holiday,
 } from "./templates";
 import { unsubscribeToken } from "./unsubscribe";
@@ -101,7 +104,10 @@ export async function runMarketing(
           data: { status: "RUNNING", startedAt: now },
         });
         if (!claimed.count) return;
-        if (campaign.excludeStart <= now.toISOString().slice(0, 10)) {
+        if (
+          !campaign.allCustomers &&
+          campaign.excludeStart <= now.toISOString().slice(0, 10)
+        ) {
           await tx.marketingCampaign.update({
             where: { id: campaign.id },
             data: { status: "CANCELLED", completedAt: now },
@@ -109,7 +115,7 @@ export async function runMarketing(
           return;
         }
         const customers = await tx.customer.findMany({
-          where: { emailMarketingOptIn: true },
+          where: marketingAudienceWhere(campaign.allCustomers),
           select: { id: true, email: true },
         });
         await tx.marketingDelivery.createMany({
@@ -153,15 +159,18 @@ export async function runMarketing(
       const customer = await prisma.customer.findUnique({
         where: { id: item.customerId },
         include: {
+          pets: { orderBy: { name: "asc" } },
           submissions: {
-            where: {
-              dropoffAt: {
-                lte: new Date(`${item.campaign.excludeEnd}T23:59:59.999Z`),
-              },
-              pickupAt: {
-                gte: new Date(`${item.campaign.excludeStart}T00:00:00Z`),
-              },
-            },
+            where: item.campaign.allCustomers
+              ? { id: "" }
+              : {
+                  dropoffAt: {
+                    lte: new Date(`${item.campaign.excludeEnd}T23:59:59.999Z`),
+                  },
+                  pickupAt: {
+                    gte: new Date(`${item.campaign.excludeStart}T00:00:00Z`),
+                  },
+                },
             include: { submissionPets: true, payments: true },
           },
         },
@@ -182,18 +191,21 @@ export async function runMarketing(
         });
         continue;
       }
-      const reason = !customer?.emailMarketingOptIn
-        ? "No longer subscribed."
-        : customer.email !== item.email
-          ? "Customer email changed."
-          : suppression
-            ? `Suppressed: ${suppression.reason}`
-            : item.campaign.excludeStart <=
-                new Date().toISOString().slice(0, 10)
-              ? "Stay period has already started."
-              : customer.submissions.some((s) => reservesCapacity(s))
-                ? "Already has an active booking in this stay period."
-                : null;
+      const reason =
+        !customer || !canReceiveMarketing(customer, item.campaign.allCustomers)
+          ? "No longer subscribed."
+          : customer.email !== item.email
+            ? "Customer email changed."
+            : suppression
+              ? `Suppressed: ${suppression.reason}`
+              : !item.campaign.allCustomers &&
+                  item.campaign.excludeStart <=
+                    new Date().toISOString().slice(0, 10)
+                ? "Stay period has already started."
+                : !item.campaign.allCustomers &&
+                    customer.submissions.some((s) => reservesCapacity(s))
+                  ? "Already has an active booking in this stay period."
+                  : null;
       if (reason) {
         await prisma.marketingDelivery.update({
           where: { id: item.id },
@@ -203,17 +215,27 @@ export async function runMarketing(
       }
       const unsubscribeUrl = `${config.baseUrl}/unsubscribe?token=${encodeURIComponent(unsubscribeToken(customer!.id, item.email))}`;
       const oneClickUrl = `${config.baseUrl}/api/marketing/unsubscribe?token=${encodeURIComponent(unsubscribeToken(customer!.id, item.email))}`;
+      const recipient = {
+        firstName: customer!.firstName,
+        petName: customer!.pets.map((pet) => pet.name).join(" & "),
+        imageUrl: item.campaign.imagePath
+          ? `${config.baseUrl}${item.campaign.imagePath}`
+          : null,
+      };
       const payload: EmailPayload = item.payload
         ? (item.payload as unknown as EmailPayload)
         : {
             from: config.from,
             to: [item.email],
-            subject: item.campaign.subject,
+            subject: personalizeText(item.campaign.subject, recipient),
             ...emailContent(
               item.campaign.body,
-              await createCustomerEmailUrl(item.email, "/book"),
+              item.campaign.allCustomers
+                ? BOOKING_WEBSITE
+                : await createCustomerEmailUrl(item.email, "/book"),
               unsubscribeUrl,
               config.address,
+              recipient,
             ),
             headers: {
               "List-Unsubscribe": `<${oneClickUrl}>`,

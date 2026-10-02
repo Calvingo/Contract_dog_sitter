@@ -28,6 +28,7 @@ const customers = new Map([
   ["bob@example.test", { id: "bob", email: "bob@example.test" }],
 ]);
 const db = {
+  platformSettings: { findUnique: async () => ({ zelleName: "Qi Zhang", zelleRecipient: "zelle@example.test" }) },
   submissionEditToken: {
     create: async ({ data }) => {
       editTokens.set(data.tokenHash, data);
@@ -136,12 +137,29 @@ await sendPaymentConfirmation("booking-alice");
 const expectedDestinations = [[destination, "/book?editToken=valid-edit-token"], ["/book?editToken=valid-edit-token"], [destination]];
 for (const [index, message] of messages.entries()) {
   assert.equal(message.to, "alice@example.test");
-  const links = [...message.html.matchAll(/href="([^"]+)"/g)].map((match) => match[1].replaceAll("&amp;", "&"));
+  const links = [...message.html.matchAll(/href="([^"]+)"/g)].map((match) => match[1].replaceAll("&amp;", "&")).filter((link) => link.startsWith("https://boarding.example.test/"));
   assert.equal(links.length, expectedDestinations[index].length);
   for (const [i, link] of links.entries()) {
     cookies.clear();
     assert.equal((await open(link)).headers.get("location"), expectedDestinations[index][i]);
     assert.equal((await getCustomerSession()).customerId, "alice");
+  }
+}
+assert.match(messages.find((m) => m.subject.includes("Payments Requirements")).html, /zelle@example.test/);
+const { buildDecisionEmail } = require("../lib/decision-emails.ts");
+const decisionPayload = { email: "alice@example.test", firstName: "Alice", lastName: "Test", petName: "<Dog>", exp: 123 };
+for (const action of ["accept", "meet_greet"]) {
+  const content = buildDecisionEmail(decisionPayload, action, { accountUrl: "https://example.test/account", zelleName: "Qi <Zhang>", zelleRecipient: "pay@example.test" });
+  assert.match(content.html, /front yard/);
+  assert.match(content.html, /don’t offer tours of the indoor or backyard/);
+  assert.match(content.html, /LYSX6989/);
+  assert.ok(!content.html.includes("<Dog>"));
+  if (action === "accept") {
+    assert.match(content.subject, /Payments Requirements$/);
+    assert.match(content.html, /font-size:26px[^;]*;.*color:#b91c1c/);
+    assert.match(content.html, /pay your 20% deposit/);
+    assert.match(content.html, /not yet confirmed/);
+    assert.match(content.html, /Qi &lt;Zhang&gt;/);
   }
 }
 const { sendSubmissionEmails } = require("../lib/email.ts");

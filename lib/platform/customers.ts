@@ -1,3 +1,4 @@
+import { marketingAudienceWhere } from "@/lib/marketing/audience";
 import { prisma } from "@/lib/db";
 import { dateRange, reservesCapacity } from "./rules";
 export type CustomerFilters = {
@@ -11,11 +12,11 @@ export async function customerAudience(filters: CustomerFilters) {
   if (filters.start || filters.end)
     dateRange(filters.start || "", filters.end || "");
   const channel = filters.channel || "all";
-  if (!["all", "email"].includes(channel)) {
+  if (!["all", "email", "saved"].includes(channel)) {
     throw new Error("Only email promotion audiences are supported.");
   }
   const suppressions =
-    channel === "email"
+    channel !== "all"
       ? await prisma.marketingSuppression.findMany({ select: { email: true } })
       : [];
   const customers = await prisma.customer.findMany({
@@ -35,9 +36,9 @@ export async function customerAudience(filters: CustomerFilters) {
             ],
           }
         : {}),
-      ...(channel === "email"
+      ...(channel !== "all"
         ? {
-            emailMarketingOptIn: true,
+            AND: [marketingAudienceWhere(channel === "saved")],
             email: { notIn: suppressions.map((s) => s.email) },
           }
         : {}),

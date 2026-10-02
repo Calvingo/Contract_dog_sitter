@@ -5,7 +5,7 @@ export function PublicNav() {
   return (
     <header className="public-nav">
       <Link href="/" className="brand">
-        Silicon Paws <span>Retreat</span>
+        Silicon Paws Retreat
       </Link>
       <nav>
         <Link href="/book">Book a stay</Link>

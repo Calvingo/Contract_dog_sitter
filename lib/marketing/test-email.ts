@@ -3,7 +3,7 @@ import { isAdminEmail } from "@/lib/auth/admin-session";
 import { allowRequest } from "@/lib/platform/rate-limit";
 import { getMarketingConfig } from "./config";
 import { deliverEmail, ProviderError } from "./provider";
-import { emailContent } from "./templates";
+import { BOOKING_WEBSITE, emailContent } from "./templates";
 
 export async function sendCampaignTest(
   campaignId: string,
@@ -27,9 +27,16 @@ export async function sendCampaignTest(
   });
   const preview = emailContent(
     campaign.body,
-    `${config.baseUrl}/book`,
+    BOOKING_WEBSITE,
     `${config.baseUrl}/account/profile`,
     config.address,
+    {
+      firstName: "Chieh",
+      petName: "pocky",
+      imageUrl: campaign.imagePath
+        ? `${config.baseUrl}${campaign.imagePath}`
+        : null,
+    },
   );
   const notice =
     "TEST PREVIEW — sent only to your admin mailbox. No customer was contacted. The footer link opens email preferences; it does not unsubscribe a customer.";

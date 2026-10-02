@@ -1,4 +1,6 @@
 import { createCustomerEmailUrl } from "./auth/customer-email-link";
+import { getSettings } from "./platform/capacity";
+import { DEPOSIT_PERCENT } from "./pricing";
 import { teamContacts } from "./contacts";
 import { BRAND_NAME, getEnv, sendMail } from "./mailer";
 import type { DecisionTokenPayload } from "./token";
@@ -9,6 +11,8 @@ export type DecisionEmailOptions = {
   meetGreetAt?: string;
   editUrl?: string;
   accountUrl?: string;
+  zelleName?: string;
+  zelleRecipient?: string;
 };
 
 function escapeHtml(value: string): string {
@@ -27,12 +31,20 @@ function contactsHtml(): string {
   return teamContacts
     .map(
       (c) =>
-        `<p><strong>${c.name}</strong><br/>Email: ${c.email}<br/>Phone: ${c.phone}</p>`,
+        `<p><strong>${c.name}</strong><br/>Email: ${c.email}<br/>Phone: <a href="tel:${c.phone}">${c.phone}</a>${c.wechat ? `<br/>WeChat: ${c.wechat}` : ""}</p>`,
     )
     .join("");
 }
 
-function buildDecisionEmail(
+function meetGreetInfoHtml(): string {
+  return `<h3>Meet &amp; greet at our home</h3>
+    <p>We’d be happy to do a meet &amp; greet at our home. For meet &amp; greets, we meet in our front yard.</p>
+    <p>The main purpose is for us to meet you and your dog, see how your dog responds to new people and a new environment, and introduce your dog to our dogs to make sure everyone is comfortable with each other. Since the front yard is also a new environment for your dog, it gives us a good opportunity to observe their initial behavior and interactions.</p>
+    <p>For privacy, safety, and to avoid disturbing the dogs currently staying with us, we don’t offer tours of the indoor or backyard boarding areas during meet &amp; greets. We’re happy to share photos and videos of the boarding environment so you can see where the dogs spend their time.</p>
+    <p>If that works for you, we’d be happy to set up a time!</p>`;
+}
+
+export function buildDecisionEmail(
   payload: DecisionTokenPayload,
   action: DecisionAction,
   options: DecisionEmailOptions = {},
@@ -48,14 +60,24 @@ function buildDecisionEmail(
           <a href="${escapeHtml(options.editUrl)}" style="color:#ea580c;">Edit your submission</a></p>`
       : "";
     return {
-      subject: `[${BRAND_NAME}] Your booking request has been accepted — ${petSubject}`,
+      subject: `[${BRAND_NAME}] Your booking request has been accepted — ${petSubject} — Payments Requirements`,
       html: `
         <div style="font-family:Arial,sans-serif;line-height:1.6;color:#333;">
-          <h2>Booking Accepted</h2>
+          <h2>Booking Accepted — Payments Requirements</h2>
           <p>Dear ${name},</p>
           <p>Great news! Your boarding request for <strong>${pet}</strong> has been <strong>accepted</strong> by ${BRAND_NAME}.</p>
+          <div style="border:2px solid #b91c1c;background:#fff1f2;padding:20px;margin:24px 0;">
+            <p style="font-size:26px;font-weight:800;color:#b91c1c;margin:0 0 12px;">Payment required — please pay your ${DEPOSIT_PERCENT}% deposit</p>
+            <p style="font-size:18px;color:#b91c1c;font-weight:700;">Your booking is not yet confirmed. It is confirmed only after we verify the required deposit.</p>
+            ${
+              options.zelleName && options.zelleRecipient
+                ? `<p><strong>Pay with Zelle</strong><br/>Recipient name: ${escapeHtml(options.zelleName)}<br/>Email / phone: <strong>${escapeHtml(options.zelleRecipient)}</strong></p><p>Please include only your dog’s name in the transfer note: <strong>${pet}</strong>.</p>`
+                : `<p>Please contact Qi (Christine) Zhang using the details below for Zelle payment information.</p>`
+            }
+          </div>
           <p><a href="${escapeHtml(options.accountUrl!)}">View your booking and payment instructions</a> to see your hold deadline. Your booking is confirmed once the required deposit is verified. If you have already paid, check your payment status in your account.</p>
           ${editBlock}
+          ${meetGreetInfoHtml()}
           ${contactsHtml()}
           <p>Thank you,<br/>${BRAND_NAME}</p>
         </div>
@@ -95,6 +117,7 @@ function buildDecisionEmail(
         <h2>Meet &amp; Greet</h2>
         <p>Dear ${name},</p>
         <p>Thank you for submitting your request for <strong>${pet}</strong>. We would like to schedule a <strong>meet &amp; greet</strong> before confirming your booking.</p>
+        ${meetGreetInfoHtml()}
         ${scheduleLine}
         ${editBlock}
         <p>Please contact us if this time does not work for you:</p>
@@ -111,14 +134,20 @@ export async function sendDecisionEmail(
   options: DecisionEmailOptions = {},
 ) {
   const fromUser = getEnv("GMAIL_USER");
+  const settings = action === "accept" ? await getSettings() : null;
   const links = {
     ...options,
-    accountUrl: action === "accept"
-      ? await createCustomerEmailUrl(
-          payload.email,
-          payload.submissionId ? `/account/bookings/${payload.submissionId}` : "/account",
-        )
-      : undefined,
+    zelleName: settings?.zelleName,
+    zelleRecipient: settings?.zelleRecipient,
+    accountUrl:
+      action === "accept"
+        ? await createCustomerEmailUrl(
+            payload.email,
+            payload.submissionId
+              ? `/account/bookings/${payload.submissionId}`
+              : "/account",
+          )
+        : undefined,
     editUrl: options.editUrl
       ? await createCustomerEmailUrl(payload.email, options.editUrl)
       : undefined,
