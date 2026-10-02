@@ -10,7 +10,9 @@ export default function SuccessContent() {
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-3xl text-green-700">
             ✓
           </div>
-          <h1 className="text-2xl font-bold text-stone-900">{ui.successTitle}</h1>
+          <h1 className="text-2xl font-bold text-stone-900">
+            {ui.successTitle}
+          </h1>
           <p className="mt-3 text-stone-600">{ui.successBody}</p>
         </div>
 
@@ -18,10 +20,10 @@ export default function SuccessContent() {
 
         <div className="text-center">
           <Link
-            href="/"
+            href="/account"
             className="inline-flex rounded-xl bg-orange-600 px-5 py-3 text-sm font-semibold text-white hover:bg-orange-700"
           >
-            {ui.backHome}
+            View my bookings
           </Link>
         </div>
       </div>

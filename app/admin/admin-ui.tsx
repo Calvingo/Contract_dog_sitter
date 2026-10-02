@@ -13,6 +13,7 @@ export function money(value: { toNumber: () => number } | number): string {
 
 export function dateTime(value: Date): string {
   return value.toLocaleString("en-US", {
+    timeZone: "UTC",
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -24,6 +25,7 @@ export function dateTime(value: Date): string {
 export function dateOnly(value: Date): string {
   return value.toLocaleDateString("en-US", {
     weekday: "short",
+    timeZone: "UTC",
     month: "short",
     day: "numeric",
   });
@@ -51,7 +53,7 @@ export function StatusBadge({ status }: { status: SubmissionStatus }) {
   return (
     <span
       className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass(
-        status
+        status,
       )}`}
     >
       {status.replaceAll("_", " ")}
@@ -79,7 +81,10 @@ export function AdminShell({
               <Link href="/admin" className="text-orange-700">
                 Admin home
               </Link>
-              <Link href="/" className="text-stone-600 hover:text-orange-700">
+              <Link
+                href="/book"
+                className="text-stone-600 hover:text-orange-700"
+              >
                 Booking form
               </Link>
             </div>
@@ -94,6 +99,21 @@ export function AdminShell({
             </button>
           </form>
         </header>
+        <nav className="platform-tabs" aria-label="Admin navigation">
+          {[
+            ["/admin", "Overview"],
+            ["/admin/requests", "Bookings"],
+            ["/admin/calendar", "Calendar"],
+            ["/admin/customers", "Customers"],
+            ["/admin/payments", "Payments"],
+            ["/admin/marketing", "Marketing"],
+            ["/admin/settings", "Settings"],
+          ].map(([href, label]) => (
+            <Link key={href} href={href}>
+              {label}
+            </Link>
+          ))}
+        </nav>
         {children}
       </div>
     </main>
@@ -104,7 +124,9 @@ export function Stat(props: { label: string; value: string }) {
   return (
     <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-orange-100">
       <div className="text-sm font-medium text-stone-500">{props.label}</div>
-      <div className="mt-2 text-2xl font-bold text-stone-950">{props.value}</div>
+      <div className="mt-2 text-2xl font-bold text-stone-950">
+        {props.value}
+      </div>
     </div>
   );
 }
@@ -122,7 +144,9 @@ export function ModuleCard(props: {
     >
       <div className="text-sm font-semibold text-orange-700">{props.meta}</div>
       <h2 className="mt-3 text-xl font-bold text-stone-950">{props.title}</h2>
-      <p className="mt-2 text-sm leading-6 text-stone-600">{props.description}</p>
+      <p className="mt-2 text-sm leading-6 text-stone-600">
+        {props.description}
+      </p>
       <div className="mt-5 text-sm font-semibold text-stone-900">
         Open module
       </div>

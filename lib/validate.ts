@@ -1,3 +1,4 @@
+import { dateRange } from "./platform/rules";
 import { isPickupDropoffTimeAllowed } from "./booking-time";
 import type { FormValues } from "./form-config";
 import {
@@ -62,13 +63,23 @@ export function validateSubmission(data: FormValues): string | null {
     }
     const secondWeight = Number(data.secondPetWeightLb);
     const secondAge = Number(data.secondPetAgeYears);
-    if (!Number.isFinite(secondWeight) || secondWeight <= 0) return "Invalid second dog weight";
-    if (!Number.isFinite(secondAge) || secondAge < 0) return "Invalid second dog age";
-    if (data.petName.trim().toLowerCase() === data.secondPetName.trim().toLowerCase()) {
+    if (!Number.isFinite(secondWeight) || secondWeight <= 0)
+      return "Invalid second dog weight";
+    if (!Number.isFinite(secondAge) || secondAge < 0)
+      return "Invalid second dog age";
+    if (
+      data.petName.trim().toLowerCase() ===
+      data.secondPetName.trim().toLowerCase()
+    ) {
       return "The two dogs must have different names";
     }
   }
 
+  try {
+    dateRange(data.dropoffDate, data.pickupDate);
+  } catch {
+    return "Choose valid dates within one year.";
+  }
   const dropoff = parseDateTime(data.dropoffDate, data.dropoffTime);
   const pickup = parseDateTime(data.pickupDate, data.pickupTime);
   if (!dropoff || !pickup) {

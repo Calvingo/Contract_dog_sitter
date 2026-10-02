@@ -12,13 +12,19 @@ export default async function AdminPage() {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
+  const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
   const [submissions, customerCount] = await Promise.all([
     prisma.submission.findMany({
       where: {
         OR: [
           { createdAt: { gte: monthStart } },
           { pickupAt: { gte: now } },
-          { status: { in: [SubmissionStatus.PENDING, SubmissionStatus.NEEDS_REVIEW] } },
+          {
+            status: {
+              in: [SubmissionStatus.PENDING, SubmissionStatus.NEEDS_REVIEW],
+            },
+          },
         ],
       },
       include: { pet: true, submissionPets: true },
@@ -29,22 +35,28 @@ export default async function AdminPage() {
   const pending = submissions.filter(
     (submission) =>
       submission.status === SubmissionStatus.PENDING ||
-      submission.status === SubmissionStatus.NEEDS_REVIEW
+      submission.status === SubmissionStatus.NEEDS_REVIEW,
   );
-  const activeDogsToday = submissions.filter(
-    (submission) =>
-      submission.status === SubmissionStatus.ACCEPTED &&
-      submission.dropoffAt <= now &&
-      submission.pickupAt >= now
-  ).reduce((sum, submission) => sum + submissionDogCount(submission.submissionPets), 0);
+  const activeDogsToday = submissions
+    .filter(
+      (submission) =>
+        submission.status === SubmissionStatus.ACCEPTED &&
+        submission.dropoffAt <= now &&
+        submission.pickupAt >= now,
+    )
+    .reduce(
+      (sum, submission) => sum + submissionDogCount(submission.submissionPets),
+      0,
+    );
   const acceptedThisMonth = submissions.filter(
     (submission) =>
       submission.status === SubmissionStatus.ACCEPTED &&
-      submission.dropoffAt >= monthStart
+      submission.dropoffAt >= monthStart &&
+      submission.dropoffAt < nextMonthStart,
   );
   const acceptedRevenue = acceptedThisMonth.reduce(
     (sum, submission) => sum + submission.quotedTotal.toNumber(),
-    0
+    0,
   );
 
   return (
@@ -56,8 +68,11 @@ export default async function AdminPage() {
       <section className="grid gap-3 md:grid-cols-4">
         <Stat label="Pending requests" value={String(pending.length)} />
         <Stat label="Active dogs today" value={String(activeDogsToday)} />
-        <Stat label="Accepted this month" value={String(acceptedThisMonth.length)} />
-        <Stat label="Accepted revenue" value={money(acceptedRevenue)} />
+        <Stat
+          label="Accepted this month"
+          value={String(acceptedThisMonth.length)}
+        />
+        <Stat label="Approved booking value" value={money(acceptedRevenue)} />
       </section>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -84,6 +99,24 @@ export default async function AdminPage() {
           title="Customers"
           meta={`${customerCount} customers`}
           description="Browse previous customers, dog profiles, contact details, and recent stay history."
+        />
+        <ModuleCard
+          href="/admin/payments"
+          title="Payments"
+          meta="Manual verification"
+          description="Review customer transfer reports and record verified deposits or completed refunds."
+        />
+        <ModuleCard
+          href="/admin/marketing"
+          title="Marketing"
+          meta="Email campaigns"
+          description="Schedule holiday emails, preview eligible subscribers, and review campaign delivery records."
+        />
+        <ModuleCard
+          href="/admin/settings"
+          title="Settings"
+          meta="Capacity & payments"
+          description="Set daily defaults, reservation hold duration, and Zelle / Venmo recipients."
         />
       </section>
     </AdminShell>

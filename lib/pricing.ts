@@ -55,9 +55,18 @@ export function getWeightTierLabel(weightLb: number): string {
 }
 
 export function parseDateTime(date: string, time: string): Date | null {
-  if (!date || !time) return null;
-  const parsed = new Date(`${date}T${time}:00`);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+    !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)
+  )
+    return null;
+  // Boarding dates are local calendar values, encoded in UTC to keep prices and
+  // persisted schedules independent of the browser/server time zone and DST.
+  const parsed = new Date(`${date}T${time}:00Z`);
+  return Number.isNaN(parsed.getTime()) ||
+    parsed.toISOString().slice(0, 10) !== date
+    ? null
+    : parsed;
 }
 
 /** Rover-style: 24h = 1 day; remainder ≤2h no extra; 2–8h +0.5 day; 8h+ +1 day */
@@ -93,7 +102,7 @@ function buildSummary(
   specialCareFee: number,
   holidayFee: number,
   holidayFeePerDay: number,
-  totalPrice: number
+  totalPrice: number,
 ): string {
   const daysLabel = billableDays === 1 ? "1 day" : `${billableDays} days`;
   let summary = `${daysLabel} × $${dailyRate}/day = $${boardingSubtotal.toFixed(2)}`;
@@ -128,7 +137,7 @@ export function calculatePrice(
   dropoffDate: string,
   dropoffTime: string,
   pickupDate: string,
-  pickupTime: string
+  pickupTime: string,
 ): PriceBreakdown | null {
   const dropoff = parseDateTime(dropoffDate, dropoffTime);
   const pickup = parseDateTime(pickupDate, pickupTime);
@@ -147,16 +156,15 @@ export function calculatePrice(
   const totalHours = totalMs / (1000 * 60 * 60);
   const billableDays = calculateBillableDays(totalHours);
   const dailyRate = getDailyRate(weightLb);
-  const boardingSubtotal =
-    Math.round(billableDays * dailyRate * 100) / 100;
+  const boardingSubtotal = Math.round(billableDays * dailyRate * 100) / 100;
   const isPuppy = petAgeYears < PUPPY_AGE_LIMIT_YEARS;
-  const puppyFeePerDay = spayedNeuteredAnswer === "no"
-    ? INTACT_PUPPY_FEE_PER_DAY
-    : PUPPY_FEE_PER_DAY;
-  const puppyFee =
-    isPuppy
-      ? Math.round(billableDays * puppyFeePerDay * 100) / 100
-      : 0;
+  const puppyFeePerDay =
+    spayedNeuteredAnswer === "no"
+      ? INTACT_PUPPY_FEE_PER_DAY
+      : PUPPY_FEE_PER_DAY;
+  const puppyFee = isPuppy
+    ? Math.round(billableDays * puppyFeePerDay * 100) / 100
+    : 0;
   const seniorDogFee =
     petAgeYears >= SENIOR_DOG_AGE_YEARS
       ? Math.round(billableDays * SENIOR_DOG_FEE_PER_DAY * 100) / 100
@@ -176,21 +184,29 @@ export function calculatePrice(
 
   const { holidayDays, holidayDates } = countHolidayDaysInStay(
     dropoffDate,
-    pickupDate
+    pickupDate,
   );
   const holidayBillableDays = holidayDays > 0 ? billableDays : 0;
   // Keep the entire-stay rule; use the highest applicable holiday rate.
   const holidayFeePerDay = holidayDates.reduce(
     (fee, date) => Math.max(fee, getHolidayFeeForDate(date)),
-    HOLIDAY_FEE_PER_DAY
+    HOLIDAY_FEE_PER_DAY,
   );
   const holidayFee =
     Math.round(holidayBillableDays * holidayFeePerDay * 100) / 100;
   const totalPrice =
     Math.round(
-      (boardingSubtotal + puppyFee + seniorDogFee + intactDogFee + highEnergyDogFee + specialCareFee + holidayFee) * 100
+      (boardingSubtotal +
+        puppyFee +
+        seniorDogFee +
+        intactDogFee +
+        highEnergyDogFee +
+        specialCareFee +
+        holidayFee) *
+        100,
     ) / 100;
-  const depositAmount = Math.round(totalPrice * (DEPOSIT_PERCENT / 100) * 100) / 100;
+  const depositAmount =
+    Math.round(totalPrice * (DEPOSIT_PERCENT / 100) * 100) / 100;
 
   return {
     dailyRate,
@@ -228,7 +244,7 @@ export function calculatePrice(
       specialCareFee,
       holidayFee,
       holidayFeePerDay,
-      totalPrice
+      totalPrice,
     ),
   };
 }
@@ -238,6 +254,7 @@ export function formatDateTime(date: string, time: string): string {
   const parsed = parseDateTime(date, time);
   if (!parsed) return `${date} ${time}`;
   return parsed.toLocaleString("en-US", {
+    timeZone: "UTC",
     dateStyle: "medium",
     timeStyle: "short",
     hour12: false,

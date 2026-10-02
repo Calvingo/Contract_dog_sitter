@@ -1,3 +1,4 @@
+import { prepareStatusChange } from "@/lib/platform/capacity";
 import {
   DecisionAction as DbDecisionAction,
   EmailStatus,
@@ -76,7 +77,7 @@ function toEmailType(action: DecisionAction): EmailType {
 
 export async function processDecision(
   token: string | null,
-  action: string | null
+  action: string | null,
 ): Promise<DecisionResult> {
   if (!token || !action || !VALID_ACTIONS.includes(action as DecisionAction)) {
     return {
@@ -117,7 +118,10 @@ export async function processDecision(
       include: {
         customer: true,
         pet: true,
-        submissionPets: { orderBy: { position: "asc" }, include: { pet: true } },
+        submissionPets: {
+          orderBy: { position: "asc" },
+          include: { pet: true },
+        },
       },
     });
 
@@ -156,9 +160,12 @@ export async function processDecision(
       return {
         ok: true,
         action: "meet_greet",
-        owner: `${submission.customer.firstName} ${submission.customer.lastName}`.trim(),
+        owner:
+          `${submission.customer.firstName} ${submission.customer.lastName}`.trim(),
         email: submission.customer.email,
-        petName: submission.submissionPets.map((item) => item.pet.name).join(" & ") || submission.pet.name,
+        petName:
+          submission.submissionPets.map((item) => item.pet.name).join(" & ") ||
+          submission.pet.name,
         submissionId: submission.id,
         token,
         requiresScheduling: true,
@@ -180,9 +187,16 @@ export async function processDecision(
 
     if (decisionAction === "meet_greet") {
       await prisma.$transaction(async (tx) => {
+        const hold = await prepareStatusChange(
+          tx,
+          submission.id,
+          "MEET_GREET_REQUESTED",
+          submission.revision,
+          submission.status,
+        );
         await tx.submission.update({
           where: { id: submission.id },
-          data: { status: SubmissionStatus.MEET_GREET_REQUESTED },
+          data: { status: SubmissionStatus.MEET_GREET_REQUESTED, ...hold },
         });
 
         await tx.decisionEvent.create({
@@ -197,9 +211,12 @@ export async function processDecision(
       return {
         ok: true,
         action: "meet_greet",
-        owner: `${submission.customer.firstName} ${submission.customer.lastName}`.trim(),
+        owner:
+          `${submission.customer.firstName} ${submission.customer.lastName}`.trim(),
         email: submission.customer.email,
-        petName: submission.submissionPets.map((item) => item.pet.name).join(" & ") || submission.pet.name,
+        petName:
+          submission.submissionPets.map((item) => item.pet.name).join(" & ") ||
+          submission.pet.name,
         submissionId: submission.id,
         token,
         requiresScheduling: true,
@@ -211,14 +228,23 @@ export async function processDecision(
       email: submission.customer.email,
       firstName: submission.customer.firstName,
       lastName: submission.customer.lastName,
-      petName: submission.submissionPets.map((item) => item.pet.name).join(" & ") || submission.pet.name,
+      petName:
+        submission.submissionPets.map((item) => item.pet.name).join(" & ") ||
+        submission.pet.name,
       exp: payload.exp,
     };
 
     const decisionEvent = await prisma.$transaction(async (tx) => {
+      const hold = await prepareStatusChange(
+        tx,
+        submission.id,
+        toSubmissionStatus(decisionAction),
+        submission.revision,
+        submission.status,
+      );
       await tx.submission.update({
         where: { id: submission.id },
-        data: { status: toSubmissionStatus(decisionAction) },
+        data: { status: toSubmissionStatus(decisionAction), ...hold },
       });
 
       return tx.decisionEvent.create({
@@ -235,7 +261,9 @@ export async function processDecision(
       const editUrl =
         decisionAction === "reject"
           ? undefined
-          : buildSubmissionEditUrl(await createSubmissionEditToken(submission.id));
+          : buildSubmissionEditUrl(
+              await createSubmissionEditToken(submission.id),
+            );
       await sendDecisionEmail(decisionPayload, decisionAction, { editUrl });
       await prisma.decisionEvent.update({
         where: { id: decisionEvent.id },
@@ -385,7 +413,9 @@ export async function processMeetGreetSchedule(options: {
     email: submission.customer.email,
     firstName: submission.customer.firstName,
     lastName: submission.customer.lastName,
-    petName: submission.submissionPets.map((item) => item.pet.name).join(" & ") || submission.pet.name,
+    petName:
+      submission.submissionPets.map((item) => item.pet.name).join(" & ") ||
+      submission.pet.name,
     exp: payload.exp,
   };
 
@@ -395,7 +425,7 @@ export async function processMeetGreetSchedule(options: {
 
   try {
     const editUrl = buildSubmissionEditUrl(
-      await createSubmissionEditToken(submission.id)
+      await createSubmissionEditToken(submission.id),
     );
     await sendDecisionEmail(decisionPayload, "meet_greet", {
       meetGreetAt: displayTime,

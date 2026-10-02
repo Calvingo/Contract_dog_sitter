@@ -1,5 +1,11 @@
 "use server";
 
+import {
+  assertCapacity,
+  lockCapacity,
+  getSettings,
+} from "@/lib/platform/capacity";
+import type { ActionState } from "@/components/ActionForm";
 import { SubmissionStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -39,7 +45,7 @@ export async function decideSubmissionAction(formData: FormData) {
     throw new Error("Invalid admin decision.");
   }
 
-  await processAdminSubmissionDecision({
+  const decision = await processAdminSubmissionDecision({
     submissionId,
     action,
     adminEmail: session.email,
@@ -52,6 +58,29 @@ export async function decideSubmissionAction(formData: FormData) {
   revalidatePath("/admin/reports");
   revalidatePath("/admin/customers");
   revalidatePath(`/admin/submissions/${submissionId}`);
+  revalidatePath(`/account/bookings/${submissionId}`);
+  if (decision.notificationFailed)
+    throw new Error(
+      "Decision saved, but the customer email could not be delivered. Check the email log and contact the customer.",
+    );
+}
+
+export async function decideSubmissionActionWithState(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireAdmin();
+  try {
+    await decideSubmissionAction(formData);
+    return { message: "Decision saved and customer notified." };
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : "Unable to process this booking.",
+    };
+  }
 }
 
 export type AdminFormState = {
@@ -62,15 +91,14 @@ export type AdminFormState = {
 
 function buildAdminReceiptQuote(
   values: Parameters<typeof getSubmissionQuote>[0],
-  quotedTotal: number
+  quotedTotal: number,
 ): SubmissionQuote {
   const latestQuote = getSubmissionQuote(values);
   return {
     ...latestQuote,
     totalPrice: quotedTotal,
-    depositAmount: Math.round(
-      quotedTotal * (DEPOSIT_PERCENT / 100) * 100
-    ) / 100,
+    depositAmount:
+      Math.round(quotedTotal * (DEPOSIT_PERCENT / 100) * 100) / 100,
   };
 }
 
@@ -98,12 +126,17 @@ async function sendLatestSubmissionReceipt(submissionId: string) {
     submissionPets: submission.submissionPets,
   });
 
-  await sendSubmissionEmails(values, signatureToBuffer(submission.signatureData), submission.id, {
-    revision: submission.revision,
-    isUpdate: true,
-    quote: buildAdminReceiptQuote(values, submission.quotedTotal.toNumber()),
-    sendAdminNotification: true,
-  });
+  await sendSubmissionEmails(
+    values,
+    signatureToBuffer(submission.signatureData),
+    submission.id,
+    {
+      revision: submission.revision,
+      isUpdate: true,
+      quote: buildAdminReceiptQuote(values, submission.quotedTotal.toNumber()),
+      sendAdminNotification: true,
+    },
+  );
 
   return values.email;
 }
@@ -122,8 +155,8 @@ async function updateSubmissionInternal(formData: FormData) {
     throw new Error("Invalid submission update.");
   }
 
-  const dropoffDate = new Date(dropoffAt);
-  const pickupDate = new Date(pickupAt);
+  const dropoffDate = new Date(`${dropoffAt}:00Z`);
+  const pickupDate = new Date(`${pickupAt}:00Z`);
   const quotedTotalNumber = Number(quotedTotal);
 
   if (
@@ -136,17 +169,37 @@ async function updateSubmissionInternal(formData: FormData) {
     throw new Error("Invalid date or price.");
   }
 
-  await prisma.submission.update({
-    where: { id: submissionId },
-    data: {
-      status,
-      dropoffAt: dropoffDate,
-      pickupAt: pickupDate,
-      quotedTotal: quotedTotalNumber,
-      prescreenNotes: prescreenNotes || null,
-      lastEditedAt: new Date(),
-      revision: { increment: 1 },
-    },
+  await prisma.$transaction(async (tx) => {
+    await lockCapacity(tx);
+    const current = await tx.submission.findUniqueOrThrow({
+      where: { id: submissionId },
+      include: { submissionPets: true },
+    });
+    if (!["REJECTED", "CANCELLED"].includes(status))
+      await assertCapacity(
+        tx,
+        dropoffDate,
+        pickupDate,
+        Math.max(1, current.submissionPets.length),
+        current.id,
+      );
+    const settings = await getSettings(tx);
+    await tx.submission.update({
+      where: { id: submissionId },
+      data: {
+        status,
+        holdExpiresAt:
+          current.holdExpiresAt === null
+            ? null
+            : new Date(Date.now() + settings.holdHours * 3600000),
+        dropoffAt: dropoffDate,
+        pickupAt: pickupDate,
+        quotedTotal: quotedTotalNumber,
+        prescreenNotes: prescreenNotes || null,
+        lastEditedAt: new Date(),
+        revision: { increment: 1 },
+      },
+    });
   });
 
   let receiptSentTo: string | undefined;
@@ -171,14 +224,14 @@ export async function updateSubmissionAction(formData: FormData) {
   const result = await updateSubmissionInternal(formData);
   if (result.receiptError) {
     throw new Error(
-      "Order was saved, but one or more customer or admin emails could not be sent."
+      "Order was saved, but one or more customer or admin emails could not be sent.",
     );
   }
 }
 
 export async function updateSubmissionActionWithState(
   _prevState: AdminFormState | null,
-  formData: FormData
+  formData: FormData,
 ): Promise<AdminFormState> {
   try {
     const result = await updateSubmissionInternal(formData);
@@ -212,11 +265,17 @@ export async function updateCustomerPetAction(formData: FormData) {
   const secondPetId = String(formData.get("secondPetId") || "");
   const firstName = String(formData.get("firstName") || "").trim();
   const lastName = String(formData.get("lastName") || "").trim();
-  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const email = String(formData.get("email") || "")
+    .trim()
+    .toLowerCase();
   const phone = String(formData.get("phone") || "").trim();
   const backupContact = String(formData.get("backupContact") || "").trim();
-  const emergencyContactName = String(formData.get("emergencyContactName") || "").trim();
-  const emergencyContactPhone = String(formData.get("emergencyContactPhone") || "").trim();
+  const emergencyContactName = String(
+    formData.get("emergencyContactName") || "",
+  ).trim();
+  const emergencyContactPhone = String(
+    formData.get("emergencyContactPhone") || "",
+  ).trim();
   const wechatId = String(formData.get("wechatId") || "").trim();
   const petName = String(formData.get("petName") || "").trim();
   const petBreed = String(formData.get("petBreed") || "").trim();
@@ -226,8 +285,12 @@ export async function updateCustomerPetAction(formData: FormData) {
   const secondPetName = String(formData.get("secondPetName") || "").trim();
   const secondPetBreed = String(formData.get("secondPetBreed") || "").trim();
   const secondPetWeightLb = Number(formData.get("secondPetWeightLb") || "");
-  const secondPetAgeYearsRaw = String(formData.get("secondPetAgeYears") || "").trim();
-  const secondPetAgeYears = secondPetAgeYearsRaw ? Number(secondPetAgeYearsRaw) : null;
+  const secondPetAgeYearsRaw = String(
+    formData.get("secondPetAgeYears") || "",
+  ).trim();
+  const secondPetAgeYears = secondPetAgeYearsRaw
+    ? Number(secondPetAgeYearsRaw)
+    : null;
 
   if (
     !submissionId ||
@@ -244,16 +307,32 @@ export async function updateCustomerPetAction(formData: FormData) {
     !petBreed ||
     !Number.isFinite(petWeightLb) ||
     petWeightLb <= 0 ||
-    (petAgeYears !== null && (!Number.isFinite(petAgeYears) || petAgeYears < 0))
-    || (secondPetId && (!secondPetName || !secondPetBreed || !Number.isFinite(secondPetWeightLb) || secondPetWeightLb <= 0 || (secondPetAgeYears !== null && (!Number.isFinite(secondPetAgeYears) || secondPetAgeYears < 0))))
+    (petAgeYears !== null &&
+      (!Number.isFinite(petAgeYears) || petAgeYears < 0)) ||
+    (secondPetId &&
+      (!secondPetName ||
+        !secondPetBreed ||
+        !Number.isFinite(secondPetWeightLb) ||
+        secondPetWeightLb <= 0 ||
+        (secondPetAgeYears !== null &&
+          (!Number.isFinite(secondPetAgeYears) || secondPetAgeYears < 0))))
   ) {
     throw new Error("Invalid customer or pet update.");
   }
 
+  const existingCustomer = await prisma.customer.findUniqueOrThrow({
+    where: { id: customerId },
+  });
   const updates = [
     prisma.customer.update({
       where: { id: customerId },
       data: {
+        ...(existingCustomer.phone !== phone
+          ? { smsMarketingOptIn: false }
+          : {}),
+        ...(existingCustomer.email !== email
+          ? { emailMarketingOptIn: false }
+          : {}),
         firstName,
         lastName,
         email,
@@ -275,10 +354,17 @@ export async function updateCustomerPetAction(formData: FormData) {
     }),
   ];
   if (secondPetId) {
-    updates.push(prisma.pet.update({
-      where: { id: secondPetId },
-      data: { name: secondPetName, breed: secondPetBreed, weightLb: secondPetWeightLb, ageYears: secondPetAgeYears },
-    }));
+    updates.push(
+      prisma.pet.update({
+        where: { id: secondPetId },
+        data: {
+          name: secondPetName,
+          breed: secondPetBreed,
+          weightLb: secondPetWeightLb,
+          ageYears: secondPetAgeYears,
+        },
+      }),
+    );
   }
   await prisma.$transaction(updates);
 

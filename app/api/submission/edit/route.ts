@@ -1,10 +1,9 @@
+import { BookingConflict } from "@/lib/platform/capacity";
 import { SubmissionStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import type { FormValues } from "@/lib/form-config";
 import { sendSubmissionEmails } from "@/lib/email";
-import {
-  findValidSubmissionEditToken,
-} from "@/lib/submission-edit-token";
+import { findValidSubmissionEditToken } from "@/lib/submission-edit-token";
 import { formValuesFromSubmission } from "@/lib/submission-data";
 import { updateSubmissionRecord } from "@/lib/services/submission-service";
 import { signatureToBuffer, validateSubmission } from "@/lib/validate";
@@ -24,7 +23,10 @@ export async function GET(request: Request) {
   const editToken = await findValidSubmissionEditToken(token);
 
   if (!editToken) {
-    return NextResponse.json({ error: "Edit link expired or invalid" }, { status: 403 });
+    return NextResponse.json(
+      { error: "Edit link expired or invalid" },
+      { status: 403 },
+    );
   }
 
   if (!canEdit(editToken.submission.status)) {
@@ -33,7 +35,7 @@ export async function GET(request: Request) {
         error:
           "This request has already been reviewed. Please contact us directly to make changes.",
       },
-      { status: 409 }
+      { status: 409 },
     );
   }
 
@@ -52,22 +54,31 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as { token?: string; values?: FormValues };
+    const body = (await request.json()) as {
+      token?: string;
+      values?: FormValues;
+    };
     const editToken = await findValidSubmissionEditToken(body.token || null);
 
     if (!editToken) {
-      return NextResponse.json({ error: "Edit link expired or invalid" }, { status: 403 });
+      return NextResponse.json(
+        { error: "Edit link expired or invalid" },
+        { status: 403 },
+      );
     }
 
     if (!canEdit(editToken.submission.status)) {
       return NextResponse.json(
         { error: "This request can no longer be edited" },
-        { status: 409 }
+        { status: 409 },
       );
     }
 
     if (!body.values) {
-      return NextResponse.json({ error: "Missing form values" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Missing form values" },
+        { status: 400 },
+      );
     }
 
     const validationError = validateSubmission(body.values);
@@ -81,20 +92,37 @@ export async function POST(request: Request) {
       data: body.values,
     });
 
-    await sendSubmissionEmails(body.values, signatureBuffer, result.submission.id, {
-      revision: result.submission.revision,
-      isUpdate: true,
-      previousStatus: result.previousStatus,
-    });
+    let emailWarning = false;
+    try {
+      await sendSubmissionEmails(
+        body.values,
+        signatureBuffer,
+        result.submission.id,
+        {
+          revision: result.submission.revision,
+          isUpdate: true,
+          previousStatus: result.previousStatus,
+        },
+      );
+    } catch (error) {
+      console.error("Changes saved; notification failed", error);
+      emailWarning = true;
+    }
 
     return NextResponse.json({
       ok: true,
+      emailWarning,
       submissionId: result.submission.id,
       status: result.submission.status,
       revision: result.submission.revision,
     });
   } catch (error) {
+    if (error instanceof BookingConflict)
+      return NextResponse.json({ error: error.message }, { status: 409 });
     console.error("Edit submission error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
   }
 }

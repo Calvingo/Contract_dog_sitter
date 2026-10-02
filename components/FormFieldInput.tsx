@@ -10,6 +10,7 @@ type Props = {
   field: FormField;
   value: string;
   error?: string;
+  readOnly?: boolean;
   selectPlaceholder: string;
   onChange: (name: keyof FormValues, value: string) => void;
 };
@@ -18,13 +19,18 @@ export function FormFieldInput({
   field,
   value,
   error,
+  readOnly,
   selectPlaceholder,
   onChange,
 }: Props) {
   const commonClass =
     "w-full rounded-xl border border-orange-100 bg-white px-4 py-3 text-stone-800 outline-none transition focus:border-orange-300 focus:ring-2 focus:ring-orange-100";
   const numberMin =
-    field.type === "number" ? (field.name === "petAgeYears" ? 0 : 1) : undefined;
+    field.type === "number"
+      ? field.name === "petAgeYears"
+        ? 0
+        : 1
+      : undefined;
 
   if (field.type === "date" || field.type === "time") {
     return (
@@ -65,6 +71,7 @@ export function FormFieldInput({
         </select>
       ) : (
         <input
+          readOnly={readOnly}
           type={field.type === "number" ? "number" : field.type}
           min={numberMin}
           step={

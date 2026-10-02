@@ -16,7 +16,9 @@ export function hashSubmissionEditToken(token: string): string {
   return createHmac("sha256", getSecret()).update(token).digest("base64url");
 }
 
-export async function createSubmissionEditToken(submissionId: string): Promise<string> {
+export async function createSubmissionEditToken(
+  submissionId: string,
+): Promise<string> {
   const token = randomBytes(32).toString("base64url");
   await prisma.submissionEditToken.create({
     data: {
@@ -30,7 +32,7 @@ export async function createSubmissionEditToken(submissionId: string): Promise<s
 
 export function buildSubmissionEditUrl(token: string): string {
   const params = new URLSearchParams({ editToken: token });
-  return `${getAppBaseUrl()}?${params.toString()}`;
+  return `${getAppBaseUrl()}/book?${params.toString()}`;
 }
 
 export async function findValidSubmissionEditToken(token: string | null) {

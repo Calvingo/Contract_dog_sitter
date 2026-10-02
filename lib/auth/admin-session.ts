@@ -4,7 +4,6 @@ import { cookies } from "next/headers";
 const ADMIN_SESSION_COOKIE = "spr_admin_session";
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const SEP = ".";
-const DEFAULT_ADMIN_PASSWORD = "Pocky&mia";
 
 type AdminSessionPayload = {
   email: string;
@@ -20,11 +19,13 @@ function getSessionSecret(): string {
 }
 
 function sign(data: string): string {
-  return createHmac("sha256", getSessionSecret()).update(data).digest("base64url");
+  return createHmac("sha256", getSessionSecret())
+    .update(data)
+    .digest("base64url");
 }
 
 function getAdminPassword(): string {
-  return process.env.ADMIN_PASSWORD || DEFAULT_ADMIN_PASSWORD;
+  return process.env.ADMIN_PASSWORD || "";
 }
 
 export function getAdminEmails(): string[] {
@@ -44,13 +45,24 @@ function secureCompare(a: string, b: string): boolean {
   return aBuffer.length === bBuffer.length && timingSafeEqual(aBuffer, bBuffer);
 }
 
-export function verifyAdminCredentials(email: string, password: string): boolean {
+export function verifyAdminCredentials(
+  email: string,
+  password: string,
+): boolean {
   const normalizedEmail = email.trim().toLowerCase();
   const normalizedPassword = password.trim();
-  if (!normalizedEmail || !normalizedPassword || !isAdminEmail(normalizedEmail)) {
+  if (
+    !normalizedEmail ||
+    !normalizedPassword ||
+    !isAdminEmail(normalizedEmail)
+  ) {
     return false;
   }
-  return secureCompare(normalizedPassword, getAdminPassword());
+  const configuredPassword = getAdminPassword();
+  return (
+    Boolean(configuredPassword) &&
+    secureCompare(normalizedPassword, configuredPassword)
+  );
 }
 
 function createAdminSessionToken(email: string): string {
@@ -78,7 +90,7 @@ function verifyAdminSessionToken(token: string): AdminSessionPayload | null {
     }
 
     const payload = JSON.parse(
-      Buffer.from(data, "base64url").toString("utf8")
+      Buffer.from(data, "base64url").toString("utf8"),
     ) as AdminSessionPayload;
 
     if (!payload.email || payload.exp < Date.now()) return null;

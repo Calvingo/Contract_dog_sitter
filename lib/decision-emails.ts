@@ -1,3 +1,4 @@
+import { getAppBaseUrl } from "./app-url";
 import { teamContacts } from "./contacts";
 import { BRAND_NAME, getEnv, sendMail } from "./mailer";
 import type { DecisionTokenPayload } from "./token";
@@ -25,7 +26,7 @@ function contactsHtml(): string {
   return teamContacts
     .map(
       (c) =>
-        `<p><strong>${c.name}</strong><br/>Email: ${c.email}<br/>Phone: ${c.phone}</p>`
+        `<p><strong>${c.name}</strong><br/>Email: ${c.email}<br/>Phone: ${c.phone}</p>`,
     )
     .join("");
 }
@@ -33,7 +34,7 @@ function contactsHtml(): string {
 function buildDecisionEmail(
   payload: DecisionTokenPayload,
   action: DecisionAction,
-  options: DecisionEmailOptions = {}
+  options: DecisionEmailOptions = {},
 ): { subject: string; html: string } {
   const name = ownerName(payload);
   const pet = escapeHtml(payload.petName);
@@ -52,7 +53,7 @@ function buildDecisionEmail(
           <h2>Booking Accepted</h2>
           <p>Dear ${name},</p>
           <p>Great news! Your boarding request for <strong>${pet}</strong> has been <strong>accepted</strong> by ${BRAND_NAME}.</p>
-          <p>We will contact you shortly with next steps. If you have any questions in the meantime, please reach out:</p>
+          <p>Please <a href="${escapeHtml(getAppBaseUrl())}/account">sign in to your account</a> to see payment instructions and your hold deadline. Your booking is confirmed once the required deposit is verified. If you have already paid, check your payment status in your account.</p>
           ${editBlock}
           ${contactsHtml()}
           <p>Thank you,<br/>${BRAND_NAME}</p>
@@ -106,7 +107,7 @@ function buildDecisionEmail(
 export async function sendDecisionEmail(
   payload: DecisionTokenPayload,
   action: DecisionAction,
-  options: DecisionEmailOptions = {}
+  options: DecisionEmailOptions = {},
 ) {
   const fromUser = getEnv("GMAIL_USER");
   const { subject, html } = buildDecisionEmail(payload, action, options);

@@ -1,3 +1,10 @@
+import {
+  BookingConflict,
+  assertCapacity,
+  getSettings,
+  lockCapacity,
+} from "@/lib/platform/capacity";
+import { verifiedAmount, depositDue } from "@/lib/platform/rules";
 import { SubmissionStatus, type Prisma } from "@prisma/client";
 import type { FormValues } from "@/lib/form-config";
 import { prisma } from "@/lib/db";
@@ -9,7 +16,10 @@ import {
   getSubmissionQuote,
 } from "@/lib/submission-data";
 
-export async function createSubmissionRecord(data: FormValues) {
+export async function createSubmissionRecord(
+  data: FormValues,
+  customerId: string,
+) {
   const customerSnapshot = buildCustomerSnapshot(data);
   const petSnapshots = buildPetSnapshots(data);
   const prescreenAnswersByPet = buildPetPrescreenAnswers(data);
@@ -20,6 +30,13 @@ export async function createSubmissionRecord(data: FormValues) {
   const now = new Date();
 
   return prisma.$transaction(async (tx) => {
+    await lockCapacity(tx);
+    const owner = await tx.customer.findUnique({ where: { id: customerId } });
+    if (!owner || owner.email !== customerSnapshot.email)
+      throw new BookingConflict("Please use your signed-in email address.");
+    await assertCapacity(tx, dropoffAt, pickupAt, petSnapshots.length);
+    const settings = await getSettings(tx);
+
     const customer = await tx.customer.upsert({
       where: { email: customerSnapshot.email },
       create: {
@@ -28,6 +45,9 @@ export async function createSubmissionRecord(data: FormValues) {
         lastSeenAt: now,
       },
       update: {
+        ...(owner.phone !== customerSnapshot.phone
+          ? { smsMarketingOptIn: false }
+          : {}),
         firstName: customerSnapshot.firstName,
         lastName: customerSnapshot.lastName,
         phone: customerSnapshot.phone,
@@ -41,11 +61,19 @@ export async function createSubmissionRecord(data: FormValues) {
 
     const pets = [];
     for (const snapshot of petSnapshots) {
-      pets.push(await tx.pet.upsert({
-        where: { customerId_name: { customerId: customer.id, name: snapshot.name } },
-        create: { customerId: customer.id, ...snapshot },
-        update: { breed: snapshot.breed, weightLb: snapshot.weightLb, ageYears: snapshot.ageYears },
-      }));
+      pets.push(
+        await tx.pet.upsert({
+          where: {
+            customerId_name: { customerId: customer.id, name: snapshot.name },
+          },
+          create: { customerId: customer.id, ...snapshot },
+          update: {
+            breed: snapshot.breed,
+            weightLb: snapshot.weightLb,
+            ageYears: snapshot.ageYears,
+          },
+        }),
+      );
     }
     const pet = pets[0];
 
@@ -53,6 +81,7 @@ export async function createSubmissionRecord(data: FormValues) {
       data: {
         customerId: customer.id,
         petId: pet.id,
+        holdExpiresAt: new Date(now.getTime() + settings.holdHours * 3600000),
         firstTimeBooking: data.firstTimeBooking,
         dropoffAt,
         pickupAt,
@@ -68,10 +97,19 @@ export async function createSubmissionRecord(data: FormValues) {
           create: pets.map((savedPet, index) => ({
             petId: savedPet.id,
             position: index + 1,
-            petSnapshot: petSnapshots[index] as unknown as Prisma.InputJsonValue,
-            prescreenAnswers: prescreenAnswersByPet[index] as Prisma.InputJsonValue,
-            prescreenNotes: index === 0 ? data.prescreenNotes?.trim() || null : data.secondPrescreenNotes?.trim() || null,
-            quotedBreakdown: quote.dogs[index] as unknown as Prisma.InputJsonValue,
+            petSnapshot: petSnapshots[
+              index
+            ] as unknown as Prisma.InputJsonValue,
+            prescreenAnswers: prescreenAnswersByPet[
+              index
+            ] as Prisma.InputJsonValue,
+            prescreenNotes:
+              index === 0
+                ? data.prescreenNotes?.trim() || null
+                : data.secondPrescreenNotes?.trim() || null,
+            quotedBreakdown: quote.dogs[
+              index
+            ] as unknown as Prisma.InputJsonValue,
             quotedTotal: quote.dogs[index].totalPrice,
           })),
         },
@@ -96,10 +134,12 @@ export async function updateSubmissionRecord(options: {
   const now = new Date();
 
   return prisma.$transaction(async (tx) => {
+    await lockCapacity(tx);
     const current = await tx.submission.findUnique({
       where: { id: options.submissionId },
       include: {
         customer: true,
+        payments: true,
         pet: true,
         submissionPets: { orderBy: { position: "asc" } },
       },
@@ -115,6 +155,24 @@ export async function updateSubmissionRecord(options: {
     ) {
       throw new Error("This submission can no longer be edited");
     }
+
+    if (current.customer.email !== customerSnapshot.email)
+      throw new BookingConflict(
+        "Use the original booking email. Contact us to change the booking owner.",
+      );
+    await assertCapacity(
+      tx,
+      dropoffAt,
+      pickupAt,
+      petSnapshots.length,
+      current.id,
+    );
+    const settings = await getSettings(tx);
+    const holdExpiresAt =
+      current.holdExpiresAt === null ||
+      verifiedAmount(current) >= depositDue(quote.totalPrice)
+        ? current.holdExpiresAt
+        : new Date(now.getTime() + settings.holdHours * 3600000);
 
     await tx.submissionRevision.upsert({
       where: {
@@ -156,6 +214,9 @@ export async function updateSubmissionRecord(options: {
         lastSeenAt: now,
       },
       update: {
+        ...(current.customer.phone !== customerSnapshot.phone
+          ? { smsMarketingOptIn: false }
+          : {}),
         firstName: customerSnapshot.firstName,
         lastName: customerSnapshot.lastName,
         phone: customerSnapshot.phone,
@@ -169,11 +230,19 @@ export async function updateSubmissionRecord(options: {
 
     const pets = [];
     for (const snapshot of petSnapshots) {
-      pets.push(await tx.pet.upsert({
-        where: { customerId_name: { customerId: customer.id, name: snapshot.name } },
-        create: { customerId: customer.id, ...snapshot },
-        update: { breed: snapshot.breed, weightLb: snapshot.weightLb, ageYears: snapshot.ageYears },
-      }));
+      pets.push(
+        await tx.pet.upsert({
+          where: {
+            customerId_name: { customerId: customer.id, name: snapshot.name },
+          },
+          create: { customerId: customer.id, ...snapshot },
+          update: {
+            breed: snapshot.breed,
+            weightLb: snapshot.weightLb,
+            ageYears: snapshot.ageYears,
+          },
+        }),
+      );
     }
     const pet = pets[0];
 
@@ -188,6 +257,7 @@ export async function updateSubmissionRecord(options: {
         customerId: customer.id,
         petId: pet.id,
         status: nextStatus,
+        holdExpiresAt,
         revision: current.revision + 1,
         firstTimeBooking: options.data.firstTimeBooking,
         dropoffAt,
@@ -216,7 +286,10 @@ export async function updateSubmissionRecord(options: {
         position: index + 1,
         petSnapshot: petSnapshots[index] as unknown as Prisma.InputJsonValue,
         prescreenAnswers: prescreenAnswersByPet[index] as Prisma.InputJsonValue,
-        prescreenNotes: index === 0 ? options.data.prescreenNotes?.trim() || null : options.data.secondPrescreenNotes?.trim() || null,
+        prescreenNotes:
+          index === 0
+            ? options.data.prescreenNotes?.trim() || null
+            : options.data.secondPrescreenNotes?.trim() || null,
         quotedBreakdown: quote.dogs[index] as unknown as Prisma.InputJsonValue,
         quotedTotal: quote.dogs[index].totalPrice,
       })),

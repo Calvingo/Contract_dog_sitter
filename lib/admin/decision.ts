@@ -1,3 +1,4 @@
+import { prepareStatusChange } from "@/lib/platform/capacity";
 import {
   DecisionAction as DbDecisionAction,
   EmailStatus,
@@ -91,9 +92,16 @@ export async function processAdminSubmissionDecision(options: {
       : `Admin selected ${decisionActionLabel(options.action)}.`;
 
   const decisionEvent = await prisma.$transaction(async (tx) => {
+    const hold = await prepareStatusChange(
+      tx,
+      submission.id,
+      toSubmissionStatus(options.action),
+      submission.revision,
+      submission.status,
+    );
     await tx.submission.update({
       where: { id: submission.id },
-      data: { status: toSubmissionStatus(options.action) },
+      data: { status: toSubmissionStatus(options.action), ...hold },
     });
 
     return tx.decisionEvent.create({
@@ -110,7 +118,9 @@ export async function processAdminSubmissionDecision(options: {
     email: submission.customer.email,
     firstName: submission.customer.firstName,
     lastName: submission.customer.lastName,
-    petName: submission.submissionPets.map((item) => item.pet.name).join(" & ") || submission.pet.name,
+    petName:
+      submission.submissionPets.map((item) => item.pet.name).join(" & ") ||
+      submission.pet.name,
     exp: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60,
   };
   const subjectLabel = decisionActionLabel(options.action);
@@ -119,7 +129,9 @@ export async function processAdminSubmissionDecision(options: {
     const editUrl =
       options.action === "reject"
         ? undefined
-        : buildSubmissionEditUrl(await createSubmissionEditToken(submission.id));
+        : buildSubmissionEditUrl(
+            await createSubmissionEditToken(submission.id),
+          );
     await sendDecisionEmail(payload, options.action, {
       editUrl,
       meetGreetAt: options.meetGreetAt
@@ -146,6 +158,7 @@ export async function processAdminSubmissionDecision(options: {
       status: EmailStatus.FAILED,
       error: error instanceof Error ? error.message : String(error),
     });
-    throw error;
+    return { notificationFailed: true };
   }
+  return { notificationFailed: false };
 }

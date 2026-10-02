@@ -38,35 +38,40 @@ enum EmailStatus {
 }
 
 model Customer {
-  id            String       @id @default(cuid())
-  firstName     String
-  lastName      String
-  email         String       @unique
-  phone         String
-  backupContact String
-  emergencyContactName String?
-  emergencyContactPhone String?
-  wechatId      String?
-  lastSeenAt    DateTime?
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-  pets          Pet[]
-  submissions   Submission[]
+  id                        String                  @id @default(cuid())
+  firstName                 String
+  lastName                  String
+  email                     String                  @unique
+  phone                     String
+  backupContact             String
+  emergencyContactName      String?
+  emergencyContactPhone     String?
+  wechatId                  String?
+  lastSeenAt                DateTime?
+  createdAt                 DateTime                @default(now())
+  updatedAt                 DateTime                @updatedAt
+  emailMarketingOptIn       Boolean                 @default(false)
+  smsMarketingOptIn         Boolean                 @default(false)
+  marketingConsentUpdatedAt DateTime?
+  consentEvents             MarketingConsentEvent[]
+  marketingDeliveries       MarketingDelivery[]
+  pets                      Pet[]
+  submissions               Submission[]
 
   @@index([email])
 }
 
 model Pet {
-  id          String       @id @default(cuid())
-  customerId  String
-  name        String
-  breed       String
-  weightLb    Float
-  ageYears    Float?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  customer    Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  submissions Submission[]
+  id             String          @id @default(cuid())
+  customerId     String
+  name           String
+  breed          String
+  weightLb       Float
+  ageYears       Float?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  customer       Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  submissions    Submission[]
   submissionPets SubmissionPet[]
 
   @@unique([customerId, name])
@@ -74,39 +79,98 @@ model Pet {
 }
 
 model Submission {
-  id                 String           @id @default(cuid())
-  customerId         String
-  petId              String
-  status             SubmissionStatus @default(PENDING)
-  revision           Int              @default(1)
-  firstTimeBooking   String
-  dropoffAt          DateTime
-  pickupAt           DateTime
-  quotedTotal        Decimal          @db.Decimal(10, 2)
-  quotedBreakdown    Json
-  prescreenAnswers   Json
-  prescreenNotes     String?          @db.Text
-  agreementVersion   String           @default("2026-05")
-  agreedAt           DateTime
-  signatureData      String           @db.Text
-  customerSnapshot   Json
-  petSnapshot        Json
-  lastEditedAt       DateTime?
-  previouslyAcceptedAt DateTime?
-  createdAt          DateTime         @default(now())
-  updatedAt          DateTime         @updatedAt
-  customer           Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  pet                Pet              @relation(fields: [petId], references: [id], onDelete: Restrict)
-  decisionEvents     DecisionEvent[]
-  emailLogs          EmailLog[]
-  editTokens         SubmissionEditToken[]
-  revisions          SubmissionRevision[]
-  submissionPets     SubmissionPet[]
+  id                      String                @id @default(cuid())
+  customerId              String
+  petId                   String
+  status                  SubmissionStatus      @default(PENDING)
+  revision                Int                   @default(1)
+  firstTimeBooking        String
+  dropoffAt               DateTime
+  pickupAt                DateTime
+  quotedTotal             Decimal               @db.Decimal(10, 2)
+  quotedBreakdown         Json
+  prescreenAnswers        Json
+  prescreenNotes          String?               @db.Text
+  agreementVersion        String                @default("2026-05")
+  agreedAt                DateTime
+  signatureData           String                @db.Text
+  customerSnapshot        Json
+  petSnapshot             Json
+  lastEditedAt            DateTime?
+  previouslyAcceptedAt    DateTime?
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+  holdExpiresAt           DateTime?
+  cancellationRequestedAt DateTime?
+  cancellationReason      String?               @db.Text
+  payments                Payment[]
+  customer                Customer              @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  pet                     Pet                   @relation(fields: [petId], references: [id], onDelete: Restrict)
+  decisionEvents          DecisionEvent[]
+  emailLogs               EmailLog[]
+  editTokens              SubmissionEditToken[]
+  revisions               SubmissionRevision[]
+  submissionPets          SubmissionPet[]
 
   @@index([customerId])
   @@index([petId])
   @@index([status, createdAt])
   @@index([revision])
+}
+
+model PlatformSettings {
+  id               String   @id @default("default")
+  defaultCapacity  Int      @default(17)
+  holdHours        Int      @default(24)
+  includePickupDay Boolean  @default(true)
+  zelleRecipient   String   @default("")
+  zelleName        String   @default("")
+  venmoUsername    String   @default("")
+  venmoName        String   @default("")
+  updatedAt        DateTime @updatedAt
+}
+
+model DailyCapacity {
+  date      String   @id
+  capacity  Int
+  note      String   @default("")
+  updatedAt DateTime @updatedAt
+}
+
+enum PaymentStatus {
+  REPORTED
+  VERIFIED
+  REJECTED
+  REFUNDED
+}
+
+model Payment {
+  id           String        @id @default(cuid())
+  submissionId String
+  method       String
+  amount       Decimal       @db.Decimal(10, 2)
+  payerName    String
+  reference    String
+  status       PaymentStatus @default(REPORTED)
+  reviewedBy   String?
+  reviewedAt   DateTime?
+  reviewNote   String?
+  createdAt    DateTime      @default(now())
+  submission   Submission    @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+
+  @@index([submissionId, status])
+}
+
+model MarketingConsentEvent {
+  id         String   @id @default(cuid())
+  customerId String
+  emailOptIn Boolean
+  smsOptIn   Boolean
+  source     String   @default("account-preferences-v1")
+  createdAt  DateTime @default(now())
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, createdAt])
 }
 
 model SubmissionEditToken {
@@ -123,22 +187,22 @@ model SubmissionEditToken {
 }
 
 model SubmissionRevision {
-  id                 String           @id @default(cuid())
-  submissionId       String
-  revision           Int
-  status             SubmissionStatus
-  quotedBreakdown    Json
-  quotedTotal        Decimal          @db.Decimal(10, 2)
-  prescreenAnswers   Json
-  prescreenNotes     String?          @db.Text
-  signatureData      String           @db.Text
-  customerSnapshot   Json
-  petSnapshot        Json
-  petsSnapshot       Json?
-  dropoffAt          DateTime
-  pickupAt           DateTime
-  createdAt          DateTime         @default(now())
-  submission         Submission       @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  id               String           @id @default(cuid())
+  submissionId     String
+  revision         Int
+  status           SubmissionStatus
+  quotedBreakdown  Json
+  quotedTotal      Decimal          @db.Decimal(10, 2)
+  prescreenAnswers Json
+  prescreenNotes   String?          @db.Text
+  signatureData    String           @db.Text
+  customerSnapshot Json
+  petSnapshot      Json
+  petsSnapshot     Json?
+  dropoffAt        DateTime
+  pickupAt         DateTime
+  createdAt        DateTime         @default(now())
+  submission       Submission       @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 
   @@unique([submissionId, revision])
   @@index([submissionId])
@@ -201,5 +265,99 @@ model LoginToken {
   createdAt DateTime  @default(now())
 
   @@index([email])
+  @@index([expiresAt])
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  RUNNING
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum DeliveryStatus {
+  PENDING
+  SENDING
+  ACCEPTED
+  DELIVERED
+  SKIPPED
+  FAILED
+  UNKNOWN
+  BOUNCED
+  COMPLAINED
+}
+
+model MarketingRule {
+  holiday   String @id
+  enabled   Boolean @default(false)
+  subject   String
+  body      String @db.Text
+  updatedBy String
+  updatedAt DateTime @updatedAt
+}
+
+model MarketingCampaign {
+  id          String @id @default(cuid())
+  annualKey   String? @unique
+  name        String
+  subject     String
+  body        String @db.Text
+  excludeStart String
+  excludeEnd   String
+  scheduledAt DateTime
+  status      CampaignStatus @default(DRAFT)
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deliveries  MarketingDelivery[]
+
+  @@index([status, scheduledAt])
+}
+
+model MarketingDelivery {
+  id             String @id @default(cuid())
+  campaignId     String
+  customerId     String
+  email          String
+  status         DeliveryStatus @default(PENDING)
+  attempts       Int @default(0)
+  firstAttemptAt DateTime?
+  lastAttemptAt  DateTime?
+  nextAttemptAt  DateTime @default(now())
+  payload        Json?
+  providerId     String? @unique
+  detail         String?
+  campaign       MarketingCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  customer       Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([campaignId, customerId])
+  @@index([status, nextAttemptAt])
+}
+
+model MarketingSuppression {
+  email     String @id
+  reason    String
+  createdAt DateTime @default(now())
+}
+
+model MarketingRun {
+  id         String @id @default(cuid())
+  startedAt  DateTime @default(now())
+  finishedAt DateTime?
+  processed  Int @default(0)
+  error      String?
+}
+
+model RequestRateLimit {
+  key       String @id
+  count     Int @default(1)
+  expiresAt DateTime
+
   @@index([expiresAt])
 }

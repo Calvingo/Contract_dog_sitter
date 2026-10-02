@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { getCustomerSession } from "@/lib/auth/customer-session";
 import { prisma } from "@/lib/db";
-import { normalizeEmail } from "@/lib/submission-data";
 
 const includeQuery = {
+  _count: { select: { submissions: true } },
   pets: {
     orderBy: { updatedAt: "desc" as const },
     include: {
@@ -36,6 +36,7 @@ type PrefillPet = {
 };
 
 type PrefillCustomer = {
+  _count: { submissions: number };
   firstName: string;
   lastName: string;
   email: string;
@@ -51,6 +52,7 @@ function toPrefillResponse(customer: PrefillCustomer) {
   return {
     authenticated: true,
     customer: {
+      hasBookedBefore: customer._count.submissions > 0,
       firstName: customer.firstName,
       lastName: customer.lastName,
       email: customer.email,
@@ -76,23 +78,7 @@ function toPrefillResponse(customer: PrefillCustomer) {
   };
 }
 
-export async function GET(request: Request) {
-  const url = new URL(request.url);
-  const email = normalizeEmail(url.searchParams.get("email") || "");
-
-  if (email) {
-    const customer = await prisma.customer.findFirst({
-      where: { email: { equals: email, mode: "insensitive" } },
-      include: includeQuery,
-    });
-
-    if (!customer) {
-      return NextResponse.json({ authenticated: false }, { status: 404 });
-    }
-
-    return NextResponse.json(toPrefillResponse(customer));
-  }
-
+export async function GET() {
   const session = await getCustomerSession();
 
   if (!session) {

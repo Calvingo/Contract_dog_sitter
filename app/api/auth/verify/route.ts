@@ -4,41 +4,45 @@ import {
   setCustomerSession,
 } from "@/lib/auth/customer-session";
 import { prisma } from "@/lib/db";
-
+function redirectLocal(path: string) {
+  // Keep redirects on the browser's origin, including localhost/127.0.0.1 aliases.
+  return new NextResponse(null, {
+    status: 303,
+    headers: {
+      Location: path,
+      "Cache-Control": "no-store",
+      "Referrer-Policy": "no-referrer",
+    },
+  });
+}
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const rawToken = url.searchParams.get("token");
-
-  if (!rawToken) {
-    return NextResponse.redirect(new URL("/?returning=invalid", request.url));
-  }
-
-  const tokenHash = hashLoginToken(rawToken);
-  const loginToken = await prisma.loginToken.findUnique({
-    where: { tokenHash },
+  if (!rawToken) return redirectLocal("/login?error=invalid");
+  const customer = await prisma.$transaction(async (tx) => {
+    const token = await tx.loginToken.findUnique({
+      where: { tokenHash: hashLoginToken(rawToken) },
+    });
+    if (!token) return null;
+    const used = await tx.loginToken.updateMany({
+      where: { id: token.id, usedAt: null, expiresAt: { gt: new Date() } },
+      data: { usedAt: new Date() },
+    });
+    if (used.count !== 1) return null;
+    return tx.customer.upsert({
+      where: { email: token.email },
+      update: { lastSeenAt: new Date() },
+      create: {
+        email: token.email,
+        firstName: "",
+        lastName: "",
+        phone: "",
+        backupContact: "email",
+      },
+    });
   });
-
-  if (
-    !loginToken ||
-    loginToken.usedAt ||
-    loginToken.expiresAt.getTime() < Date.now()
-  ) {
-    return NextResponse.redirect(new URL("/?returning=expired", request.url));
-  }
-
-  const customer = await prisma.customer.findUnique({
-    where: { email: loginToken.email },
-  });
-
-  if (!customer) {
-    return NextResponse.redirect(new URL("/?returning=missing", request.url));
-  }
-
-  await prisma.loginToken.update({
-    where: { id: loginToken.id },
-    data: { usedAt: new Date() },
-  });
-
+  if (!customer) return redirectLocal("/login?error=expired");
   await setCustomerSession(customer.id);
-  return NextResponse.redirect(new URL("/?returning=ok", request.url));
+  const next = url.searchParams.get("next");
+  return redirectLocal(next === "/book" ? "/book" : "/account");
 }
