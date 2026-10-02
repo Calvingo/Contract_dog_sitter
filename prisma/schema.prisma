@@ -139,6 +139,7 @@ model PlatformSettings {
 model DailyCapacity {
   date      String   @id
   capacity  Int
+  blocked   Boolean  @default(false)
   note      String   @default("")
   updatedAt DateTime @updatedAt
 }

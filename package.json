@@ -19,7 +19,8 @@
     "test:platform": "node scripts/test-platform.mjs",
     "test:marketing": "node scripts/test-marketing.mjs",
     "check:production": "node scripts/check-production.mjs",
-    "test:booking-entry": "node scripts/test-booking-entry.mjs"
+    "test:booking-entry": "node scripts/test-booking-entry.mjs",
+    "test:admin-workflow": "node scripts/test-admin-workflow.mjs"
   },
   "dependencies": {
     "@pdf-lib/fontkit": "^1.1.1",

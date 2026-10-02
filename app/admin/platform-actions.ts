@@ -9,7 +9,10 @@ import {
 } from "@/lib/platform/capacity";
 import { sendPaymentConfirmation } from "@/lib/platform/payment-email";
 import { depositDue, verifiedAmount } from "@/lib/platform/rules";
-import { dateRange } from "@/lib/platform/rules";
+import {
+  updateCalendarRange,
+  type CalendarMode,
+} from "@/lib/platform/calendar-management";
 import type { ActionState } from "@/components/ActionForm";
 function text(form: FormData, key: string) {
   return String(form.get(key) || "").trim();
@@ -90,41 +93,26 @@ export async function saveDailyCapacity(
   form: FormData,
 ): Promise<ActionState> {
   await requirePlatformAdmin();
-  const start = text(form, "start"),
-    end = text(form, "end") || start;
-  const capacity = Number(text(form, "capacity")),
-    note = text(form, "note").slice(0, 300);
-  if (!Number.isInteger(capacity) || capacity < 0 || capacity > 100)
-    return { error: "Capacity must be a whole number from 0 to 100." };
   try {
-    const dates = dateRange(start, end);
-    await prisma.$transaction(
-      async (tx) => {
-        await lockCapacity(tx);
-        if (form.get("reset") === "on")
-          await tx.dailyCapacity.deleteMany({ where: { date: { in: dates } } });
-        else
-          for (const date of dates)
-            await tx.dailyCapacity.upsert({
-              where: { date },
-              create: { date, capacity, note },
-              update: { capacity, note },
-            });
-      },
-      { timeout: 15000 },
-    );
+    const message = await updateCalendarRange({
+      start: text(form, "start"),
+      end: text(form, "end") || text(form, "start"),
+      mode: text(form, "mode") as CalendarMode,
+      capacity: Number(text(form, "capacity")),
+      note: text(form, "note"),
+    });
     refresh();
-    return {
-      message:
-        "Daily limits updated. Existing bookings have not been cancelled; over-capacity dates are flagged.",
-    };
+    revalidatePath("/book");
+    revalidatePath("/");
+    return { message };
   } catch (error) {
     return {
       error:
-        error instanceof Error ? error.message : "Unable to update capacity.",
+        error instanceof Error ? error.message : "Unable to update calendar.",
     };
   }
 }
+
 export async function reviewPayment(
   _state: ActionState,
   form: FormData,

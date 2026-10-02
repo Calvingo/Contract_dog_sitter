@@ -1,0 +1,1 @@
+ALTER TABLE "DailyCapacity" ADD COLUMN "blocked" BOOLEAN NOT NULL DEFAULT false;

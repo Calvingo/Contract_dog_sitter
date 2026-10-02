@@ -4,9 +4,8 @@ import { availability, getSettings } from "@/lib/platform/capacity";
 import { dateKey, todayKey, validDate } from "@/lib/platform/rules";
 import { prisma } from "@/lib/db";
 import { submissionDogNames } from "@/lib/submission-pets";
-import { ActionForm } from "@/components/ActionForm";
+import { AdminCapacityCalendar } from "@/components/AdminCapacityCalendar";
 import { AdminShell, StatusBadge } from "../admin-ui";
-import { saveDailyCapacity } from "../platform-actions";
 export default async function AdminCalendarPage({
   searchParams,
 }: {
@@ -21,7 +20,7 @@ export default async function AdminCalendarPage({
     end = dateKey(
       new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5)), 0)),
     );
-  const [result, settings, bookings] = await Promise.all([
+  const [result, settings, bookings, overrides] = await Promise.all([
     availability(start, end),
     getSettings(),
     prisma.submission.findMany({
@@ -40,7 +39,24 @@ export default async function AdminCalendarPage({
         },
       },
     }),
+    prisma.dailyCapacity.findMany({
+      where: { date: { gte: start, lte: end } },
+      orderBy: { date: "asc" },
+    }),
   ]);
+  const blocks: { start: string; end: string; note: string }[] = [];
+  for (const row of overrides.filter(
+    (row) => row.blocked || row.capacity === 0,
+  )) {
+    const last = blocks.at(-1);
+    if (
+      last &&
+      last.note === row.note &&
+      Date.parse(row.date) - Date.parse(last.end) === 86400000
+    )
+      last.end = row.date;
+    else blocks.push({ start: row.date, end: row.date, note: row.note });
+  }
   const over = result.days.filter((day) => day.overCapacity);
   return (
     <AdminShell
@@ -48,99 +64,23 @@ export default async function AdminCalendarPage({
       title="Calendar & capacity"
       subtitle={`Default capacity: ${settings.defaultCapacity} dogs. ${settings.includePickupDay ? "Arrival and pick-up dates both count." : "Capacity is counted by night."}`}
     >
-      <section className="panel">
-        <form className="filter-form">
-          <label>
-            View month
-            <input type="month" name="month" defaultValue={month} required />
-          </label>
-          <button className="button">View calendar</button>
-          <Link className="button secondary" href="/admin/settings">
-            Default settings
-          </Link>
-        </form>
-        {over.length > 0 && (
-          <p role="alert" className="notice error">
-            {over.length} day(s) exceed the current limit. Existing reservations
-            remain in place; resolve these manually before accepting more dogs.
-          </p>
-        )}
-        <div className="capacity-grid">
-          {result.days.map((day) => (
-            <div
-              key={day.date}
-              className={`capacity-day ${day.closed ? "closed" : day.remaining === 0 ? "full" : ""} ${day.overCapacity ? "over" : ""}`}
-            >
-              <strong>{Number(day.date.slice(8))}</strong>
-              <div>
-                {day.occupied} / {day.capacity} dogs
-              </div>
-              <div>
-                {day.overCapacity
-                  ? "Over capacity"
-                  : day.closed
-                    ? "Closed"
-                    : `${day.remaining} available`}
-              </div>
-            </div>
-          ))}
-        </div>
-        <p className="small">
-          Includes active holds and verified deposits. Expired unpaid holds
-          release their space automatically.
+      {over.length > 0 && (
+        <p role="alert" className="notice error">
+          {over.length} day(s) exceed the current limit. Review existing stays
+          before accepting more dogs.
         </p>
-      </section>
-      <section className="panel">
-        <h2>Adjust daily limits</h2>
-        <ActionForm action={saveDailyCapacity} label="Update capacity">
-          <div className="field-grid">
-            <label>
-              From
-              <input
-                type="date"
-                name="start"
-                defaultValue={todayKey()}
-                required
-              />
-            </label>
-            <label>
-              Through
-              <input
-                type="date"
-                name="end"
-                defaultValue={todayKey()}
-                required
-              />
-            </label>
-            <label>
-              Maximum dogs (0 = closed)
-              <input
-                type="number"
-                name="capacity"
-                min="0"
-                max="100"
-                defaultValue={settings.defaultCapacity}
-                required
-              />
-            </label>
-            <label>
-              Internal note
-              <input
-                name="note"
-                maxLength={300}
-                placeholder="e.g. Holiday staffing"
-              />
-            </label>
-          </div>
-          <label className="check-label">
-            <input type="checkbox" name="reset" />
-            <span>
-              Remove overrides for these dates and use the default capacity
-              instead.
-            </span>
-          </label>
-        </ActionForm>
-      </section>
+      )}
+      <AdminCapacityCalendar
+        month={month}
+        days={result.days}
+        defaultCapacity={settings.defaultCapacity}
+        blocks={blocks}
+      />
+      <p className="small">
+        Counts come from website reservations, including active holds and
+        verified deposits. Expired unpaid holds release their space
+        automatically. Notion data is not connected yet.
+      </p>
       <section className="panel table-scroll">
         <h2>Stays in this month</h2>
         <table className="platform-table">

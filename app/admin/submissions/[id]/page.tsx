@@ -1,13 +1,10 @@
 import Link from "next/link";
-import { ActionForm } from "@/components/ActionForm";
+import { BookingRequestActions } from "@/components/BookingRequestActions";
 import { notFound, redirect } from "next/navigation";
 import { getAdminSession } from "@/lib/auth/admin-session";
 import { prisma } from "@/lib/db";
 import { submissionDogNames } from "@/lib/submission-pets";
-import {
-  decideSubmissionActionWithState,
-  updateCustomerPetAction,
-} from "../../actions";
+import { updateCustomerPetAction } from "../../actions";
 import { AdminShell } from "../../admin-ui";
 import { EditOrderForm } from "../_edit-order-form";
 
@@ -80,40 +77,17 @@ export default async function AdminSubmissionDetailPage(props: {
 
         <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-orange-100">
           <h2 className="text-xl font-bold text-stone-950">Admin Decision</h2>
-          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
-            <ActionForm
-              action={decideSubmissionActionWithState}
-              label="Accept and email customer"
-            >
-              <input type="hidden" name="submissionId" value={submission.id} />
-              <input type="hidden" name="action" value="accept" />
-            </ActionForm>
-            <ActionForm
-              action={decideSubmissionActionWithState}
-              label="Reject and email customer"
-            >
-              <input type="hidden" name="submissionId" value={submission.id} />
-              <input type="hidden" name="action" value="reject" />
-            </ActionForm>
-            <ActionForm
-              action={decideSubmissionActionWithState}
-              label="Send meet & greet"
-              className="form-stack"
-            >
-              <input type="hidden" name="submissionId" value={submission.id} />
-              <input type="hidden" name="action" value="meet_greet" />
-              <input
-                type="datetime-local"
-                name="meetGreetAt"
-                className="min-w-0 flex-1 rounded-xl border border-stone-200 px-3 py-3 text-sm"
-                required
-              />
-            </ActionForm>
-          </div>
+          <BookingRequestActions
+            id={submission.id}
+            status={submission.status}
+            revision={submission.revision}
+            showEdit={false}
+          />
         </section>
 
         <section className="grid gap-6 lg:grid-cols-2">
           <EditOrderForm
+            key={`${submission.revision}:${submission.status}`}
             submissionId={submission.id}
             defaultStatus={submission.status}
             defaultDropoffAt={localDateTimeInputValue(submission.dropoffAt)}

@@ -1,4 +1,5 @@
 import { prepareStatusChange } from "@/lib/platform/capacity";
+import { bookingDecisionActions } from "./booking-actions";
 import {
   DecisionAction as DbDecisionAction,
   EmailStatus,
@@ -68,6 +69,8 @@ export async function processAdminSubmissionDecision(options: {
   action: DecisionAction;
   adminEmail: string;
   meetGreetAt?: string;
+  expectedRevision?: number;
+  expectedStatus?: string;
 }) {
   if (options.action === "meet_greet" && !options.meetGreetAt) {
     throw new Error("Meet & greet time is required.");
@@ -84,6 +87,20 @@ export async function processAdminSubmissionDecision(options: {
 
   if (!submission) {
     throw new Error("Submission not found.");
+  }
+  if (!bookingDecisionActions(submission.status).includes(options.action)) {
+    throw new Error(
+      "This decision was already recorded. Refresh the page and use Edit to make changes. No email was sent.",
+    );
+  }
+  if (
+    (options.expectedRevision !== undefined &&
+      options.expectedRevision !== submission.revision) ||
+    (options.expectedStatus && options.expectedStatus !== submission.status)
+  ) {
+    throw new Error(
+      "This booking changed. Refresh and review the latest details before deciding.",
+    );
   }
 
   const message =

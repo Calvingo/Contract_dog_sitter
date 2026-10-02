@@ -74,6 +74,14 @@ The existing production app stores booking timestamps as local civil date/time v
 
 Configure the real Zelle enrolled identifier / recipient name and Venmo username / recipient name in **Admin → Settings**. Empty values disable that method. No real payment details are seeded by migrations.
 
+## Admin booking and calendar actions
+
+Pending / needs-review requests offer Accept, Reject, and Schedule meet & greet. After a meet & greet is requested, only Accept, Reject, and Edit remain. Accepted, rejected, and cancelled requests show Edit only. The server rejects repeated or stale decisions before sending another email; concurrent decisions use the shared transaction lock.
+
+Admin → Calendar supports selecting an inclusive date range and choosing Block dates, Unblock dates, or Adjust limit. Manual blocks stop new reservations while preserving existing stays and configured daily limits. Changing a limit does not remove a manual block; unblocking does not open dates that are still full. Counts currently come from website reservations; Notion synchronization is not configured.
+
+`TEST_DATABASE_URL=postgresql://USER@127.0.0.1:55439/postgres npm run test:admin-workflow` validates cross-month blocks, preserved occupancy and limits, stale/repeated/concurrent decisions, and email deduplication using a fake sender. It requires the isolated local test database and never sends real mail.
+
 ## Checks
 
 ```bash

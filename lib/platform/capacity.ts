@@ -42,18 +42,20 @@ export async function availability(
     db.dailyCapacity.findMany({ where: { date: { gte: start, lte: end } } }),
   ]);
   const counts = occupancyByDay(bookings, settings.includePickupDay);
-  const capacities = new Map(overrides.map((row) => [row.date, row.capacity]));
+  const capacities = new Map(overrides.map((row) => [row.date, row]));
   return {
     includePickupDay: settings.includePickupDay,
     days: dates.map((date) => {
-      const capacity = capacities.get(date) ?? settings.defaultCapacity;
+      const override = capacities.get(date);
+      const capacity = override?.capacity ?? settings.defaultCapacity;
+      const closed = Boolean(override?.blocked) || capacity === 0;
       const occupied = counts.get(date) ?? 0;
       return {
         date,
         capacity,
         occupied,
-        remaining: Math.max(0, capacity - occupied),
-        closed: capacity === 0,
+        remaining: closed ? 0 : Math.max(0, capacity - occupied),
+        closed,
         overCapacity: occupied > capacity,
       };
     }),

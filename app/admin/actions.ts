@@ -40,8 +40,18 @@ export async function decideSubmissionAction(formData: FormData) {
   const submissionId = String(formData.get("submissionId") || "");
   const action = String(formData.get("action") || "") as DecisionAction;
   const meetGreetAt = String(formData.get("meetGreetAt") || "").trim();
+  const revision = Number(formData.get("revision"));
+  const expectedStatus = String(formData.get("expectedStatus") || "");
 
-  if (!submissionId || !["accept", "reject", "meet_greet"].includes(action)) {
+  if (
+    !submissionId ||
+    !["accept", "reject", "meet_greet"].includes(action) ||
+    !Number.isInteger(revision) ||
+    revision < 1 ||
+    !Object.values(SubmissionStatus).includes(
+      expectedStatus as SubmissionStatus,
+    )
+  ) {
     throw new Error("Invalid admin decision.");
   }
 
@@ -50,6 +60,8 @@ export async function decideSubmissionAction(formData: FormData) {
     action,
     adminEmail: session.email,
     meetGreetAt: meetGreetAt || undefined,
+    expectedRevision: revision,
+    expectedStatus,
   });
 
   revalidatePath("/admin");

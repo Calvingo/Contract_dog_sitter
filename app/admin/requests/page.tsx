@@ -1,11 +1,9 @@
-import Link from "next/link";
-import { ActionForm } from "@/components/ActionForm";
+import { BookingRequestActions } from "@/components/BookingRequestActions";
 import { SubmissionStatus } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { getAdminSession } from "@/lib/auth/admin-session";
 import { prisma } from "@/lib/db";
 import { submissionDogNames } from "@/lib/submission-pets";
-import { decideSubmissionActionWithState } from "../actions";
 import { AdminShell, StatusBadge, dateTime, money } from "../admin-ui";
 
 export default async function AdminRequestsPage() {
@@ -115,44 +113,11 @@ export default async function AdminRequestsPage() {
                     ) : null}
                   </td>
                   <td className="py-4 pr-4">
-                    <div className="flex min-w-64 flex-col gap-2">
-                      <div className="flex flex-wrap gap-2">
-                        <DecisionButton
-                          submissionId={submission.id}
-                          action="accept"
-                          label="Accept"
-                        />
-                        <DecisionButton
-                          submissionId={submission.id}
-                          action="reject"
-                          label="Reject"
-                        />
-                      </div>
-                      <ActionForm
-                        action={decideSubmissionActionWithState}
-                        label="Send meet & greet"
-                        className="form-stack"
-                      >
-                        <input
-                          type="hidden"
-                          name="submissionId"
-                          value={submission.id}
-                        />
-                        <input type="hidden" name="action" value="meet_greet" />
-                        <input
-                          type="datetime-local"
-                          name="meetGreetAt"
-                          className="min-w-0 flex-1 rounded-lg border border-stone-200 px-2 py-2 text-xs"
-                          required
-                        />
-                      </ActionForm>
-                      <Link
-                        href={`/admin/submissions/${submission.id}`}
-                        className="text-xs font-semibold text-orange-700"
-                      >
-                        View and edit
-                      </Link>
-                    </div>
+                    <BookingRequestActions
+                      id={submission.id}
+                      status={submission.status}
+                      revision={submission.revision}
+                    />
                   </td>
                 </tr>
               ))}
@@ -161,18 +126,5 @@ export default async function AdminRequestsPage() {
         </div>
       </section>
     </AdminShell>
-  );
-}
-
-function DecisionButton(props: {
-  submissionId: string;
-  action: "accept" | "reject";
-  label: string;
-}) {
-  return (
-    <ActionForm action={decideSubmissionActionWithState} label={props.label}>
-      <input type="hidden" name="submissionId" value={props.submissionId} />
-      <input type="hidden" name="action" value={props.action} />
-    </ActionForm>
   );
 }
