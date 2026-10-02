@@ -241,7 +241,7 @@ export function AvailabilityCalendar({
                       onTimeChange(item.name, event.target.value)
                     }
                     aria-invalid={Boolean(errors?.[item.name])}
-                    className="w-full rounded-xl border border-stone-200 bg-white px-3 py-3"
+                    className="w-full rounded-xl border border-orange-100 bg-white px-3 py-3 text-stone-800"
                   >
                     <option value="">Choose a time</option>
                     {item.time &&

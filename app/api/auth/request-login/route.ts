@@ -74,6 +74,10 @@ export async function POST(request: Request) {
         { status: 429, headers: { "Retry-After": "900" } },
       );
 
+    const customer = await prisma.customer.findUnique({ where: { email } });
+    if (customer?.deactivatedAt)
+      return NextResponse.json({ error: "This account is deactivated. Contact us to restore access." }, { status: 403 });
+
     const recentToken = await prisma.loginToken.findFirst({
       where: {
         email,

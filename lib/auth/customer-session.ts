@@ -1,5 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
+import { prisma } from "@/lib/db";
 
 const CUSTOMER_SESSION_COOKIE = "spr_customer_session";
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -8,6 +9,7 @@ const SEP = ".";
 type CustomerSessionPayload = {
   customerId: string;
   exp: number;
+  version?: number;
 };
 
 function getSessionSecret(): string {
@@ -22,10 +24,11 @@ function sign(data: string): string {
   return createHmac("sha256", getSessionSecret()).update(data).digest("base64url");
 }
 
-function createCustomerSessionToken(customerId: string): string {
+function createCustomerSessionToken(customerId: string, version: number): string {
   const payload: CustomerSessionPayload = {
     customerId,
     exp: Date.now() + SESSION_TTL_MS,
+    version,
   };
   const data = Buffer.from(JSON.stringify(payload)).toString("base64url");
   return `${data}${SEP}${sign(data)}`;
@@ -58,14 +61,17 @@ function verifyCustomerSessionToken(token: string): CustomerSessionPayload | nul
 }
 
 export async function setCustomerSession(customerId: string) {
+  const customer = await prisma.customer.findUnique({ where: { id: customerId } });
+  if (!customer || customer.deactivatedAt) return false;
   const cookieStore = await cookies();
-  cookieStore.set(CUSTOMER_SESSION_COOKIE, createCustomerSessionToken(customerId), {
+  cookieStore.set(CUSTOMER_SESSION_COOKIE, createCustomerSessionToken(customerId, customer.sessionVersion ?? 0), {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
     maxAge: Math.floor(SESSION_TTL_MS / 1000),
   });
+  return true;
 }
 
 export async function clearCustomerSession() {
@@ -76,7 +82,11 @@ export async function clearCustomerSession() {
 export async function getCustomerSession(): Promise<CustomerSessionPayload | null> {
   const cookieStore = await cookies();
   const raw = cookieStore.get(CUSTOMER_SESSION_COOKIE)?.value;
-  return raw ? verifyCustomerSessionToken(raw) : null;
+  const session = raw ? verifyCustomerSessionToken(raw) : null;
+  if (!session) return null;
+  const customer = await prisma.customer.findUnique({ where: { id: session.customerId } });
+  if (!customer || customer.deactivatedAt || (customer.sessionVersion ?? 0) !== (session.version ?? 0)) return null;
+  return session;
 }
 
 export function createRawLoginToken(): string {

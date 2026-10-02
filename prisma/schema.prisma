@@ -54,6 +54,8 @@ model Customer {
   emergencyContactPhone     String?
   wechatId                  String?
   lastSeenAt                DateTime?
+  deactivatedAt             DateTime?
+  sessionVersion            Int                     @default(0)
   createdAt                 DateTime                @default(now())
   updatedAt                 DateTime                @updatedAt
   emailMarketingOptIn       Boolean                 @default(false)
@@ -74,6 +76,9 @@ model Pet {
   breed          String
   weightLb       Float
   ageYears       Float?
+  prescreenAnswers Json?
+  prescreenNotes String?          @db.Text
+  archivedAt     DateTime?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   customer       Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)

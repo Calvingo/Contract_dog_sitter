@@ -170,6 +170,7 @@ function toTimeInputValue(date: Date): string {
 }
 
 type SubmissionLike = {
+  petId?: string;
   firstTimeBooking: string;
   dropoffAt: Date;
   pickupAt: Date;
@@ -179,6 +180,7 @@ type SubmissionLike = {
   customerSnapshot: unknown;
   petSnapshot: unknown;
   submissionPets?: Array<{
+    petId?: string;
     position: number;
     petSnapshot: unknown;
     prescreenAnswers: unknown;
@@ -204,6 +206,8 @@ export function formValuesFromSubmission(
 
   return {
     firstTimeBooking: submission.firstTimeBooking,
+    savedPetId: submission.petId,
+    savedSecondPetId: second?.petId,
     prescreenAggression: prescreen.prescreenAggression ?? "",
     prescreenBitten: prescreen.prescreenBitten ?? "",
     prescreenPottyTraining: prescreen.prescreenPottyTraining ?? "",

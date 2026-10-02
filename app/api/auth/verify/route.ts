@@ -42,7 +42,8 @@ export async function GET(request: Request) {
     });
   });
   if (!customer) return redirectLocal("/login?error=expired");
-  await setCustomerSession(customer.id);
+  if (!(await setCustomerSession(customer.id)))
+    return redirectLocal("/login?deactivated=1");
   const next = url.searchParams.get("next");
   return redirectLocal(next === "/book" ? "/book" : "/account");
 }

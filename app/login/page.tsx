@@ -21,6 +21,13 @@ function Login() {
       <section className="panel login-card">
         <p className="eyebrow">YOUR DOG’S HOME AWAY FROM HOME</p>
         <h1>Welcome to the pack.</h1>
+        {params.get("deactivated") === "1" && (
+          <p role="status" className="notice">
+            Your account has been deactivated and you have been signed out.
+            Existing bookings remain in place and your history is retained.
+            Contact Silicon Paws Retreat to restore your account.
+          </p>
+        )}
         <p>
           New here or returning? Enter your email and we’ll send you a secure
           sign-in link. No password needed.

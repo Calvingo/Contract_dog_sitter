@@ -17,6 +17,15 @@ import {
   verifiedAmount,
 } from "@/lib/platform/rules";
 import type { ActionState } from "@/components/ActionForm";
+import { prescreenQuestions } from "@/lib/form-config";
+import {
+  archiveCustomerDog,
+  deactivateCustomerAccount,
+  lockCustomerProfile,
+  restoreCustomerDog,
+  saveCustomerDetails,
+  saveCustomerDog,
+} from "@/lib/services/customer-profile";
 
 function text(form: FormData, key: string) {
   return String(form.get(key) || "").trim();
@@ -38,43 +47,30 @@ export async function saveProfile(
   form: FormData,
 ): Promise<ActionState> {
   const customer = await requireCustomer();
-  const firstName = text(form, "firstName"),
-    lastName = text(form, "lastName"),
-    phone = text(form, "phone");
-  if (
-    !firstName ||
-    !lastName ||
-    !phone ||
-    firstName.length > 100 ||
-    lastName.length > 100 ||
-    phone.length > 40
-  )
-    return { error: "Enter your name and a valid phone number." };
   const emailOptIn = form.get("emailOptIn") === "on";
   // Retain legacy database fields for compatibility; SMS cannot be opted into.
   const smsOptIn = false;
   try {
     await prisma.$transaction(async (tx) => {
+      await lockCustomerProfile(tx, customer.id);
       const current = await tx.customer.findUniqueOrThrow({
         where: { id: customer.id },
       });
+      await saveCustomerDetails(customer.id, {
+        firstName: text(form, "firstName"),
+        lastName: text(form, "lastName"),
+        phone: text(form, "phone"),
+        backupContact: text(form, "backupContact"),
+        emergencyContactName: text(form, "emergencyContactName"),
+        emergencyContactPhone: text(form, "emergencyContactPhone"),
+        wechatId: text(form, "wechatId"),
+      }, tx);
       const changed =
         current.emailMarketingOptIn !== emailOptIn ||
         current.smsMarketingOptIn !== smsOptIn;
       await tx.customer.update({
         where: { id: customer.id },
         data: {
-          firstName,
-          lastName,
-          phone,
-          emergencyContactName: text(form, "emergencyContactName").slice(
-            0,
-            100,
-          ),
-          emergencyContactPhone: text(form, "emergencyContactPhone").slice(
-            0,
-            40,
-          ),
           emailMarketingOptIn: emailOptIn,
           smsMarketingOptIn: smsOptIn,
           marketingConsentUpdatedAt: new Date(),
@@ -92,10 +88,11 @@ export async function saveProfile(
     });
     revalidatePath("/account/profile");
     revalidatePath("/account");
+    revalidatePath("/book");
     revalidatePath("/admin/customers");
     return { message: "Your profile and email preferences have been saved." };
-  } catch {
-    return { error: "Unable to save your profile. Please try again." };
+  } catch (error) {
+    return failed(error);
   }
 }
 export async function saveDog(
@@ -103,46 +100,70 @@ export async function saveDog(
   form: FormData,
 ): Promise<ActionState> {
   const customer = await requireCustomer();
-  const id = text(form, "id"),
-    name = text(form, "name"),
-    breed = text(form, "breed"),
-    weightLb = Number(text(form, "weightLb"));
-  const rawAge = text(form, "ageYears"),
-    ageYears = rawAge === "" ? null : Number(rawAge);
-  if (
-    !name ||
-    !breed ||
-    name.length > 100 ||
-    breed.length > 100 ||
-    !Number.isFinite(weightLb) ||
-    weightLb <= 0 ||
-    weightLb > 300 ||
-    (ageYears !== null &&
-      (!Number.isFinite(ageYears) || ageYears < 0 || ageYears > 40))
-  )
-    return { error: "Check your dog’s name, breed, weight and age." };
   try {
-    if (id) {
-      const updated = await prisma.pet.updateMany({
-        where: { id, customerId: customer.id },
-        data: { name, breed, weightLb, ageYears },
-      });
-      if (!updated.count) return { error: "Dog not found." };
-    } else
-      await prisma.pet.create({
-        data: { customerId: customer.id, name, breed, weightLb, ageYears },
-      });
-    revalidatePath("/account/dogs");
+    await saveCustomerDog(customer.id, {
+      id: text(form, "id") || undefined,
+      name: text(form, "name"),
+      breed: text(form, "breed"),
+      weightLb: text(form, "weightLb"),
+      ageYears: text(form, "ageYears"),
+      prescreenAnswers: Object.fromEntries(
+        prescreenQuestions.map((question) => [question.name, text(form, question.name)]),
+      ),
+      prescreenNotes: text(form, "prescreenNotes"),
+    });
+    revalidateCustomerDogs();
     return {
       message:
         "Dog profile saved. Existing booking agreements keep their original details.",
     };
-  } catch {
-    return {
-      error:
-        "Unable to save. Check whether you already have a dog with this name.",
-    };
+  } catch (error) {
+    return failed(error);
   }
+}
+
+function revalidateCustomerDogs() {
+  revalidatePath("/account/dogs");
+  revalidatePath("/account");
+  revalidatePath("/book");
+  revalidatePath("/admin/customers");
+}
+
+export async function archiveDog(_state: ActionState, form: FormData): Promise<ActionState> {
+  const customer = await requireCustomer();
+  try {
+    await archiveCustomerDog(customer.id, text(form, "id"));
+    revalidateCustomerDogs();
+    return { message: "Dog profile removed from future bookings. You can restore it below. Existing bookings and agreements are unchanged." };
+  } catch (error) {
+    return failed(error);
+  }
+}
+
+export async function restoreDog(_state: ActionState, form: FormData): Promise<ActionState> {
+  const customer = await requireCustomer();
+  try {
+    await restoreCustomerDog(customer.id, text(form, "id"));
+    revalidateCustomerDogs();
+    return { message: "Dog profile restored. Its saved details are available for future bookings." };
+  } catch (error) {
+    return failed(error);
+  }
+}
+
+export async function deactivateAccount(_state: ActionState, form: FormData): Promise<ActionState> {
+  const customer = await requireCustomer();
+  if (form.get("confirmDeactivation") !== "on")
+    return { error: "Confirm that you understand deactivation does not cancel existing bookings." };
+  try {
+    await deactivateCustomerAccount(customer.id);
+    revalidatePath("/admin/customers");
+    revalidatePath("/account", "layout");
+  } catch (error) {
+    return failed(error);
+  }
+  await clearCustomerSession();
+  redirect("/login?deactivated=1");
 }
 export async function editBooking(form: FormData) {
   const customer = await requireCustomer();

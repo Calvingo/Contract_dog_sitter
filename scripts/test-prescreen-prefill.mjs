@@ -31,8 +31,11 @@ const {
   secondPrescreenQuestions,
 } = require("../lib/form-config.ts");
 const {
+  customerPrefillValues,
   hasSavedPrescreen,
+  petPrefillValues,
   prescreenPrefillValues,
+  selectPrefillPets,
 } = require("../lib/booking-prefill.ts");
 const answers = Object.fromEntries(
   prescreenQuestions.map((q, index) => [q.name, index % 2 ? "yes" : "no"]),
@@ -42,9 +45,136 @@ const pet = {
   name: "Pocky",
   breed: "Corgi",
   weightLb: 20,
+  ageYears: 3,
   lastPrescreenAnswers: answers,
   lastPrescreenNotes: "Dinner at 6 pm",
 };
+const ownerFields = {
+  firstName: "Returning",
+  lastName: "Guest",
+  email: "returning@example.test",
+  phone: "5551234567",
+  backupContact: "wechat",
+  emergencyContactName: "Trusted Friend",
+  emergencyContactPhone: "5559876543",
+  wechatId: "returning-guest",
+};
+const customer = { hasBookedBefore: true, ...ownerFields };
+assert.deepEqual(customerPrefillValues(customer), {
+  firstTimeBooking: "no",
+  ...ownerFields,
+  agreed: false,
+  signature: "",
+});
+assert.equal(
+  customerPrefillValues({ ...customer, hasBookedBefore: false }).firstTimeBooking,
+  "yes",
+);
+const secondAnswers = Object.fromEntries(
+  prescreenQuestions.map((q) => [q.name, answers[q.name] === "yes" ? "no" : "yes"]),
+);
+const secondFormAnswers = Object.fromEntries(
+  secondPrescreenQuestions.map((q, index) => [
+    q.name,
+    secondAnswers[prescreenQuestions[index].name],
+  ]),
+);
+const secondPet = {
+  id: "second-dog",
+  name: "Milo",
+  breed: "Poodle",
+  weightLb: 15.5,
+  ageYears: 0.5,
+  lastPrescreenAnswers: secondAnswers,
+  lastPrescreenNotes: "Bring blue blanket",
+};
+assert.deepEqual(petPrefillValues(pet), {
+  savedPetId: "dog",
+  petName: "Pocky",
+  petBreed: "Corgi",
+  petWeightLb: "20",
+  petAgeYears: "3",
+  ...answers,
+  prescreenNotes: "Dinner at 6 pm",
+});
+assert.deepEqual(petPrefillValues(secondPet, true), {
+  savedSecondPetId: "second-dog",
+  hasSecondDog: true,
+  secondPetName: "Milo",
+  secondPetBreed: "Poodle",
+  secondPetWeightLb: "15.5",
+  secondPetAgeYears: "0.5",
+  ...secondFormAnswers,
+  secondPrescreenNotes: "Bring blue blanket",
+});
+for (const second of [false, true]) {
+  const ageField = second ? "secondPetAgeYears" : "petAgeYears";
+  assert.equal(petPrefillValues({ ...pet, ageYears: 0 }, second)[ageField], "0");
+  for (const ageYears of [null, undefined])
+    assert.equal(petPrefillValues({ ...pet, ageYears }, second)[ageField], "");
+}
+const privateData = { authenticated: true, customer, pets: [pet, secondPet] };
+assert.deepEqual(selectPrefillPets(privateData, {}), { first: pet, second: secondPet });
+assert.deepEqual(selectPrefillPets(privateData, { first: secondPet.id }), {
+  first: secondPet,
+  second: pet,
+});
+assert.deepEqual(selectPrefillPets(privateData, { second: pet.id }), {
+  first: secondPet,
+  second: pet,
+}, "Verification must preserve an explicit second dog without selecting it twice");
+assert.deepEqual(selectPrefillPets(privateData, { first: pet.id, second: pet.id }), {
+  first: pet,
+  second: undefined,
+});
+assert.deepEqual(selectPrefillPets({ ...privateData, pets: [pet] }, {}), {
+  first: pet,
+  second: undefined,
+});
+assert.deepEqual(selectPrefillPets({ ...privateData, pets: [] }, {}), {
+  first: undefined,
+  second: undefined,
+});
+assert.deepEqual(selectPrefillPets(privateData, { first: "" }), {
+  first: undefined,
+  second: undefined,
+}, "Clearing dog 1 must not restore a saved dog during verified prefill");
+assert.deepEqual(selectPrefillPets(privateData, { first: pet.id, second: "" }), {
+  first: pet,
+  second: undefined,
+}, "Removing dog 2 must survive another prefill");
+const publicData = { ...privateData, authenticated: false };
+assert.deepEqual(selectPrefillPets(publicData, {}), {
+  first: undefined,
+  second: undefined,
+}, "Email-only lookup must not automatically choose among several dogs");
+assert.deepEqual(selectPrefillPets(publicData, { first: pet.id }), {
+  first: pet,
+  second: undefined,
+});
+assert.deepEqual(selectPrefillPets({ ...publicData, pets: [pet] }, {}), {
+  first: pet,
+  second: undefined,
+});
+const currentBooking = {
+  dropoffDate: "2092-05-10",
+  dropoffTime: "09:30",
+  pickupDate: "2092-05-12",
+  pickupTime: "17:15",
+};
+const merged = {
+  ...initialFormValues,
+  ...currentBooking,
+  agreed: true,
+  signature: "previous-booking-signature",
+  ...customerPrefillValues(customer),
+  ...petPrefillValues(pet),
+  ...petPrefillValues(secondPet, true),
+};
+for (const [field, value] of Object.entries(currentBooking))
+  assert.equal(merged[field], value, `Prefill must preserve this booking's ${field}`);
+assert.equal(merged.agreed, false, "A new booking requires agreement again");
+assert.equal(merged.signature, "", "A previous signature must never be prefilled");
 assert.equal(hasSavedPrescreen(pet), true);
 assert.equal(
   hasSavedPrescreen({
@@ -78,7 +208,7 @@ assert.equal(
   "",
 );
 console.log(
-  "PASS per-dog answer mapping, partial/invalid answers, notes and clearing a new dog's answers",
+  "PASS all owner fields, both dogs' details/answers/notes, zero/missing age, verified selection, explicit clearing, public selection, current booking dates and fresh agreement/signature",
 );
 if (!process.env.TEST_DATABASE_URL) {
   console.log(
@@ -100,6 +230,8 @@ Object.assign(process.env, {
 const cookies = new Map();
 const originalLoad = Module._load;
 Module._load = function (request, parent, ...args) {
+  if (request === "nodemailer")
+    return { createTransport: () => assert.fail("This test must never send real email") };
   if (request === "next/headers")
     return {
       cookies: async () => ({
@@ -123,13 +255,10 @@ const stamp = Date.now();
 const ids = [];
 const values = {
   ...initialFormValues,
+  ...ownerFields,
   ...answers,
-  ...Object.fromEntries(secondPrescreenQuestions.map((q) => [q.name, "no"])),
+  ...secondFormAnswers,
   email: `prescreen-${stamp}@example.test`,
-  firstName: "Returning",
-  lastName: "Guest",
-  phone: "5551234567",
-  backupContact: "email",
   petName: "Pocky",
   petBreed: "Corgi",
   petWeightLb: "20",
@@ -138,8 +267,8 @@ const values = {
   hasSecondDog: true,
   secondPetName: "Milo",
   secondPetBreed: "Poodle",
-  secondPetWeightLb: "15",
-  secondPetAgeYears: "2",
+  secondPetWeightLb: "15.5",
+  secondPetAgeYears: "0.5",
   secondPrescreenNotes: "Bring blue blanket",
   dropoffDate: "2092-04-01",
   pickupDate: "2092-04-02",
@@ -148,6 +277,56 @@ const values = {
   signature: "test-only",
   agreed: true,
 };
+function assertStoredPrefill(data, expected) {
+  assert.equal(data.authenticated, true);
+  assert.deepEqual(data.customer, {
+    hasBookedBefore: true,
+    ...Object.fromEntries(Object.keys(ownerFields).map((field) => [field, expected[field]])),
+  });
+  assert.equal(data.pets.length, 2);
+  const first = data.pets.find((item) => item.name === expected.petName);
+  const second = data.pets.find((item) => item.name === expected.secondPetName);
+  assert.ok(first && second && first.id !== second.id);
+  for (const [savedPet, isSecond] of [[first, false], [second, true]]) {
+    assert.equal(savedPet.breed, expected[isSecond ? "secondPetBreed" : "petBreed"]);
+    assert.equal(savedPet.weightLb, Number(expected[isSecond ? "secondPetWeightLb" : "petWeightLb"]));
+    assert.equal(savedPet.ageYears, Number(expected[isSecond ? "secondPetAgeYears" : "petAgeYears"]));
+    assert.equal(savedPet.lastPrescreenNotes, expected[isSecond ? "secondPrescreenNotes" : "prescreenNotes"]);
+    assert.deepEqual(savedPet.lastPrescreenAnswers, Object.fromEntries(
+      prescreenQuestions.map((question, index) => [
+        question.name,
+        expected[isSecond ? secondPrescreenQuestions[index].name : question.name],
+      ]),
+    ));
+    assert.ok(Number.isFinite(Date.parse(savedPet.lastSubmittedAt)));
+  }
+  const autoSelected = selectPrefillPets(data, {});
+  assert.deepEqual(new Set([autoSelected.first.id, autoSelected.second.id]), new Set([first.id, second.id]));
+  const filled = {
+    ...initialFormValues,
+    ...currentBooking,
+    agreed: true,
+    signature: "old-signature",
+    ...customerPrefillValues(data.customer),
+    ...petPrefillValues(first),
+    ...petPrefillValues(second, true),
+  };
+  const savedFields = [
+    ...Object.keys(ownerFields),
+    "petName", "petBreed", "petWeightLb", "petAgeYears", "prescreenNotes",
+    "secondPetName", "secondPetBreed", "secondPetWeightLb", "secondPetAgeYears", "secondPrescreenNotes",
+    ...prescreenQuestions.map((question) => question.name),
+    ...secondPrescreenQuestions.map((question) => question.name),
+  ];
+  for (const field of savedFields)
+    assert.equal(filled[field], expected[field], `${field} survives storage, retrieval and form prefill`);
+  for (const [field, value] of Object.entries(currentBooking))
+    assert.equal(filled[field], value);
+  assert.equal(filled.firstTimeBooking, "no");
+  assert.equal(filled.hasSecondDog, true);
+  assert.equal(filled.agreed, false);
+  assert.equal(filled.signature, "");
+}
 try {
   const created = await createSubmissionRecord(values);
   ids.push(created.customer.id);
@@ -162,14 +341,7 @@ try {
   });
   ids.push(other.id);
   let saved = await loadCustomerPrefill(created.customer.id);
-  assert.deepEqual(
-    saved.pets.find((p) => p.name === "Pocky").lastPrescreenAnswers,
-    answers,
-  );
-  assert.equal(
-    saved.pets.find((p) => p.name === "Milo").lastPrescreenNotes,
-    "Bring blue blanket",
-  );
+  assertStoredPrefill(saved, values);
   assert.equal((await GET()).status, 401);
   const lookup = (email) =>
     POST(
@@ -181,6 +353,23 @@ try {
     );
   const publicLookup = await (await lookup(values.email)).json();
   assert.equal(publicLookup.authenticated, false);
+  assert.deepEqual(publicLookup.customer, {
+    ...saved.customer,
+    emergencyContactName: "",
+    emergencyContactPhone: "",
+    wechatId: "",
+  }, "Email-only lookup must not disclose emergency contacts or WeChat ID");
+  assert.equal(publicLookup.pets.length, 2);
+  for (const publicPet of publicLookup.pets) {
+    const fullPet = saved.pets.find((item) => item.id === publicPet.id);
+    assert.deepEqual(publicPet, {
+      id: fullPet.id,
+      name: fullPet.name,
+      breed: fullPet.breed,
+      weightLb: fullPet.weightLb,
+      ageYears: fullPet.ageYears,
+    });
+  }
   assert.ok(
     publicLookup.pets.every(
       (p) =>
@@ -205,16 +394,8 @@ try {
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("cache-control"), "private, no-store");
   const rich = await response.json();
-  assert.equal(rich.customer.email, values.email);
-  assert.deepEqual(
-    rich.pets.find((p) => p.name === "Pocky").lastPrescreenAnswers,
-    answers,
-  );
-  assert.equal(
-    (await (await lookup(values.email)).json()).authenticated,
-    true,
-    "Matching verified POST must not downgrade to public data",
-  );
+  assertStoredPrefill(rich, values);
+  assertStoredPrefill(await (await lookup(values.email)).json(), values);
   assert.equal(
     (await (await lookup(other.email)).json()).authenticated,
     false,
@@ -230,31 +411,41 @@ try {
     },
     created.customer.id,
   );
+  assertStoredPrefill(await loadCustomerPrefill(created.customer.id), {
+    ...values,
+    prescreenNotes: "Updated meal plan",
+  });
+  const editedValues = {
+    ...values,
+    ...secondAnswers,
+    ...Object.fromEntries(secondPrescreenQuestions.map((question, index) => [
+      question.name, answers[prescreenQuestions[index].name],
+    ])),
+    firstName: "Updated",
+    lastName: "Owner",
+    phone: "5551112233",
+    backupContact: "sms",
+    emergencyContactName: "New Contact",
+    emergencyContactPhone: "5554445566",
+    wechatId: "updated-guest",
+    petBreed: "Corgi Mix",
+    petWeightLb: "22.5",
+    petAgeYears: "4",
+    secondPetBreed: "Miniature Poodle",
+    secondPetWeightLb: "18",
+    secondPetAgeYears: "3",
+    dropoffDate: "2092-04-04",
+    pickupDate: "2092-04-05",
+    prescreenNotes: "Latest care notes",
+    secondPrescreenNotes: "Latest Milo notes",
+  };
   await updateSubmissionRecord({
     submissionId: repeat.submission.id,
-    data: {
-      ...values,
-      dropoffDate: "2092-04-04",
-      pickupDate: "2092-04-05",
-      prescreenAggression: "yes",
-      prescreenNotes: "Latest care notes",
-      secondPrescreenNotes: "Latest Milo notes",
-    },
+    data: editedValues,
   });
   saved = await loadCustomerPrefill(created.customer.id);
-  assert.equal(
-    saved.pets.find((p) => p.name === "Pocky").lastPrescreenAnswers
-      .prescreenAggression,
-    "yes",
-  );
-  assert.equal(
-    saved.pets.find((p) => p.name === "Pocky").lastPrescreenNotes,
-    "Latest care notes",
-  );
-  assert.equal(
-    saved.pets.find((p) => p.name === "Milo").lastPrescreenNotes,
-    "Latest Milo notes",
-  );
+  assertStoredPrefill(saved, editedValues);
+  assertStoredPrefill(await (await GET()).json(), editedValues);
   assert.equal(
     (
       await prisma.submissionRevision.findFirst({
@@ -286,7 +477,7 @@ try {
   );
   assert.equal(await loadCustomerPrefill("does-not-exist"), null);
   console.log(
-    "PASS save/rebook/edit history, multiple dogs, legacy fallback, email verification, private caching and cross-customer isolation; no real emails sent",
+    "PASS every owner/pet field and answer through save/rebook/edit and verified form prefill, public privacy boundaries, multiple dogs, legacy fallback, revision history, private caching and cross-customer isolation; no real emails sent",
   );
 } finally {
   await prisma.submission.deleteMany({ where: { customerId: { in: ids } } });

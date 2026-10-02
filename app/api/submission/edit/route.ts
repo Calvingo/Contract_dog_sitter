@@ -41,7 +41,8 @@ export async function GET(request: Request) {
   }
 
   // Existing edit links also establish the customer's session for account navigation.
-  await setCustomerSession(editToken.submission.customerId);
+  if (!(await setCustomerSession(editToken.submission.customerId)))
+    return NextResponse.json({ error: "This account is deactivated." }, { status: 403 });
   return NextResponse.json({
     ok: true,
     token,

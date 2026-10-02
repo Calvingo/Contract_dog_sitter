@@ -10,6 +10,8 @@ export type FormValues = {
   prescreenMedicalHistory: string;
   prescreenAggressionChildren: string;
   hasSecondDog: boolean;
+  savedPetId?: string;
+  savedSecondPetId?: string;
   secondPrescreenAggression: string;
   secondPrescreenBitten: string;
   secondPrescreenPottyTraining: string;

@@ -38,7 +38,7 @@ function contactsHtml(): string {
 
 function meetGreetInfoHtml(): string {
   return `<h3>Meet &amp; greet at our home</h3>
-    <p>We’d be happy to do a meet &amp; greet at our home. For meet &amp; greets, we meet in our front yard.</p>
+    <p>We’d be happy to do a meet &amp; greet at our home. <strong>We meet in our ground front yard.</strong></p>
     <p>The main purpose is for us to meet you and your dog, see how your dog responds to new people and a new environment, and introduce your dog to our dogs to make sure everyone is comfortable with each other. Since the front yard is also a new environment for your dog, it gives us a good opportunity to observe their initial behavior and interactions.</p>
     <p>For privacy, safety, and to avoid disturbing the dogs currently staying with us, we don’t offer tours of the indoor or backyard boarding areas during meet &amp; greets. We’re happy to share photos and videos of the boarding environment so you can see where the dogs spend their time.</p>
     <p>If that works for you, we’d be happy to set up a time!</p>`;
@@ -76,6 +76,7 @@ export function buildDecisionEmail(
             }
           </div>
           <p><a href="${escapeHtml(options.accountUrl!)}">View your booking and payment instructions</a> to see your hold deadline. Your booking is confirmed once the required deposit is verified. If you have already paid, check your payment status in your account.</p>
+          <p style="color:#dc2626;font-weight:700;"><strong>Deposit Cancellation Policy: The deposit is refundable only if the booking is canceled more than 7 days before the scheduled start date. Cancellations within 7 days of the booking are non-refundable.</strong></p>
           ${editBlock}
           ${meetGreetInfoHtml()}
           ${contactsHtml()}

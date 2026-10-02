@@ -3,9 +3,13 @@
 import Link from "next/link";
 import { SavedPrescreen } from "@/components/SavedPrescreen";
 import {
+  customerPrefillValues,
   hasSavedPrescreen,
+  petPrefillValues,
   prescreenPrefillValues,
+  selectPrefillPets,
   type PrefillPet,
+  type PrefillPetSelection,
   type PrefillResponse,
 } from "@/lib/booking-prefill";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
@@ -22,6 +26,7 @@ import { PriceEstimate } from "@/components/PriceEstimate";
 import { SignaturePad } from "@/components/SignaturePad";
 import { isPickupDropoffTimeAllowed } from "@/lib/booking-time";
 import { parseDateTime } from "@/lib/pricing";
+import { buildPetPrescreenAnswers, buildPetSnapshots } from "@/lib/submission-data";
 import {
   formFields,
   initialFormValues,
@@ -50,13 +55,16 @@ function HomePageContent() {
   >({});
   const [submitError, setSubmitError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [profileSaveMessage, setProfileSaveMessage] = useState("");
+  const [profileSaveError, setProfileSaveError] = useState("");
   const [hasReadAgreement, setHasReadAgreement] = useState(false);
   const [returningStatus, setReturningStatus] = useState("");
   const [prefill, setPrefill] = useState<PrefillResponse | null>(null);
   const [selectedPetId, setSelectedPetId] = useState("");
   const [selectedSecondPetId, setSelectedSecondPetId] = useState("");
   const currentPrefill = useRef<PrefillResponse | null>(null);
-  const chosenPets = useRef({ first: "", second: "" });
+  const chosenPets = useRef<PrefillPetSelection>({});
   const [editNotice, setEditNotice] = useState("");
   const lookupGeneration = useRef(0);
   const loadedEmail = useRef("");
@@ -104,16 +112,9 @@ function HomePageContent() {
     (customer: PrefillResponse["customer"]) => {
       setFormValues((current) => ({
         ...current,
-        firstTimeBooking: customer.hasBookedBefore ? "no" : "yes",
-        firstName: customer.firstName,
-        lastName: customer.lastName,
-        email: customer.email,
-        phone: customer.phone,
-        backupContact: customer.backupContact,
-        emergencyContactName: customer.emergencyContactName,
-        emergencyContactPhone: customer.emergencyContactPhone,
-        wechatId: customer.wechatId,
+        ...customerPrefillValues(customer),
       }));
+      setHasReadAgreement(false);
     },
     [],
   );
@@ -124,10 +125,7 @@ function HomePageContent() {
       setSelectedPetId(pet.id);
       setFormValues((current) => ({
         ...current,
-        petName: pet.name,
-        petBreed: pet.breed,
-        petWeightLb: String(pet.weightLb),
-        petAgeYears: pet.ageYears == null ? "" : String(pet.ageYears),
+        ...petPrefillValues(pet),
       }));
       applyPrescreenPrefill(pet, false);
     },
@@ -140,11 +138,7 @@ function HomePageContent() {
       setSelectedSecondPetId(pet.id);
       setFormValues((current) => ({
         ...current,
-        hasSecondDog: true,
-        secondPetName: pet.name,
-        secondPetBreed: pet.breed,
-        secondPetWeightLb: String(pet.weightLb),
-        secondPetAgeYears: pet.ageYears == null ? "" : String(pet.ageYears),
+        ...petPrefillValues(pet, true),
       }));
       applyPrescreenPrefill(pet, true);
     },
@@ -165,18 +159,8 @@ function HomePageContent() {
       currentPrefill.current = data;
       setPrefill(data);
       applyCustomerPrefill(data.customer);
-      const selected = data.pets.find(
-        (pet) => pet.id === chosenPets.current.first,
-      );
-      const first =
-        selected ||
-        (data.authenticated || data.pets.length === 1
-          ? data.pets[0]
-          : undefined);
+      const { first, second } = selectPrefillPets(data, chosenPets.current);
       if (first) applyPetPrefill(first);
-      const second = data.pets.find(
-        (pet) => pet.id === chosenPets.current.second,
-      );
       if (second) applySecondPetPrefill(second);
       setReturningStatus(
         data.authenticated
@@ -314,11 +298,13 @@ function HomePageContent() {
   }, [editToken]);
 
   const handleFieldChange = (name: keyof FormValues, value: string) => {
+    setProfileSaveMessage("");
+    setProfileSaveError("");
     if (name === "email") {
       lookupGeneration.current++;
       loadedEmail.current = "";
       currentPrefill.current = null;
-      chosenPets.current = { first: "", second: "" };
+      chosenPets.current = {};
       setSelectedSecondPetId("");
       setPrefill(null);
       setSelectedPetId("");
@@ -335,31 +321,6 @@ function HomePageContent() {
       setErrors({});
       return;
     }
-    if (
-      name === "petName" &&
-      value !== prefill?.pets.find((pet) => pet.id === selectedPetId)?.name
-    ) {
-      chosenPets.current.first = "";
-      setSelectedPetId("");
-      if (selectedPetId)
-        applyPrescreenPrefill(
-          { id: "", name: "", breed: "", weightLb: 0 },
-          false,
-        );
-    }
-    if (
-      name === "secondPetName" &&
-      value !==
-        prefill?.pets.find((pet) => pet.id === selectedSecondPetId)?.name
-    ) {
-      chosenPets.current.second = "";
-      setSelectedSecondPetId("");
-      if (selectedSecondPetId)
-        applyPrescreenPrefill(
-          { id: "", name: "", breed: "", weightLb: 0 },
-          true,
-        );
-    }
     setFormValues((current) => {
       const next = { ...current, [name]: value };
       if (name === "backupContact" && value !== "wechat") {
@@ -369,6 +330,71 @@ function HomePageContent() {
     });
     setErrors((current) => ({ ...current, [name]: undefined }));
     setSubmitError("");
+  };
+
+  const startNewDog = (second = false) => {
+    const emptyDog = { id: "", name: "", breed: "", weightLb: 0 };
+    chosenPets.current[second ? "second" : "first"] = "";
+    if (second) setSelectedSecondPetId("");
+    else setSelectedPetId("");
+    setFormValues((current) => ({
+      ...current,
+      ...petPrefillValues(emptyDog, second),
+      [second ? "secondPetWeightLb" : "petWeightLb"]: "",
+    }));
+    setProfileSaveMessage("");
+    setProfileSaveError("");
+  };
+
+  const saveProfileDetails = async () => {
+    if (!prefill?.authenticated || isSavingProfile) return;
+    setIsSavingProfile(true);
+    setProfileSaveMessage("");
+    setProfileSaveError("");
+    const generation = lookupGeneration.current;
+    const answers = buildPetPrescreenAnswers(formValues);
+    const pets = buildPetSnapshots(formValues).map((pet, index) => ({
+      ...pet,
+      id: (index === 0 ? formValues.savedPetId : formValues.savedSecondPetId) || undefined,
+      ageYears: (index === 0 ? formValues.petAgeYears : formValues.secondPetAgeYears) || null,
+      prescreenAnswers: answers[index],
+      prescreenNotes: index === 0 ? formValues.prescreenNotes : formValues.secondPrescreenNotes,
+    }));
+    try {
+      const response = await fetch("/api/me/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customer: {
+            firstName: formValues.firstName,
+            lastName: formValues.lastName,
+            phone: formValues.phone,
+            backupContact: formValues.backupContact,
+            emergencyContactName: formValues.emergencyContactName,
+            emergencyContactPhone: formValues.emergencyContactPhone,
+            wechatId: formValues.wechatId,
+          },
+          pets,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Unable to save your details.");
+      if (generation !== lookupGeneration.current) return;
+      const saved = data as PrefillResponse;
+      const first = saved.pets.find((pet) => pet.name === pets[0].name);
+      const second = pets[1] ? saved.pets.find((pet) => pet.name === pets[1].name) : undefined;
+      currentPrefill.current = saved;
+      setPrefill(saved);
+      chosenPets.current = { first: first?.id || "", second: second?.id || "" };
+      setSelectedPetId(first?.id || "");
+      setSelectedSecondPetId(second?.id || "");
+      setFormValues((current) => ({ ...current, savedPetId: first?.id, savedSecondPetId: second?.id }));
+      setProfileSaveMessage("Your contact and dog details are saved for next time. No booking has been submitted.");
+    } catch (error) {
+      setProfileSaveError(error instanceof Error ? error.message : "Unable to save your details. Please try again.");
+    } finally {
+      setIsSavingProfile(false);
+    }
   };
 
   const handleReachBottom = useCallback(() => {
@@ -572,7 +598,7 @@ function HomePageContent() {
             <h2 className="text-lg font-semibold text-stone-800">
               Find your details
             </h2>
-            <p className="mt-1 text-sm text-stone-600">
+            <p className="mt-2 text-base font-bold leading-relaxed text-stone-800 sm:text-lg">
               Enter your email to automatically find your saved contact and dog
               details. After verifying your email, your saved pre-screening
               answers and notes are filled in too.
@@ -589,6 +615,7 @@ function HomePageContent() {
                 handleFieldChange("email", event.target.value)
               }
               readOnly={Boolean(editToken)}
+              disabled={isSavingProfile || isSubmitting}
               autoComplete="email"
               maxLength={254}
               className="w-full rounded-xl border border-stone-200 px-4 py-3"
@@ -604,7 +631,7 @@ function HomePageContent() {
 
           {prefill ? (
             <div className="space-y-3">
-              <p className="text-sm font-medium text-green-700">
+              <p className="text-sm font-medium text-orange-700">
                 Welcome back, {prefill.customer.firstName}.
               </p>
               {prefill.pets.length > 0 ? (
@@ -617,8 +644,9 @@ function HomePageContent() {
                       <button
                         key={pet.id}
                         type="button"
+                        disabled={selectedSecondPetId === pet.id || isSavingProfile || isSubmitting}
                         onClick={() => applyPetPrefill(pet)}
-                        className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${
+                        className={`rounded-xl border px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
                           selectedPetId === pet.id
                             ? "border-orange-500 bg-orange-600 text-white"
                             : "border-orange-200 bg-white text-stone-700 hover:bg-orange-50"
@@ -627,6 +655,10 @@ function HomePageContent() {
                         {pet.name}
                       </button>
                     ))}
+                    <button type="button" onClick={() => startNewDog()} disabled={isSavingProfile || isSubmitting}
+                      className="rounded-xl border border-orange-200 px-4 py-2 text-sm font-semibold text-orange-700 disabled:opacity-50">
+                      Use a new dog
+                    </button>
                   </div>
                 </div>
               ) : null}
@@ -654,6 +686,7 @@ function HomePageContent() {
         ) : null}
 
         <form onSubmit={handleSubmit} className="space-y-6">
+          <fieldset disabled={isSavingProfile || isSubmitting} className="min-w-0 space-y-6">
           <input
             type="text"
             name="honeypot"
@@ -744,12 +777,7 @@ function HomePageContent() {
             {!formValues.hasSecondDog ? (
               <button
                 type="button"
-                onClick={() =>
-                  setFormValues((current) => ({
-                    ...current,
-                    hasSecondDog: true,
-                  }))
-                }
+                onClick={() => startNewDog(true)}
                 className="w-full rounded-xl border-2 border-dashed border-orange-300 bg-orange-50 px-4 py-3 text-sm font-semibold text-orange-700 transition hover:bg-orange-100"
               >
                 + Add a Second Dog
@@ -769,12 +797,21 @@ function HomePageContent() {
                       <button
                         key={pet.id}
                         type="button"
+                        disabled={selectedPetId === pet.id}
                         onClick={() => applySecondPetPrefill(pet)}
-                        className="rounded-xl border border-orange-200 bg-white px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-orange-50"
+                        className={`rounded-xl border px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${
+                          selectedSecondPetId === pet.id
+                            ? "border-orange-500 bg-orange-600 text-white"
+                            : "border-orange-200 bg-white text-stone-700 hover:bg-orange-50"
+                        }`}
                       >
                         {pet.name}
                       </button>
                     ))}
+                    <button type="button" onClick={() => startNewDog(true)}
+                      className="rounded-xl border border-orange-200 px-3 py-2 text-sm font-semibold text-orange-700">
+                      Use a new dog
+                    </button>
                   </div>
                 </div>
               ) : null}
@@ -828,6 +865,7 @@ function HomePageContent() {
                   setFormValues((current) => ({
                     ...current,
                     hasSecondDog: false,
+                    savedSecondPetId: "",
                   }));
                 }}
                 className="rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50"
@@ -836,6 +874,29 @@ function HomePageContent() {
               </button>
             </FormSection>
           ) : null}
+
+          {!editToken && (
+            <section className="space-y-3 rounded-2xl bg-orange-50 p-5 ring-1 ring-orange-100">
+              <h2 className="font-semibold text-stone-800">Save your details for next time</h2>
+              <p className="text-sm text-stone-700">
+                {prefill?.authenticated
+                  ? "Corrections to your contact details, dog profiles, answers and notes are saved when you submit your booking. You can also save them now without choosing dates or signing an agreement."
+                  : "Verify your email to save corrections to your existing profile. Until then, your changes are used only for this booking request."}
+              </p>
+              {prefill?.authenticated ? (
+                <>
+                  <button type="button" onClick={saveProfileDetails} className="rounded-xl bg-orange-600 px-4 py-3 font-semibold text-white disabled:opacity-60">
+                    {isSavingProfile ? "Saving details…" : "Save contact & dog details"}
+                  </button>
+                  <p className="text-sm"><Link className="text-link" href="/account/profile">Manage contact details or deactivate account</Link>{" · "}<Link className="text-link" href="/account/dogs">Add, edit, remove or restore dogs</Link></p>
+                </>
+              ) : (
+                <Link className="text-link" href={`/login?next=/book&email=${encodeURIComponent(formValues.email)}`}>Verify email to save updates →</Link>
+              )}
+              {profileSaveMessage && <p role="status" className="text-sm font-semibold text-orange-800">{profileSaveMessage}</p>}
+              {profileSaveError && <p role="alert" className="text-sm text-red-700">{profileSaveError}</p>}
+            </section>
+          )}
 
           <FormSection title={ui.sections.agreement}>
             <AgreementPanel
@@ -918,6 +979,7 @@ function HomePageContent() {
           >
             {isSubmitting ? ui.submitting : ui.submit}
           </button>
+          </fieldset>
         </form>
       </div>
     </main>

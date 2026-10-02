@@ -31,7 +31,8 @@ export async function GET(request: Request) {
       backupContact: "email",
     },
   });
-  await setCustomerSession(customer.id);
+  if (!(await setCustomerSession(customer.id)))
+    return redirectLocal("/login?deactivated=1");
   // Reusable until expiry: mail scanners and later clicks must not consume it.
   return redirectLocal(next);
 }

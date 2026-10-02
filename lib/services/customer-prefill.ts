@@ -5,10 +5,11 @@ export async function loadCustomerPrefill(
   customerId: string,
 ): Promise<PrefillResponse | null> {
   const customer = await prisma.customer.findUnique({
-    where: { id: customerId },
+    where: { id: customerId, deactivatedAt: null },
     include: {
       _count: { select: { submissions: true } },
       pets: {
+        where: { archivedAt: null },
         orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
         include: {
           submissionPets: {
@@ -64,8 +65,9 @@ export async function loadCustomerPrefill(
         breed: pet.breed,
         weightLb: pet.weightLb,
         ageYears: pet.ageYears,
-        lastPrescreenAnswers: latest?.prescreenAnswers ?? null,
-        lastPrescreenNotes: latest?.prescreenNotes || "",
+        lastPrescreenAnswers: pet.prescreenAnswers ?? latest?.prescreenAnswers ?? null,
+        // Empty notes explicitly clear prior care instructions; null keeps legacy fallback.
+        lastPrescreenNotes: pet.prescreenNotes ?? latest?.prescreenNotes ?? "",
         lastSubmittedAt: latest?.createdAt.toISOString() ?? null,
       };
     }),

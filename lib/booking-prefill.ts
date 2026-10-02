@@ -29,6 +29,74 @@ export type PrefillResponse = {
   };
   pets: PrefillPet[];
 };
+
+// An empty selection means the customer deliberately cleared/removed that dog.
+export type PrefillPetSelection = { first?: string; second?: string };
+
+export function selectPrefillPets(
+  data: PrefillResponse,
+  chosen: PrefillPetSelection,
+) {
+  const first =
+    chosen.first !== undefined
+      ? data.pets.find((pet) => pet.id === chosen.first)
+      : data.authenticated || data.pets.length === 1
+        ? data.pets.find((pet) => pet.id !== chosen.second)
+        : undefined;
+  const second =
+    chosen.second !== undefined
+      ? data.pets.find(
+          (pet) => pet.id === chosen.second && pet.id !== first?.id,
+        )
+      : data.authenticated && first
+        ? data.pets.find((pet) => pet.id !== first.id)
+        : undefined;
+  return { first, second };
+}
+
+export function customerPrefillValues(
+  customer: PrefillResponse["customer"],
+): Partial<FormValues> {
+  return {
+    firstTimeBooking: customer.hasBookedBefore ? "no" : "yes",
+    firstName: customer.firstName,
+    lastName: customer.lastName,
+    email: customer.email,
+    phone: customer.phone,
+    backupContact: customer.backupContact,
+    emergencyContactName: customer.emergencyContactName,
+    emergencyContactPhone: customer.emergencyContactPhone,
+    wechatId: customer.wechatId,
+    agreed: false,
+    signature: "",
+  };
+}
+
+export function petPrefillValues(
+  pet: PrefillPet,
+  second = false,
+): Partial<FormValues> {
+  return {
+    ...(second
+      ? {
+          hasSecondDog: true,
+          savedSecondPetId: pet.id,
+          secondPetName: pet.name,
+          secondPetBreed: pet.breed,
+          secondPetWeightLb: String(pet.weightLb),
+          secondPetAgeYears: pet.ageYears == null ? "" : String(pet.ageYears),
+        }
+      : {
+          savedPetId: pet.id,
+          petName: pet.name,
+          petBreed: pet.breed,
+          petWeightLb: String(pet.weightLb),
+          petAgeYears: pet.ageYears == null ? "" : String(pet.ageYears),
+        }),
+    ...prescreenPrefillValues(pet, second),
+  };
+}
+
 function answersOf(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)

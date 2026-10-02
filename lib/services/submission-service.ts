@@ -8,13 +8,52 @@ import { verifiedAmount, depositDue } from "@/lib/platform/rules";
 import { SubmissionStatus, type Prisma } from "@prisma/client";
 import type { FormValues } from "@/lib/form-config";
 import { prisma } from "@/lib/db";
+import { lockCustomerProfile } from "@/lib/services/customer-profile";
 import {
   buildCustomerSnapshot,
   buildPetSnapshots,
   buildPetPrescreenAnswers,
   getSubmissionDateTimes,
   getSubmissionQuote,
+  type PetSnapshot,
 } from "@/lib/submission-data";
+
+// Stable IDs let owners correct a dog's name without creating a second profile.
+async function saveBookingPets(
+  tx: Prisma.TransactionClient,
+  customerId: string,
+  data: FormValues,
+  snapshots: PetSnapshot[],
+  answers: Record<string, string>[],
+  verified: boolean,
+) {
+  const requestedIds = [data.savedPetId, data.savedSecondPetId].slice(0, snapshots.length);
+  if (verified && requestedIds[0] && requestedIds[0] === requestedIds[1])
+    throw new BookingConflict("Choose a different dog for each slot.");
+  const pets = [];
+  for (const [index, snapshot] of snapshots.entries()) {
+    const id = verified ? requestedIds[index] : undefined;
+    if (id !== undefined && (typeof id !== "string" || id.length > 200))
+      throw new BookingConflict("Invalid saved dog.");
+    const existing = id
+      ? await tx.pet.findFirst({ where: { id, customerId } })
+      : await tx.pet.findFirst({ where: { customerId, name: { equals: snapshot.name, mode: "insensitive" } } });
+    if (id && !existing) throw new BookingConflict("Saved dog not found in your account.");
+    if (existing?.archivedAt) throw new BookingConflict("Restore this dog in My dogs before booking again.");
+    const sameName = await tx.pet.findFirst({ where: { customerId, name: { equals: snapshot.name, mode: "insensitive" } } });
+    if (sameName && sameName.id !== existing?.id)
+      throw new BookingConflict("You already have a dog with this name. Choose that saved dog instead.");
+    const profile = {
+      ...snapshot,
+      prescreenAnswers: answers[index] as Prisma.InputJsonValue,
+      prescreenNotes: (index === 0 ? data.prescreenNotes : data.secondPrescreenNotes)?.trim() || "",
+    };
+    pets.push(existing
+      ? verified ? await tx.pet.update({ where: { id: existing.id }, data: profile }) : existing
+      : await tx.pet.create({ data: { customerId, ...profile } }));
+  }
+  return pets;
+}
 
 export async function createSubmissionRecord(
   data: FormValues,
@@ -31,6 +70,12 @@ export async function createSubmissionRecord(
 
   return prisma.$transaction(async (tx) => {
     await lockCapacity(tx);
+    const existingCustomer = await tx.customer.findUnique({ where: { email: customerSnapshot.email } });
+    if (existingCustomer) {
+      await lockCustomerProfile(tx, existingCustomer.id);
+      const active = await tx.customer.findUniqueOrThrow({ where: { id: existingCustomer.id } });
+      if (active.deactivatedAt) throw new BookingConflict("This account is deactivated. Contact us to restore access.");
+    }
     const owner = customerId
       ? await tx.customer.findUnique({ where: { id: customerId } })
       : null;
@@ -38,11 +83,6 @@ export async function createSubmissionRecord(
       throw new BookingConflict("Please use your signed-in email address.");
     await assertCapacity(tx, dropoffAt, pickupAt, petSnapshots.length);
     const settings = await getSettings(tx);
-    const existingCustomer = await tx.customer.findUnique({
-      where: { email: customerSnapshot.email },
-      select: { id: true },
-    });
-
     const customer = await tx.customer.upsert({
       where: { email: customerSnapshot.email },
       create: {
@@ -89,24 +129,7 @@ export async function createSubmissionRecord(
       });
     }
 
-    const pets = [];
-    for (const snapshot of petSnapshots) {
-      pets.push(
-        await tx.pet.upsert({
-          where: {
-            customerId_name: { customerId: customer.id, name: snapshot.name },
-          },
-          create: { customerId: customer.id, ...snapshot },
-          update: owner
-            ? {
-                breed: snapshot.breed,
-                weightLb: snapshot.weightLb,
-                ageYears: snapshot.ageYears,
-              }
-            : {},
-        }),
-      );
-    }
+    const pets = await saveBookingPets(tx, customer.id, data, petSnapshots, prescreenAnswersByPet, Boolean(owner));
     const pet = pets[0];
 
     const submission = await tx.submission.create({
@@ -180,6 +203,10 @@ export async function updateSubmissionRecord(options: {
     if (!current) {
       throw new Error("Submission not found");
     }
+
+    await lockCustomerProfile(tx, current.customerId);
+    const activeCustomer = await tx.customer.findUniqueOrThrow({ where: { id: current.customerId } });
+    if (activeCustomer.deactivatedAt) throw new BookingConflict("This account is deactivated. Contact us to restore access.");
 
     if (
       current.status === SubmissionStatus.REJECTED ||
@@ -260,22 +287,7 @@ export async function updateSubmissionRecord(options: {
       },
     });
 
-    const pets = [];
-    for (const snapshot of petSnapshots) {
-      pets.push(
-        await tx.pet.upsert({
-          where: {
-            customerId_name: { customerId: customer.id, name: snapshot.name },
-          },
-          create: { customerId: customer.id, ...snapshot },
-          update: {
-            breed: snapshot.breed,
-            weightLb: snapshot.weightLb,
-            ageYears: snapshot.ageYears,
-          },
-        }),
-      );
-    }
+    const pets = await saveBookingPets(tx, customer.id, options.data, petSnapshots, prescreenAnswersByPet, true);
     const pet = pets[0];
 
     const nextStatus =

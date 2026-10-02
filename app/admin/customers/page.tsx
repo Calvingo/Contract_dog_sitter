@@ -5,6 +5,7 @@ import {
   type CustomerFilters,
 } from "@/lib/platform/customers";
 import { AdminShell } from "../admin-ui";
+import { CustomerAccountStatus } from "@/components/CustomerAccountStatus";
 export default async function CustomersPage({
   searchParams,
 }: {
@@ -69,6 +70,7 @@ export default async function CustomersPage({
           {result?.customers.length ?? 0} customers · Promotion exports respect
           the selected subscription filter.
         </p>
+        <p className="small">All customers includes deactivated accounts. Restoring an account restores sign-in access without resubscribing it to promotions.</p>
         <table className="platform-table">
           <thead>
             <tr>
@@ -78,6 +80,7 @@ export default async function CustomersPage({
                 "Email",
                 "Phone",
                 "Marketing",
+                "Account status",
                 "Recent booking",
               ].map((h) => (
                 <th key={h}>{h}</th>
@@ -96,7 +99,7 @@ export default async function CustomersPage({
                       {`${c.firstName} ${c.lastName}`.trim() || "New customer"}
                     </strong>
                   </td>
-                  <td>{c.pets.map((p) => p.name).join(", ") || "—"}</td>
+                  <td>{c.pets.map((p) => `${p.name}${p.archivedAt ? " (removed)" : ""}`).join(", ") || "—"}</td>
                   <td>
                     <a href={`mailto:${c.email}`}>{c.email}</a>
                   </td>
@@ -106,6 +109,7 @@ export default async function CustomersPage({
                       Email: {c.emailMarketingOptIn ? "Subscribed" : "Off"}
                     </span>
                   </td>
+                  <td><CustomerAccountStatus id={c.id} deactivated={Boolean(c.deactivatedAt)} /></td>
                   <td>
                     {last ? (
                       <Link href={`/admin/submissions/${last.id}`}>

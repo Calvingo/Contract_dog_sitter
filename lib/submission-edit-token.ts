@@ -50,6 +50,6 @@ export async function findValidSubmissionEditToken(token: string | null) {
     },
   });
 
-  if (!editToken || editToken.expiresAt.getTime() < Date.now()) return null;
+  if (!editToken || editToken.usedAt || editToken.expiresAt.getTime() < Date.now() || editToken.submission.customer.deactivatedAt) return null;
   return editToken;
 }

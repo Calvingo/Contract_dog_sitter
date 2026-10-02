@@ -53,10 +53,11 @@ export async function POST(request: Request) {
       { status: 429 },
     );
   const customer = await prisma.customer.findUnique({
-    where: { email },
+    where: { email, deactivatedAt: null },
     include: {
       _count: { select: { submissions: true } },
       pets: {
+        where: { archivedAt: null },
         orderBy: { updatedAt: "desc" },
         select: {
           id: true,

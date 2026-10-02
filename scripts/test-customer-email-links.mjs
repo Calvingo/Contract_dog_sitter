@@ -24,8 +24,8 @@ Object.assign(process.env, {
 });
 const tokens = new Map(), editTokens = new Map(), cookies = new Map(), messages = [];
 const customers = new Map([
-  ["alice@example.test", { id: "alice", email: "alice@example.test" }],
-  ["bob@example.test", { id: "bob", email: "bob@example.test" }],
+  ["alice@example.test", { id: "alice", email: "alice@example.test", deactivatedAt: null, sessionVersion: 0 }],
+  ["bob@example.test", { id: "bob", email: "bob@example.test", deactivatedAt: null, sessionVersion: 0 }],
 ]);
 const db = {
   platformSettings: { findUnique: async () => ({ zelleName: "Qi Zhang", zelleRecipient: "zelle@example.test" }) },
@@ -45,8 +45,12 @@ const db = {
     findUnique: async ({ where }) => tokens.get(where.tokenHash) || null,
   },
   customer: {
+    findUnique: async ({ where }) => [...customers.values()].find((customer) =>
+      (!where.id || customer.id === where.id) &&
+      (!where.email || customer.email === where.email),
+    ) || null,
     upsert: async ({ where, create }) => {
-      if (!customers.has(where.email)) customers.set(where.email, { ...create, id: "new-customer" });
+      if (!customers.has(where.email)) customers.set(where.email, { ...create, id: "new-customer", deactivatedAt: null, sessionVersion: 0 });
       return customers.get(where.email);
     },
   },
@@ -181,6 +185,7 @@ const { GET: editGET } = require("../app/api/submission/edit/route.ts");
 const editRecord = [...editTokens.values()][0];
 editRecord.submission = {
   customerId: "alice", status: "ACCEPTED", revision: 1,
+  customer: customers.get("alice@example.test"),
   firstTimeBooking: "yes", dropoffAt: new Date("2027-04-01T10:00:00Z"), pickupAt: new Date("2027-04-02T10:00:00Z"),
   prescreenAnswers: {}, customerSnapshot: { email: "alice@example.test" }, petSnapshot: {},
 };
