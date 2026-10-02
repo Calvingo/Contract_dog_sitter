@@ -1,4 +1,5 @@
 "use server";
+import { getVenmoDetails } from "@/lib/platform/payment-details";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { clearCustomerSession } from "@/lib/auth/customer-session";
@@ -193,21 +194,8 @@ export async function reportPayment(
   form: FormData,
 ): Promise<ActionState> {
   const customer = await requireCustomer();
-  const id = text(form, "id"),
-    method = text(form, "method"),
-    payerName = text(form, "payerName"),
-    reference = text(form, "reference");
-  if (
-    !["ZELLE", "VENMO"].includes(method) ||
-    !payerName ||
-    !reference ||
-    payerName.length > 100 ||
-    reference.length > 150
-  )
-    return {
-      error:
-        "Choose a payment method and enter the payer name and transfer reference.",
-    };
+  const id = text(form, "id");
+  if (!id) return { error: "Choose a booking to report payment." };
   try {
     await prisma.$transaction(async (tx) => {
       await lockCapacity(tx);
@@ -234,11 +222,10 @@ export async function reportPayment(
       if (!amount) throw new Error("Your deposit is already verified.");
       const settings = await getSettings(tx);
       if (
-        method === "ZELLE"
-          ? !settings.zelleRecipient || !settings.zelleName
-          : !settings.venmoUsername || !settings.venmoName
+        !(settings.zelleRecipient && settings.zelleName) &&
+        !getVenmoDetails(settings)
       )
-        throw new Error("This payment method is not currently available.");
+        throw new Error("Payment is not currently available.");
       await assertCapacity(
         tx,
         booking.dropoffAt,
@@ -247,7 +234,13 @@ export async function reportPayment(
         booking.id,
       );
       await tx.payment.create({
-        data: { submissionId: id, method, payerName, reference, amount },
+        data: {
+          submissionId: id,
+          method: "TRANSFER",
+          payerName: "",
+          reference: "",
+          amount,
+        },
       });
       await tx.submission.update({
         where: { id },

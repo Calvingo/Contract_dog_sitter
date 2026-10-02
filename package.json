@@ -20,6 +20,8 @@
     "test:marketing": "node scripts/test-marketing.mjs",
     "check:production": "node scripts/check-production.mjs",
     "test:booking-entry": "node scripts/test-booking-entry.mjs",
+    "test:customer-email-links": "node scripts/test-customer-email-links.mjs",
+    "test:payment-report": "node scripts/test-payment-report.mjs",
     "test:admin-workflow": "node scripts/test-admin-workflow.mjs"
   },
   "dependencies": {

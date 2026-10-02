@@ -31,10 +31,12 @@ export default async function PaymentsPage() {
                 {payment.submission.customer.lastName}
               </h2>
               <p>
-                {payment.method} · {money(payment.amount)} · Payer:{" "}
-                {payment.payerName}
+                {payment.method === "TRANSFER" ? "Transfer" : payment.method} · {money(payment.amount)}
+                {payment.payerName && <> · Payer: {payment.payerName}</>}
               </p>
-              <p className="small">Reference: {payment.reference}</p>
+              {payment.reference && (
+                <p className="small">Reference: {payment.reference}</p>
+              )}
               <p className="small">
                 Booking status: {payment.submission.status}
               </p>

@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { createCustomerEmailUrl } from "@/lib/auth/customer-email-link";
 import { reservesCapacity } from "@/lib/platform/rules";
 import { getMarketingConfig } from "./config";
 import {
@@ -210,7 +211,7 @@ export async function runMarketing(
             subject: item.campaign.subject,
             ...emailContent(
               item.campaign.body,
-              `${config.baseUrl}/book`,
+              await createCustomerEmailUrl(item.email, "/book"),
               unsubscribeUrl,
               config.address,
             ),

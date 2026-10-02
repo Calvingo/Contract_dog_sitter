@@ -10,6 +10,7 @@ import { prisma } from "@/lib/db";
 import { logEmail } from "@/lib/email-log";
 import { BRAND_NAME, getEnv, sendMail } from "@/lib/mailer";
 import { normalizeEmail } from "@/lib/submission-data";
+import { EMAIL_LINK_HASH_PREFIX } from "@/lib/auth/customer-email-link";
 
 const LOGIN_TOKEN_TTL_MINUTES = Number(
   process.env.LOGIN_TOKEN_TTL_MINUTES || "30",
@@ -74,7 +75,11 @@ export async function POST(request: Request) {
       );
 
     const recentToken = await prisma.loginToken.findFirst({
-      where: { email, createdAt: { gt: new Date(Date.now() - 60_000) } },
+      where: {
+        email,
+        createdAt: { gt: new Date(Date.now() - 60_000) },
+        NOT: { tokenHash: { startsWith: EMAIL_LINK_HASH_PREFIX } },
+      },
     });
     if (recentToken)
       return NextResponse.json({

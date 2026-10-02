@@ -7,6 +7,7 @@ import { findValidSubmissionEditToken } from "@/lib/submission-edit-token";
 import { formValuesFromSubmission } from "@/lib/submission-data";
 import { updateSubmissionRecord } from "@/lib/services/submission-service";
 import { signatureToBuffer, validateSubmission } from "@/lib/validate";
+import { setCustomerSession } from "@/lib/auth/customer-session";
 
 function canEdit(status: SubmissionStatus): boolean {
   return (
@@ -39,6 +40,8 @@ export async function GET(request: Request) {
     );
   }
 
+  // Existing edit links also establish the customer's session for account navigation.
+  await setCustomerSession(editToken.submission.customerId);
   return NextResponse.json({
     ok: true,
     token,
@@ -49,7 +52,7 @@ export async function GET(request: Request) {
       editToken.submission.status === SubmissionStatus.ACCEPTED
         ? "Your previous booking was accepted. If you submit changes, the request will need to be reviewed again."
         : "You are editing a submitted request. Please review, sign again, and submit your changes.",
-  });
+  }, { headers: { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" } });
 }
 
 export async function POST(request: Request) {

@@ -494,13 +494,6 @@ function HomePageContent() {
     }
   };
 
-  const bookingFields = formFields.filter(
-    (field) =>
-      field.section === "booking" &&
-      !["dropoffDate", "pickupDate", "dropoffTime", "pickupTime"].includes(
-        field.name,
-      ),
-  );
   const ownerFields = formFields.filter(
     (field) =>
       field.section === "owner" && !["wechatId", "email"].includes(field.name),
@@ -625,33 +618,6 @@ function HomePageContent() {
           {returningStatus ? (
             <p className="text-sm text-stone-600">{returningStatus}</p>
           ) : null}
-          {!editToken &&
-            (prefill && !prefill.authenticated ? (
-              <p className="text-sm text-stone-600">
-                Manage holiday email reminders in{" "}
-                <a className="text-link" href="/account/profile">
-                  your account preferences
-                </a>
-                .
-              </p>
-            ) : (
-              <label className="flex items-start gap-3 text-sm text-stone-700">
-                <input
-                  type="checkbox"
-                  checked={formValues.emailMarketingOptIn === true}
-                  onChange={(event) =>
-                    setFormValues((current) => ({
-                      ...current,
-                      emailMarketingOptIn: event.target.checked,
-                    }))
-                  }
-                />
-                <span>
-                  Email me holiday reminders and early-booking promotions.
-                  Optional; you can unsubscribe at any time.
-                </span>
-              </label>
-            ))}
         </section>
 
         {editNotice ? (
@@ -672,20 +638,6 @@ function HomePageContent() {
             tabIndex={-1}
             autoComplete="off"
           />
-
-          <FormSection title={ui.sections.booking}>
-            {bookingFields.map((field) => (
-              <FormFieldInput
-                key={field.name}
-                field={field}
-                value={String(formValues[field.name] ?? "")}
-                error={errors[field.name]}
-                readOnly={field.name === "email"}
-                selectPlaceholder={ui.selectPlaceholder}
-                onChange={handleFieldChange}
-              />
-            ))}
-          </FormSection>
 
           <FormSection title={`Dog 1 — ${ui.sections.prescreen}`}>
             <p className="text-sm text-stone-600">

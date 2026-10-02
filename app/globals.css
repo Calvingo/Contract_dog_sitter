@@ -90,6 +90,9 @@ body {
   font-size: 14px;
   font-weight: 600;
 }
+.public-nav nav a {
+  white-space: nowrap;
+}
 .public-nav nav a:hover,
 .text-link:hover {
   text-decoration: underline;
@@ -849,8 +852,15 @@ summary:focus-visible {
     gap: 12px;
   }
   .public-nav nav {
-    gap: 14px;
+    display: grid;
+    grid-template-columns: repeat(2, auto);
+    gap: 10px 14px;
     font-size: 12px;
+  }
+  .public-nav .admin-sign-in {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    justify-self: end;
   }
   .brand {
     font-size: 20px;

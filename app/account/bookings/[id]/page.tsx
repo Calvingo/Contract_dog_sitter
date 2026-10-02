@@ -5,6 +5,7 @@ import { ActionForm } from "@/components/ActionForm";
 import { requireCustomer } from "@/lib/platform/auth";
 import { prisma } from "@/lib/db";
 import { getSettings } from "@/lib/platform/capacity";
+import { getVenmoDetails } from "@/lib/platform/payment-details";
 import {
   bookingLabel,
   depositDue,
@@ -45,7 +46,7 @@ export default async function BookingDetail({
     remaining > 0 &&
     !booking.payments.some((p) => p.status === "REPORTED");
   const zelle = Boolean(settings.zelleName && settings.zelleRecipient),
-    venmo = Boolean(settings.venmoName && settings.venmoUsername);
+    venmo = getVenmoDetails(settings);
   const dogNames =
     booking.submissionPets
       .map((p) => {
@@ -133,11 +134,15 @@ export default async function BookingDetail({
             <>
               {zelle || venmo ? (
                 <>
-                  <h3>Choose how to pay</h3>
+                  <h3>Payment details</h3>
                   <p>
                     Transfer <strong>${remaining.toFixed(2)}</strong> using one
-                    of the accounts below. Verify the recipient before sending,
-                    and use your booking reference in the note.
+                    of the accounts below. Verify the recipient before sending.
+                  </p>
+                  <p className="notice">
+                    <strong>Payment note:</strong> Enter only <strong>friends</strong>
+                    {" "}in the transfer note. Do not include “boarding”, “deposit”,
+                    or your booking reference.
                   </p>
                   <div className="payment-options">
                     {zelle && (
@@ -150,15 +155,19 @@ export default async function BookingDetail({
                     {venmo && (
                       <div>
                         <h3>Venmo</h3>
-                        <p>{settings.venmoName}</p>
-                        <a
-                          className="text-link"
-                          href={`https://venmo.com/${encodeURIComponent(settings.venmoUsername.replace(/^@/, ""))}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          @{settings.venmoUsername.replace(/^@/, "")} ↗
-                        </a>
+                        <p>{venmo.name}</p>
+                        {venmo.profileUrl ? (
+                          <a
+                            className="text-link"
+                            href={venmo.profileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            @{venmo.recipient} ↗
+                          </a>
+                        ) : (
+                          <code>{venmo.recipient}</code>
+                        )}
                       </div>
                     )}
                   </div>
@@ -167,27 +176,9 @@ export default async function BookingDetail({
                     label="I’ve sent the payment"
                   >
                     <input type="hidden" name="id" value={booking.id} />
-                    <label>
-                      Payment method
-                      <select name="method" required defaultValue="">
-                        <option value="" disabled>
-                          Select a method
-                        </option>
-                        {zelle && <option value="ZELLE">Zelle</option>}
-                        {venmo && <option value="VENMO">Venmo</option>}
-                      </select>
-                    </label>
-                    <label>
-                      Name on the transfer
-                      <input name="payerName" required maxLength={100} />
-                    </label>
-                    <label>
-                      Transfer reference / confirmation number
-                      <input name="reference" required maxLength={150} />
-                    </label>
                     <p className="small">
-                      Submitting this form does not confirm payment. We check
-                      the actual transfer before verifying your deposit.
+                      After transferring, use the button below to let us know.
+                      We check the actual transfer before confirming your deposit.
                     </p>
                   </ActionForm>
                 </>
@@ -219,7 +210,7 @@ export default async function BookingDetail({
               {booking.payments.map((p) => (
                 <div key={p.id} className="history-item">
                   <span>
-                    {p.method} · ${Number(p.amount).toFixed(2)}
+                    {p.method === "TRANSFER" ? "Transfer" : p.method} · ${Number(p.amount).toFixed(2)}
                   </span>
                   <span className="pill">{p.status.replaceAll("_", " ")}</span>
                   {p.reviewNote && <p className="small">{p.reviewNote}</p>}

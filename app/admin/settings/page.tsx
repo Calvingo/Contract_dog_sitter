@@ -57,9 +57,10 @@ export default async function SettingsPage() {
           </p>
           <h2>Payment instructions</h2>
           <p className="small">
-            Customers pay the existing 20% deposit after approval. Leave a
-            method empty to disable it. Use accounts authorized to receive
-            service payments.
+            Customers pay the existing 20% deposit after approval. Venmo uses
+            the same recipient name and contact as Zelle unless a separate
+            Venmo username and name are provided below. Leave all payment
+            details empty to disable both methods.
           </p>
           <div className="field-grid">
             <label>

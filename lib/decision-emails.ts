@@ -1,4 +1,4 @@
-import { getAppBaseUrl } from "./app-url";
+import { createCustomerEmailUrl } from "./auth/customer-email-link";
 import { teamContacts } from "./contacts";
 import { BRAND_NAME, getEnv, sendMail } from "./mailer";
 import type { DecisionTokenPayload } from "./token";
@@ -8,6 +8,7 @@ export type DecisionAction = "accept" | "reject" | "meet_greet";
 export type DecisionEmailOptions = {
   meetGreetAt?: string;
   editUrl?: string;
+  accountUrl?: string;
 };
 
 function escapeHtml(value: string): string {
@@ -53,7 +54,7 @@ function buildDecisionEmail(
           <h2>Booking Accepted</h2>
           <p>Dear ${name},</p>
           <p>Great news! Your boarding request for <strong>${pet}</strong> has been <strong>accepted</strong> by ${BRAND_NAME}.</p>
-          <p>Please <a href="${escapeHtml(getAppBaseUrl())}/account">sign in to your account</a> to see payment instructions and your hold deadline. Your booking is confirmed once the required deposit is verified. If you have already paid, check your payment status in your account.</p>
+          <p><a href="${escapeHtml(options.accountUrl!)}">View your booking and payment instructions</a> to see your hold deadline. Your booking is confirmed once the required deposit is verified. If you have already paid, check your payment status in your account.</p>
           ${editBlock}
           ${contactsHtml()}
           <p>Thank you,<br/>${BRAND_NAME}</p>
@@ -110,7 +111,19 @@ export async function sendDecisionEmail(
   options: DecisionEmailOptions = {},
 ) {
   const fromUser = getEnv("GMAIL_USER");
-  const { subject, html } = buildDecisionEmail(payload, action, options);
+  const links = {
+    ...options,
+    accountUrl: action === "accept"
+      ? await createCustomerEmailUrl(
+          payload.email,
+          payload.submissionId ? `/account/bookings/${payload.submissionId}` : "/account",
+        )
+      : undefined,
+    editUrl: options.editUrl
+      ? await createCustomerEmailUrl(payload.email, options.editUrl)
+      : undefined,
+  };
+  const { subject, html } = buildDecisionEmail(payload, action, links);
 
   await sendMail({
     from: `"${BRAND_NAME}" <${fromUser}>`,

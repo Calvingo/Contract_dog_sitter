@@ -225,6 +225,7 @@ export async function processDecision(
     }
 
     const decisionPayload = {
+      submissionId: submission.id,
       email: submission.customer.email,
       firstName: submission.customer.firstName,
       lastName: submission.customer.lastName,

@@ -53,7 +53,7 @@ export async function saveSettings(
   )
     return {
       error:
-        "Provide both the recipient identifier and display name, or leave both empty to disable a payment method.",
+        "Provide both the recipient identifier and display name, or leave both empty. Empty Venmo details use the Zelle recipient.",
     };
   if (
     zelleRecipient &&

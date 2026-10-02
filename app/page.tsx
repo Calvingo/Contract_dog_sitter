@@ -99,7 +99,6 @@ export default async function HomePage({
       </section>
       <footer className="public-footer">
         <span>Silicon Paws Retreat · A little home away from home.</span>
-        <Link href="/admin/login">Admin sign in</Link>
       </footer>
     </main>
   );

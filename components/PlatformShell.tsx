@@ -10,6 +10,7 @@ export function PublicNav() {
       <nav>
         <Link href="/book">Book a stay</Link>
         <Link href="/account">My account</Link>
+        <Link href="/admin/login" className="admin-sign-in">Admin sign in</Link>
       </nav>
     </header>
   );

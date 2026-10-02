@@ -132,6 +132,7 @@ export async function processAdminSubmissionDecision(options: {
   });
 
   const payload = {
+    submissionId: submission.id,
     email: submission.customer.email,
     firstName: submission.customer.firstName,
     lastName: submission.customer.lastName,

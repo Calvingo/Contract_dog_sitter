@@ -1,4 +1,5 @@
 import { EmailStatus, EmailType } from "@prisma/client";
+import { createCustomerEmailUrl } from "./auth/customer-email-link";
 import type { FormValues } from "./form-config";
 import {
   PAYMENT_EARLY_PICKUP_POLICY,
@@ -434,7 +435,10 @@ export async function sendSubmissionEmails(
   const ownerName = `${data.firstName} ${data.lastName}`.trim();
   const fromHeader = `"${BRAND_NAME}" <${fromUser}>`;
   const editUrl = submissionId
-    ? buildSubmissionEditUrl(await createSubmissionEditToken(submissionId))
+    ? await createCustomerEmailUrl(
+        data.email,
+        buildSubmissionEditUrl(await createSubmissionEditToken(submissionId)),
+      )
     : undefined;
   const bookingDates = `${data.dropoffDate} to ${data.pickupDate}`;
   const bookingSummary = `${dogNames} — $${quote.totalPrice.toFixed(2)} — ${bookingDates}`;

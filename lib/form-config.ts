@@ -67,7 +67,7 @@ export type PrescreenQuestion = {
 };
 
 export const initialFormValues: FormValues = {
-  firstTimeBooking: "",
+  firstTimeBooking: "yes",
   prescreenAggression: "",
   prescreenBitten: "",
   prescreenPottyTraining: "",
