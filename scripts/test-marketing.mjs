@@ -99,10 +99,17 @@ const {
 } = require("../lib/marketing/unsubscribe.ts");
 const { allowRequest } = require("../lib/platform/rate-limit.ts");
 const { GET: cron } = require("../app/api/cron/marketing/route.ts");
+const { sendCampaignTest } = require("../lib/marketing/test-email.ts");
+const { getMarketingConfig } = require("../lib/marketing/config.ts");
 const stamp = `marketing-test-${Date.now()}`,
   customers = [],
   campaigns = [];
 const sendCalls = [];
+const previousSettings = await prisma.marketingSettings.findUnique({
+  where: { id: "default" },
+});
+const testAdmin = `${stamp}-admin@example.test`;
+process.env.ADMIN_EMAIL = testAdmin;
 const send = async (payload, key) => {
   sendCalls.push({ payload, key });
   return `test-${key}`;
@@ -144,6 +151,20 @@ async function delivery(c, u, data = {}) {
   });
 }
 try {
+  await prisma.marketingSettings.upsert({
+    where: { id: "default" },
+    create: {
+      id: "default",
+      enabled: true,
+      postalAddress: "Local test mailing address",
+      updatedBy: testAdmin,
+    },
+    update: {
+      enabled: true,
+      postalAddress: "Local test mailing address",
+      updatedBy: testAdmin,
+    },
+  });
   assert.equal(
     (await cron(new Request("http://localhost/api/cron/marketing"))).status,
     401,
@@ -282,10 +303,78 @@ try {
     "Rate limit increment is atomic",
   );
   await syncHolidayCampaigns(); // No enabled test rules; must not enable or send anything.
+  const preview = await campaign("DRAFT");
+  const testCalls = [];
+  const testSender = async (payload, key) => {
+    testCalls.push({ payload, key });
+    return key;
+  };
+  await assert.rejects(
+    sendCampaignTest(preview.id, "outsider@example.test", testSender),
+    /approved admin/,
+  );
+  await prisma.marketingSettings.update({
+    where: { id: "default" },
+    data: { enabled: false },
+  });
+  const cronSecret = process.env.CRON_SECRET;
+  delete process.env.CRON_SECRET;
+  await sendCampaignTest(preview.id, testAdmin, testSender);
+  assert.equal(
+    testCalls.length,
+    1,
+    "Admin preview works while campaigns are disabled and cron is not configured",
+  );
+  assert.deepEqual(testCalls[0].payload.to, [testAdmin]);
+  assert.equal(testCalls[0].payload.subject, "[TEST] Test promotion");
+  assert.ok(testCalls[0].payload.text.includes("Local test mailing address"));
+  assert.ok(testCalls[0].payload.text.includes("https://example.test/book"));
+  assert.equal(
+    (
+      await prisma.marketingTest.findFirst({
+        where: { campaignId: preview.id },
+      })
+    ).status,
+    "ACCEPTED",
+  );
+  await assert.rejects(
+    sendCampaignTest(preview.id, testAdmin, testSender),
+    /five minutes/,
+  );
+  assert.equal(testCalls.length, 1, "Repeated test requests do not send twice");
+  process.env.CRON_SECRET = cronSecret;
+  const disabled = await campaign();
+  await delivery(disabled, b);
+  await runMarketing({ send });
+  assert.equal(
+    sendCalls.length,
+    2,
+    "Global sending switch stops queued campaigns",
+  );
+  await prisma.marketingSettings.update({
+    where: { id: "default" },
+    data: { enabled: true },
+  });
+  process.env.MARKETING_ENABLED = "false";
+  assert.equal(
+    (await getMarketingConfig()).enabled,
+    false,
+    "Deployment pause overrides admin setting",
+  );
+  process.env.MARKETING_ENABLED = "true";
   console.log(
-    "PASS authenticated cron, consent, suppression, booking exclusion, concurrency, deduplication, SMTP failure handling, pause, recipient snapshot and rate limits (zero actual emails)",
+    "PASS authenticated cron, consent, suppression, booking exclusion, concurrency, deduplication, SMTP failure handling, pause, recipient snapshot, global settings, admin-only test emails and rate limits (zero actual emails)",
   );
 } finally {
+  await prisma.marketingTest.deleteMany({ where: { email: testAdmin } });
+  if (previousSettings) {
+    await prisma.marketingSettings.update({
+      where: { id: "default" },
+      data: previousSettings,
+    });
+  } else {
+    await prisma.marketingSettings.deleteMany({ where: { id: "default" } });
+  }
   await prisma.marketingCampaign.deleteMany({
     where: { id: { in: campaigns.map((c) => c.id) } },
   });

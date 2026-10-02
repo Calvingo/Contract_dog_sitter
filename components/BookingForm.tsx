@@ -625,6 +625,33 @@ function HomePageContent() {
           {returningStatus ? (
             <p className="text-sm text-stone-600">{returningStatus}</p>
           ) : null}
+          {!editToken &&
+            (prefill && !prefill.authenticated ? (
+              <p className="text-sm text-stone-600">
+                Manage holiday email reminders in{" "}
+                <a className="text-link" href="/account/profile">
+                  your account preferences
+                </a>
+                .
+              </p>
+            ) : (
+              <label className="flex items-start gap-3 text-sm text-stone-700">
+                <input
+                  type="checkbox"
+                  checked={formValues.emailMarketingOptIn === true}
+                  onChange={(event) =>
+                    setFormValues((current) => ({
+                      ...current,
+                      emailMarketingOptIn: event.target.checked,
+                    }))
+                  }
+                />
+                <span>
+                  Email me holiday reminders and early-booking promotions.
+                  Optional; you can unsubscribe at any time.
+                </span>
+              </label>
+            ))}
         </section>
 
         {editNotice ? (

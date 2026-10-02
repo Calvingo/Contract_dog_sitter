@@ -1,13 +1,19 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { marketingConfig } from "@/lib/marketing/config";
+import { getMarketingConfig } from "@/lib/marketing/config";
 import {
   holidays,
   holidaySchedule,
   type Holiday,
 } from "@/lib/marketing/templates";
 import { ActionForm } from "@/components/ActionForm";
-import { saveCampaign, saveHolidayRule, suppressEmail } from "./actions";
+import {
+  saveCampaign,
+  saveHolidayRule,
+  suppressEmail,
+  saveMarketingSettings,
+  updateSubscriber,
+} from "./actions";
 import { CampaignFields } from "./fields";
 import { requirePlatformAdmin } from "@/lib/platform/auth";
 import { customerAudience } from "@/lib/platform/customers";
@@ -16,21 +22,55 @@ import { AdminShell, Stat } from "../admin-ui";
 export default async function MarketingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ start?: string; end?: string; channel?: string }>;
+  searchParams: Promise<{
+    start?: string;
+    end?: string;
+    channel?: string;
+    q?: string;
+  }>;
 }) {
   const admin = await requirePlatformAdmin();
   const params = await searchParams;
-  const config = marketingConfig();
-  const [campaigns, rules, lastRun, suppressedCount] = await Promise.all([
-    prisma.marketingCampaign.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 100,
-      include: { _count: { select: { deliveries: true } } },
-    }),
-    prisma.marketingRule.findMany(),
-    prisma.marketingRun.findFirst({ orderBy: { startedAt: "desc" } }),
-    prisma.marketingSuppression.count(),
-  ]);
+  const config = await getMarketingConfig();
+  const [campaigns, rules, lastRun, suppressedCount, contacts] =
+    await Promise.all([
+      prisma.marketingCampaign.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 100,
+        include: { _count: { select: { deliveries: true } } },
+      }),
+      prisma.marketingRule.findMany(),
+      prisma.marketingRun.findFirst({ orderBy: { startedAt: "desc" } }),
+      prisma.marketingSuppression.count(),
+      prisma.customer.findMany({
+        where: params.q
+          ? {
+              OR: [
+                {
+                  email: {
+                    contains: params.q.slice(0, 100),
+                    mode: "insensitive",
+                  },
+                },
+                {
+                  firstName: {
+                    contains: params.q.slice(0, 100),
+                    mode: "insensitive",
+                  },
+                },
+                {
+                  lastName: {
+                    contains: params.q.slice(0, 100),
+                    mode: "insensitive",
+                  },
+                },
+              ],
+            }
+          : {},
+        orderBy: { createdAt: "desc" },
+        take: 30,
+      }),
+    ]);
   const year = todayKey().slice(0, 4);
   const start = params.start || `${year}-11-01`,
     end = params.end || `${year}-11-30`;
@@ -69,12 +109,46 @@ export default async function MarketingPage({
             Missing configuration: {config.missing.join(", ")}
           </p>
         )}
-        {!config.enabled && (
-          <p className="notice">
-            Drafts and audience previews are available. Enable MARKETING_ENABLED
-            after configuring and verifying the sender.
+        <p className="small">
+          Save a draft → review the email and audience → send yourself a test →
+          schedule delivery.
+        </p>
+        <ActionForm action={saveMarketingSettings} label="Save email settings">
+          <label>
+            Business mailing address
+            <textarea
+              name="postalAddress"
+              defaultValue={config.address}
+              required
+              maxLength={500}
+              rows={2}
+              placeholder="Street or registered mailbox, city, state, ZIP"
+            />
+          </label>
+          <p className="small">
+            This address appears in every promotional email. Your existing SMTP
+            mailbox remains the sender.
           </p>
-        )}
+          <label className="check-label">
+            <input
+              type="checkbox"
+              name="enabled"
+              defaultChecked={config.enabled}
+              disabled={!config.ready || config.environmentPaused}
+            />
+            <span>Enable promotional delivery for scheduled campaigns</span>
+          </label>
+          <p className="small">
+            Turning this off pauses the queue without deleting drafts. An email
+            already in flight may still finish.
+          </p>
+          {config.environmentPaused && (
+            <p className="notice">
+              Deployment pause is active. Set MARKETING_ENABLED=true in Vercel
+              to allow the sending switch.
+            </p>
+          )}
+        </ActionForm>
         {config.enabled &&
           config.ready &&
           (!lastRun ||
@@ -149,7 +223,12 @@ export default async function MarketingPage({
         {(Object.keys(holidays) as Holiday[]).map((key) => {
           const template = holidays[key],
             rule = rules.find((r) => r.holiday === key),
-            schedule = holidaySchedule(key, Number(year));
+            currentSchedule = holidaySchedule(key, Number(year)),
+            nextYear =
+              currentSchedule.scheduledAt > new Date()
+                ? Number(year)
+                : Number(year) + 1,
+            schedule = holidaySchedule(key, nextYear);
           return (
             <details
               key={key}
@@ -157,7 +236,7 @@ export default async function MarketingPage({
             >
               <summary className="cursor-pointer font-semibold">
                 {template.name} · {rule?.enabled ? "Enabled" : "Disabled"} ·{" "}
-                {year} send date:{" "}
+                Next send date:{" "}
                 {schedule.scheduledAt.toISOString().slice(0, 10)}
               </summary>
               <ActionForm action={saveHolidayRule} label="Save annual rule">
@@ -233,8 +312,10 @@ export default async function MarketingPage({
         </form>
         <p className="small">
           Uses stay dates, not the date a request was submitted. Active holds
-          and paid reservations overlapping this period are excluded. Cancelled,
-          rejected, and expired unpaid requests do not exclude a customer.
+          and paid reservations overlapping this period are excluded. Notion
+          reservations are not included until Notion sync is connected.
+          Cancelled, rejected, and expired unpaid requests do not exclude a
+          customer.
         </p>
         {error && <p className="notice error">{error}</p>}
       </section>
@@ -298,6 +379,65 @@ export default async function MarketingPage({
           </section>
         </>
       )}
+      <section className="panel" id="subscribers">
+        <h2>Subscriber preferences</h2>
+        <p>
+          New customers can opt in while booking. Existing customers can update
+          their account preferences; you can also record a customer&apos;s explicit
+          request here.
+        </p>
+        <form className="filter-form">
+          <label>
+            Find a customer
+            <input
+              name="q"
+              defaultValue={params.q || ""}
+              placeholder="Name or email"
+            />
+          </label>
+          <button className="button secondary">Search</button>
+        </form>
+        <p className="small">
+          Showing up to 30 matching customers. This does not automatically
+          subscribe your historical customer list.
+        </p>
+        {contacts.map((c) => (
+          <details
+            key={`${c.id}:${c.emailMarketingOptIn}`}
+            className="mt-3 rounded-xl border border-stone-200 p-4"
+          >
+            <summary className="cursor-pointer">
+              {c.firstName} {c.lastName} · {c.email} ·{" "}
+              {c.emailMarketingOptIn ? "Subscribed" : "Not subscribed"}
+            </summary>
+            <ActionForm action={updateSubscriber} label="Save preference">
+              <input name="customerId" type="hidden" value={c.id} />
+              <label className="check-label">
+                <input
+                  name="subscribed"
+                  type="checkbox"
+                  defaultChecked={c.emailMarketingOptIn}
+                />
+                Subscribed to promotional emails
+              </label>
+              <label>
+                Customer request / permission record
+                <input
+                  name="reason"
+                  required
+                  maxLength={250}
+                  placeholder="e.g. Customer asked by email on Oct 1"
+                />
+              </label>
+              <label className="check-label">
+                <input name="confirmed" type="checkbox" />
+                The customer explicitly asked to receive promotional emails
+                (required when subscribing).
+              </label>
+            </ActionForm>
+          </details>
+        ))}
+      </section>
       <section className="panel">
         <h2>Exclude an email address</h2>
         <p>

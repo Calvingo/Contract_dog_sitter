@@ -1,9 +1,11 @@
 "use server";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requirePlatformAdmin } from "@/lib/platform/auth";
 import type { ActionState } from "@/components/ActionForm";
-import { marketingConfig } from "@/lib/marketing/config";
+import { getMarketingConfig, marketingConfig } from "@/lib/marketing/config";
+import { sendCampaignTest } from "@/lib/marketing/test-email";
 import {
   holidays,
   validateCampaign,
@@ -12,14 +14,108 @@ import {
 import { syncHolidayCampaigns } from "@/lib/marketing/worker";
 const text = (form: FormData, key: string) =>
   String(form.get(key) || "").trim();
+
+export async function saveMarketingSettings(
+  _state: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const admin = await requirePlatformAdmin();
+  const postalAddress = text(form, "postalAddress");
+  const enabled = form.get("enabled") === "on";
+  if (
+    !postalAddress ||
+    postalAddress.length > 500 ||
+    /[^\s]+@[^\s]+/.test(postalAddress)
+  )
+    return {
+      error:
+        "Enter your business street address or registered mailing box, including city, state and ZIP code.",
+    };
+  const config = marketingConfig({ postalAddress, enabled });
+  if (enabled && (!config.ready || config.environmentPaused))
+    return {
+      error: `Save the address with sending turned off first. Complete deployment setup before enabling sending: ${config.missing.join(", ")}${config.environmentPaused ? " · deployment pause is active (MARKETING_ENABLED=false)" : ""}.`,
+    };
+  await prisma.marketingSettings.upsert({
+    where: { id: "default" },
+    create: { postalAddress, enabled, updatedBy: admin.email },
+    update: { postalAddress, enabled, updatedBy: admin.email },
+  });
+  refresh();
+  return {
+    message: enabled
+      ? "Sending enabled. Only campaigns you explicitly schedule will send."
+      : "Settings saved. Promotional sending is paused; drafts and admin tests remain available.",
+  };
+}
+
+export async function sendTestEmail(
+  _state: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const admin = await requirePlatformAdmin();
+  try {
+    const message = await sendCampaignTest(text(form, "id"), admin.email);
+    refresh();
+    return { message };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function updateSubscriber(
+  _state: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const admin = await requirePlatformAdmin();
+  const id = text(form, "customerId"),
+    enabled = form.get("subscribed") === "on",
+    reason = text(form, "reason");
+  if (
+    !id ||
+    !reason ||
+    reason.length > 250 ||
+    (enabled && form.get("confirmed") !== "on")
+  )
+    return {
+      error:
+        "Record the customer's request and confirm permission before subscribing them.",
+    };
+  await prisma.$transaction(async (tx) => {
+    const customer = await tx.customer.findUniqueOrThrow({ where: { id } });
+    if (customer.emailMarketingOptIn === enabled) return;
+    await tx.customer.update({
+      where: { id },
+      data: {
+        emailMarketingOptIn: enabled,
+        marketingConsentUpdatedAt: new Date(),
+      },
+    });
+    await tx.marketingConsentEvent.create({
+      data: {
+        customerId: id,
+        emailOptIn: enabled,
+        smsOptIn: false,
+        source: `admin:${admin.email}: ${reason}`,
+      },
+    });
+  });
+  refresh();
+  revalidatePath("/admin/customers");
+  revalidatePath("/account/profile");
+  return {
+    message:
+      "Email preference saved. Suppressed addresses remain excluded from promotions.",
+  };
+}
 function refresh() {
   revalidatePath("/admin/marketing", "layout");
 }
-function readiness() {
-  const config = marketingConfig();
+async function readiness() {
+  const config = await getMarketingConfig();
   if (!config.ready || !config.enabled)
     throw new Error(
-      `Sending is disabled. ${config.missing.length ? `Configure ${config.missing.join(", ")}.` : "Set MARKETING_ENABLED=true after checking the sender settings."}`,
+      `Sending is disabled. ${config.missing.length ? `Configure ${config.missing.join(", ")}.` : config.environmentPaused ? "Remove the deployment pause (MARKETING_ENABLED=false)." : "Enable sending in Email settings after checking the sender settings."}`,
     );
 }
 function failure(error: unknown): ActionState {
@@ -32,6 +128,7 @@ export async function saveCampaign(
   form: FormData,
 ): Promise<ActionState> {
   const admin = await requirePlatformAdmin();
+  let savedId = "";
   try {
     const data = {
       name: text(form, "name"),
@@ -52,18 +149,18 @@ export async function saveCampaign(
         throw new Error(
           "Only drafts can be edited. Refresh to see the current status.",
         );
+      savedId = id;
     } else
-      await prisma.marketingCampaign.create({
-        data: { ...data, createdBy: admin.email },
-      });
+      savedId = (
+        await prisma.marketingCampaign.create({
+          data: { ...data, createdBy: admin.email },
+        })
+      ).id;
     refresh();
-    return {
-      message:
-        "Draft saved. Open it below to preview the email and schedule sending.",
-    };
   } catch (error) {
     return failure(error);
   }
+  redirect(`/admin/marketing/campaigns/${savedId}`);
 }
 export async function campaignAction(
   _state: ActionState,
@@ -78,7 +175,7 @@ export async function campaignAction(
         where: { id },
       });
       if (action === "schedule" || action === "resume") {
-        readiness();
+        await readiness();
         if (form.get("confirmed") !== "on")
           throw new Error(
             "Confirm the email content, eligible audience and sending date before scheduling.",
@@ -147,7 +244,7 @@ export async function saveHolidayRule(
     )
       throw new Error("Check the email subject and message length.");
     if (enabled) {
-      readiness();
+      await readiness();
       if (form.get("confirmed") !== "on")
         throw new Error("Confirm automatic sending before enabling this rule.");
     }
@@ -228,7 +325,7 @@ export async function resolveDelivery(
   });
   if (outcome === "retry") {
     try {
-      readiness();
+      await readiness();
     } catch (error) {
       return failure(error);
     }

@@ -38,6 +38,10 @@ export async function createSubmissionRecord(
       throw new BookingConflict("Please use your signed-in email address.");
     await assertCapacity(tx, dropoffAt, pickupAt, petSnapshots.length);
     const settings = await getSettings(tx);
+    const existingCustomer = await tx.customer.findUnique({
+      where: { email: customerSnapshot.email },
+      select: { id: true },
+    });
 
     const customer = await tx.customer.upsert({
       where: { email: customerSnapshot.email },
@@ -62,6 +66,28 @@ export async function createSubmissionRecord(
           }
         : {},
     });
+
+    // Guest booking never reverses an existing customer's email preferences.
+    if (
+      data.emailMarketingOptIn === true &&
+      (!existingCustomer || owner) &&
+      !customer.emailMarketingOptIn
+    ) {
+      await tx.customer.update({
+        where: { id: customer.id },
+        data: { emailMarketingOptIn: true, marketingConsentUpdatedAt: now },
+      });
+      await tx.marketingConsentEvent.create({
+        data: {
+          customerId: customer.id,
+          emailOptIn: true,
+          smsOptIn: false,
+          source: owner
+            ? "signed-in-booking-opt-in-v1"
+            : "new-customer-booking-opt-in-v1",
+        },
+      });
+    }
 
     const pets = [];
     for (const snapshot of petSnapshots) {

@@ -80,7 +80,6 @@ export default async function ProfilePage() {
           </label>
           <p className="small">
             You can unsubscribe from promotional emails here at any time.
-            Automated promotional sending is not yet enabled.
           </p>
         </ActionForm>
       </section>

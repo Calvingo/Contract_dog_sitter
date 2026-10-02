@@ -44,6 +44,7 @@ export type FormValues = {
   agreed: boolean;
   signature: string;
   honeypot?: string;
+  emailMarketingOptIn?: boolean;
 };
 
 export type SelectOption = {

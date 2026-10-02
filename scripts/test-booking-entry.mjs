@@ -216,8 +216,17 @@ try {
       ]),
     ),
   };
-  const guest = await createSubmissionRecord(values);
+  const guest = await createSubmissionRecord({
+    ...values,
+    emailMarketingOptIn: true,
+  });
   assert.equal(guest.customer.id, a.id);
+  assert.equal(
+    (await prisma.customer.findUnique({ where: { id: a.id } }))
+      .emailMarketingOptIn,
+    false,
+    "An email-only guest cannot subscribe an existing customer",
+  );
   assert.equal(
     (await prisma.customer.findUnique({ where: { id: a.id } })).firstName,
     "Original",
@@ -239,11 +248,29 @@ try {
   );
   const fresh = await createSubmissionRecord({
     ...values,
+    emailMarketingOptIn: true,
     email: `entry-new-${suffix}@example.test`,
     dropoffDate: "2091-04-08",
     pickupDate: "2091-04-09",
   });
   createdCustomers.push(fresh.customer.id);
+  assert.equal(
+    (await prisma.customer.findUnique({ where: { id: fresh.customer.id } }))
+      .emailMarketingOptIn,
+    true,
+    "New customers can explicitly opt in while booking",
+  );
+  assert.equal(
+    await prisma.marketingConsentEvent.count({
+      where: {
+        customerId: fresh.customer.id,
+        emailOptIn: true,
+        source: "new-customer-booking-opt-in-v1",
+      },
+    }),
+    1,
+    "Booking opt-in records the source of consent",
+  );
   if (base) {
     const get = (path) =>
       fetch(`${base.origin}${path}`, { redirect: "manual" });

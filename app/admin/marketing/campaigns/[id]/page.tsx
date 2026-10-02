@@ -4,10 +4,15 @@ import { requirePlatformAdmin } from "@/lib/platform/auth";
 import { customerAudience } from "@/lib/platform/customers";
 import { AdminShell, Stat } from "@/app/admin/admin-ui";
 import { ActionForm } from "@/components/ActionForm";
-import { campaignAction, saveCampaign, resolveDelivery } from "../../actions";
+import {
+  campaignAction,
+  saveCampaign,
+  resolveDelivery,
+  sendTestEmail,
+} from "../../actions";
 import { CampaignFields } from "../../fields";
 import { emailContent } from "@/lib/marketing/templates";
-import { marketingConfig } from "@/lib/marketing/config";
+import { getMarketingConfig } from "@/lib/marketing/config";
 export default async function CampaignPage({
   params,
 }: {
@@ -18,7 +23,7 @@ export default async function CampaignPage({
     where: { id: (await params).id },
   });
   if (!campaign) notFound();
-  const [audience, counts, deliveries] = await Promise.all([
+  const [audience, counts, deliveries, lastTest] = await Promise.all([
     customerAudience({
       channel: "email",
       start: campaign.excludeStart,
@@ -34,8 +39,12 @@ export default async function CampaignPage({
       orderBy: { updatedAt: "desc" },
       take: 200,
     }),
+    prisma.marketingTest.findFirst({
+      where: { campaignId: campaign.id },
+      orderBy: { createdAt: "desc" },
+    }),
   ]);
-  const config = marketingConfig();
+  const config = await getMarketingConfig();
   const preview = emailContent(
     campaign.body,
     `${config.baseUrl || ""}/book`,
@@ -61,7 +70,8 @@ export default async function CampaignPage({
         Only subscribed customers are included. Reservations, opt-outs and
         suppressed addresses are checked again before each email. The daily
         queue runs around 9–10 AM Pacific; larger audiences can continue on
-        following days.
+        following days. Exclusions currently use website bookings; Notion is not
+        connected.
       </div>
       {campaign.status === "DRAFT" && (
         <section className="panel">
@@ -73,7 +83,7 @@ export default async function CampaignPage({
         </section>
       )}
       <section className="panel">
-        <h2>Email preview</h2>
+        <h2>Saved email preview</h2>
         <p>
           <strong>From:</strong> {config.from || "Not configured"}
         </p>
@@ -85,9 +95,95 @@ export default async function CampaignPage({
           dangerouslySetInnerHTML={{ __html: preview.html }}
         />
       </section>
+      <section className="panel">
+        <h2>Send yourself a test</h2>
+        <p>
+          Preview the saved email in {admin.email}. Test emails never contact
+          customers or change campaign status.
+        </p>
+        {config.mailReady ? (
+          <ActionForm action={sendTestEmail} label="Send one test email">
+            <input name="id" type="hidden" value={campaign.id} />
+          </ActionForm>
+        ) : (
+          <p className="notice">
+            Complete email settings before sending a test. Automatic scheduling
+            does not need to be enabled for a test.
+          </p>
+        )}
+        {lastTest && (
+          <p className="small">
+            Last test: {lastTest.status} · {lastTest.email} ·{" "}
+            {lastTest.createdAt.toLocaleString("en-US", {
+              timeZone: "America/Los_Angeles",
+            })}{" "}
+            Pacific · {lastTest.detail}
+          </p>
+        )}
+      </section>
+      <section className="panel">
+        <h2>Audience preview</h2>
+        <a
+          className="button secondary"
+          href={`/api/admin/customers/export?channel=email&start=${campaign.excludeStart}&end=${campaign.excludeEnd}`}
+        >
+          Export eligible audience ↓
+        </a>
+        <p className="small">
+          Eligibility is checked again when each email sends. Showing up to 50
+          eligible customers.
+        </p>
+        <div className="table-scroll">
+          <table className="platform-table">
+            <thead>
+              <tr>
+                <th>Customer</th>
+                <th>Dogs</th>
+                <th>Email</th>
+              </tr>
+            </thead>
+            <tbody>
+              {audience.customers.slice(0, 50).map((c) => (
+                <tr key={c.id}>
+                  <td>
+                    {c.firstName} {c.lastName}
+                  </td>
+                  <td>{c.pets.map((p) => p.name).join(", ")}</td>
+                  <td>{c.email}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {!audience.customers.length && (
+          <p className="notice">
+            No eligible subscribers for this campaign yet. Manage subscriber
+            preferences before scheduling.
+          </p>
+        )}
+        <details className="mt-4">
+          <summary className="cursor-pointer">
+            Already booked — excluded ({audience.excludedCount})
+          </summary>
+          {audience.excludedCustomers.slice(0, 50).map((c) => (
+            <p key={c.id}>
+              {c.firstName} {c.lastName} · {c.email}
+            </p>
+          ))}
+        </details>
+      </section>
       {!["COMPLETED", "CANCELLED"].includes(campaign.status) && (
         <section className="panel">
           <h2>Sending controls</h2>
+          {(!config.ready || !config.enabled) && (
+            <p className="notice">
+              Sending is paused or setup is incomplete. Finish{" "}
+              <a href="/admin/marketing" className="text-link">
+                email settings
+              </a>{" "}
+              before scheduling. You can still cancel this campaign.
+            </p>
+          )}
           <ActionForm action={campaignAction} label="Update campaign">
             <input type="hidden" name="id" value={campaign.id} />
             <label>

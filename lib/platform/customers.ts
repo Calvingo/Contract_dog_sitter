@@ -65,6 +65,7 @@ export async function customerAudience(filters: CustomerFilters) {
   return {
     customers: customers.filter((c) => !excludedIds.has(c.id)),
     excludedCount: excluded.length,
+    excludedCustomers: excluded,
     subscribedCount: customers.length,
   };
 }

@@ -305,6 +305,25 @@ model MarketingRule {
   updatedAt DateTime @updatedAt
 }
 
+model MarketingSettings {
+  id            String   @id @default("default")
+  postalAddress String   @default("")
+  enabled       Boolean  @default(false)
+  updatedBy     String
+  updatedAt     DateTime @updatedAt
+}
+
+model MarketingTest {
+  id         String   @id @default(cuid())
+  campaignId String
+  email      String
+  status     String   @default("SENDING")
+  detail     String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  @@index([campaignId, createdAt])
+}
+
 model MarketingCampaign {
   id          String @id @default(cuid())
   annualKey   String? @unique

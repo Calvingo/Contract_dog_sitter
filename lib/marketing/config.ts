@@ -1,10 +1,16 @@
-export function marketingConfig() {
+import { prisma } from "@/lib/db";
+export function marketingConfig(
+  settings?: { postalAddress: string; enabled: boolean } | null,
+) {
   const from =
     process.env.MARKETING_FROM?.trim() ||
     (process.env.GMAIL_USER
       ? `Silicon Paws Retreat <${process.env.GMAIL_USER.trim()}>`
       : "");
-  const address = process.env.MARKETING_POSTAL_ADDRESS?.trim() || "";
+  const address =
+    settings?.postalAddress.trim() ||
+    process.env.MARKETING_POSTAL_ADDRESS?.trim() ||
+    "";
   const baseUrl = process.env.APP_BASE_URL?.trim().replace(/\/$/, "") || "";
   const missing: string[] = [];
   if (!process.env.GMAIL_USER) missing.push("GMAIL_USER");
@@ -31,6 +37,7 @@ export function marketingConfig() {
   } catch {
     missing.push("APP_BASE_URL (public HTTPS origin)");
   }
+  const mailReady = missing.length === 0;
   if ((process.env.MARKETING_TOKEN_SECRET || "").length < 32)
     missing.push("MARKETING_TOKEN_SECRET (32+ characters)");
   if ((process.env.CRON_SECRET || "").length < 32)
@@ -40,7 +47,18 @@ export function marketingConfig() {
     address,
     baseUrl,
     missing,
-    enabled: process.env.MARKETING_ENABLED === "true",
+    mailReady,
+    environmentPaused: process.env.MARKETING_ENABLED === "false",
+    enabled:
+      process.env.MARKETING_ENABLED === "false"
+        ? false
+        : (settings?.enabled ?? process.env.MARKETING_ENABLED === "true"),
     ready: missing.length === 0,
   };
+}
+
+export async function getMarketingConfig() {
+  return marketingConfig(
+    await prisma.marketingSettings.findUnique({ where: { id: "default" } }),
+  );
 }

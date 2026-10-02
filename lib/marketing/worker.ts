@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { reservesCapacity } from "@/lib/platform/rules";
-import { marketingConfig } from "./config";
+import { getMarketingConfig } from "./config";
 import {
   holidays,
   holidaySchedule,
@@ -48,7 +48,7 @@ export async function runMarketing(
     limit?: number;
   } = {},
 ) {
-  const config = marketingConfig();
+  const config = await getMarketingConfig();
   if (!config.enabled || !config.ready)
     return { processed: 0, disabled: true, missing: config.missing };
   const now = options.now || new Date();
@@ -132,6 +132,8 @@ export async function runMarketing(
         include: { campaign: true },
       });
       if (!item) break;
+      const currentConfig = await getMarketingConfig();
+      if (!currentConfig.enabled || !currentConfig.ready) break;
       const claimed = await prisma.marketingDelivery.updateMany({
         where: {
           id: item.id,
