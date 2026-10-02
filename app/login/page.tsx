@@ -51,6 +51,7 @@ function Login() {
             <input
               type="email"
               name="email"
+              defaultValue={params.get("email") || ""}
               autoComplete="email"
               placeholder="you@example.com"
               required

@@ -1,5 +1,13 @@
 "use client";
 
+import Link from "next/link";
+import { SavedPrescreen } from "@/components/SavedPrescreen";
+import {
+  hasSavedPrescreen,
+  prescreenPrefillValues,
+  type PrefillPet,
+  type PrefillResponse,
+} from "@/lib/booking-prefill";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AvailabilityCalendar } from "@/components/AvailabilityCalendar";
@@ -24,33 +32,6 @@ import {
 } from "@/lib/form-config";
 import { ui } from "@/lib/i18n";
 
-type PrefillPet = {
-  id: string;
-  name: string;
-  breed: string;
-  weightLb: number;
-  ageYears?: number | null;
-  lastPrescreenAnswers?: unknown;
-  lastPrescreenNotes?: string;
-  lastSubmittedAt?: string | null;
-};
-
-type PrefillResponse = {
-  authenticated: boolean;
-  customer: {
-    hasBookedBefore: boolean;
-    firstName: string;
-    lastName: string;
-    email: string;
-    phone: string;
-    backupContact: string;
-    emergencyContactName: string;
-    emergencyContactPhone: string;
-    wechatId: string;
-  };
-  pets: PrefillPet[];
-};
-
 export default function HomePage() {
   return (
     <Suspense fallback={<main className="min-h-screen px-4 py-8" />}>
@@ -73,6 +54,9 @@ function HomePageContent() {
   const [returningStatus, setReturningStatus] = useState("");
   const [prefill, setPrefill] = useState<PrefillResponse | null>(null);
   const [selectedPetId, setSelectedPetId] = useState("");
+  const [selectedSecondPetId, setSelectedSecondPetId] = useState("");
+  const currentPrefill = useRef<PrefillResponse | null>(null);
+  const chosenPets = useRef({ first: "", second: "" });
   const [editNotice, setEditNotice] = useState("");
   const lookupGeneration = useRef(0);
   const loadedEmail = useRef("");
@@ -86,56 +70,12 @@ function HomePageContent() {
   const ownerName = `${formValues.firstName} ${formValues.lastName}`.trim();
   const needsWechatId = formValues.backupContact === "wechat";
 
-  const toRecord = useCallback((value: unknown): Record<string, unknown> => {
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
-      return {};
-    }
-    return value as Record<string, unknown>;
-  }, []);
-
-  const toTextValue = useCallback((value: unknown): string => {
-    if (typeof value === "string") return value;
-    if (typeof value === "number" || typeof value === "boolean") {
-      return String(value);
-    }
-    return "";
-  }, []);
-
   const applyPrescreenPrefill = useCallback(
     (pet: PrefillPet, isSecondDog: boolean) => {
-      const answers = toRecord(pet.lastPrescreenAnswers);
-      setFormValues((current) => {
-        const next = {
-          ...current,
-          prescreenNotes: isSecondDog
-            ? current.prescreenNotes
-            : toTextValue(pet.lastPrescreenNotes),
-          secondPrescreenNotes: isSecondDog
-            ? toTextValue(pet.lastPrescreenNotes)
-            : current.secondPrescreenNotes,
-        };
-
-        if (isSecondDog) {
-          secondPrescreenQuestions.forEach((question, index) => {
-            const sourceKey = prescreenQuestions[index]?.name;
-            const sourceValue =
-              sourceKey && sourceKey in answers
-                ? answers[sourceKey]
-                : undefined;
-            const value = sourceValue ?? (answers[question.name] as unknown);
-            Object.assign(next, { [question.name]: toTextValue(value) });
-          });
-          next.secondPrescreenNotes = toTextValue(pet.lastPrescreenNotes);
-          return next;
-        }
-
-        prescreenQuestions.forEach((question) => {
-          Object.assign(next, {
-            [question.name]: toTextValue(answers[question.name]),
-          });
-        });
-        return next;
-      });
+      setFormValues((current) => ({
+        ...current,
+        ...prescreenPrefillValues(pet, isSecondDog),
+      }));
       setErrors((current) => {
         const next: Partial<Record<keyof FormValues, string>> = { ...current };
         const keysToClear: Array<keyof FormValues> = isSecondDog
@@ -157,7 +97,7 @@ function HomePageContent() {
         return next;
       });
     },
-    [toRecord, toTextValue],
+    [],
   );
 
   const applyCustomerPrefill = useCallback(
@@ -180,6 +120,7 @@ function HomePageContent() {
 
   const applyPetPrefill = useCallback(
     (pet: PrefillPet) => {
+      chosenPets.current.first = pet.id;
       setSelectedPetId(pet.id);
       setFormValues((current) => ({
         ...current,
@@ -195,6 +136,8 @@ function HomePageContent() {
 
   const applySecondPetPrefill = useCallback(
     (pet: PrefillPet) => {
+      chosenPets.current.second = pet.id;
+      setSelectedSecondPetId(pet.id);
       setFormValues((current) => ({
         ...current,
         hasSecondDog: true,
@@ -210,27 +153,59 @@ function HomePageContent() {
 
   const applyPrefill = useCallback(
     (data: PrefillResponse) => {
-      loadedEmail.current = data.customer.email.trim().toLowerCase();
+      const email = data.customer.email.trim().toLowerCase();
+      // A slower public lookup must never clear answers loaded by a verified session.
+      if (
+        !data.authenticated &&
+        currentPrefill.current?.authenticated &&
+        loadedEmail.current === email
+      )
+        return;
+      loadedEmail.current = email;
+      currentPrefill.current = data;
       setPrefill(data);
       applyCustomerPrefill(data.customer);
-      if (data.pets.length === 1) {
-        applyPetPrefill(data.pets[0]);
-      }
-      setReturningStatus("Saved profile loaded.");
+      const selected = data.pets.find(
+        (pet) => pet.id === chosenPets.current.first,
+      );
+      const first =
+        selected ||
+        (data.authenticated || data.pets.length === 1
+          ? data.pets[0]
+          : undefined);
+      if (first) applyPetPrefill(first);
+      const second = data.pets.find(
+        (pet) => pet.id === chosenPets.current.second,
+      );
+      if (second) applySecondPetPrefill(second);
+      setReturningStatus(
+        data.authenticated
+          ? "Email verified. Saved details and available pre-screening answers loaded."
+          : "Saved contact and dog details loaded. Verify your email to reuse your pre-screening answers.",
+      );
     },
-    [applyCustomerPrefill, applyPetPrefill],
+    [applyCustomerPrefill, applyPetPrefill, applySecondPetPrefill],
   );
 
   const loadPrefill = useCallback(async () => {
     const generation = lookupGeneration.current;
     try {
-      const response = await fetch("/api/me/prefill");
+      const response = await fetch("/api/me/prefill", { cache: "no-store" });
       if (!response.ok) return;
 
       const data = (await response.json()) as PrefillResponse;
       if (!data.authenticated || generation !== lookupGeneration.current)
         return;
 
+      const email = data.customer.email.trim().toLowerCase();
+      if (loadedEmail.current && loadedEmail.current !== email) return;
+      // Returning from email verification in another tab should restore saved answers,
+      // but focusing an already verified form must preserve the user's edits.
+      if (
+        currentPrefill.current?.authenticated &&
+        loadedEmail.current === email
+      )
+        return;
       applyPrefill(data);
     } catch {
       // Prefill is optional; leave the blank form usable.
@@ -240,6 +215,15 @@ function HomePageContent() {
   useEffect(() => {
     if (editToken) return;
     void loadPrefill();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void loadPrefill();
+    };
+    window.addEventListener("focus", loadPrefill);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("focus", loadPrefill);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [editToken, loadPrefill]);
 
   const lookupEmail = formValues.email.trim().toLowerCase();
@@ -333,6 +317,9 @@ function HomePageContent() {
     if (name === "email") {
       lookupGeneration.current++;
       loadedEmail.current = "";
+      currentPrefill.current = null;
+      chosenPets.current = { first: "", second: "" };
+      setSelectedSecondPetId("");
       setPrefill(null);
       setSelectedPetId("");
       setReturningStatus("");
@@ -347,6 +334,31 @@ function HomePageContent() {
       setHasReadAgreement(false);
       setErrors({});
       return;
+    }
+    if (
+      name === "petName" &&
+      value !== prefill?.pets.find((pet) => pet.id === selectedPetId)?.name
+    ) {
+      chosenPets.current.first = "";
+      setSelectedPetId("");
+      if (selectedPetId)
+        applyPrescreenPrefill(
+          { id: "", name: "", breed: "", weightLb: 0 },
+          false,
+        );
+    }
+    if (
+      name === "secondPetName" &&
+      value !==
+        prefill?.pets.find((pet) => pet.id === selectedSecondPetId)?.name
+    ) {
+      chosenPets.current.second = "";
+      setSelectedSecondPetId("");
+      if (selectedSecondPetId)
+        applyPrescreenPrefill(
+          { id: "", name: "", breed: "", weightLb: 0 },
+          true,
+        );
     }
     setFormValues((current) => {
       const next = { ...current, [name]: value };
@@ -507,6 +519,11 @@ function HomePageContent() {
   );
   const wechatField = formFields.find((field) => field.name === "wechatId");
 
+  const selectedPet = prefill?.pets.find((pet) => pet.id === selectedPetId);
+  const selectedSecondPet = prefill?.pets.find(
+    (pet) => pet.id === selectedSecondPetId,
+  );
+
   const canSubmit =
     !isSubmitting &&
     hasReadAgreement &&
@@ -557,7 +574,8 @@ function HomePageContent() {
             </h2>
             <p className="mt-1 text-sm text-stone-600">
               Enter your email to automatically find your saved contact and dog
-              details. No sign-in link is needed.
+              details. After verifying your email, your saved pre-screening
+              answers and notes are filled in too.
             </p>
           </div>
 
@@ -615,6 +633,15 @@ function HomePageContent() {
             </div>
           ) : null}
 
+          {prefill && !prefill.authenticated && !editToken && (
+            <Link
+              className="text-link"
+              href={`/login?next=/book&email=${encodeURIComponent(formValues.email)}`}
+            >
+              Verify email & load saved pre-screening →
+            </Link>
+          )}
+
           {returningStatus ? (
             <p className="text-sm text-stone-600">{returningStatus}</p>
           ) : null}
@@ -640,25 +667,36 @@ function HomePageContent() {
           />
 
           <FormSection title={`Dog 1 — ${ui.sections.prescreen}`}>
-            <p className="text-sm text-stone-600">
-              {ui.sections.prescreenIntro}
-            </p>
-            {prescreenQuestions.map((question) => (
-              <PrescreenField
-                key={question.name}
-                name={question.name}
-                label={question.label}
-                value={String(formValues[question.name] ?? "")}
-                error={errors[question.name]}
+            <SavedPrescreen
+              key={`${selectedPetId}:${selectedPet?.lastSubmittedAt || ""}`}
+              saved={Boolean(
+                prefill?.authenticated && hasSavedPrescreen(selectedPet),
+              )}
+              dogName={formValues.petName}
+              hasErrors={prescreenQuestions.some((question) =>
+                Boolean(errors[question.name]),
+              )}
+            >
+              <p className="text-sm text-stone-600">
+                {ui.sections.prescreenIntro}
+              </p>
+              {prescreenQuestions.map((question) => (
+                <PrescreenField
+                  key={question.name}
+                  name={question.name}
+                  label={question.label}
+                  value={String(formValues[question.name] ?? "")}
+                  error={errors[question.name]}
+                  onChange={handleFieldChange}
+                />
+              ))}
+              <PrescreenNotes
+                value={formValues.prescreenNotes}
+                label={ui.prescreenNotesLabel}
+                placeholder={ui.prescreenNotesPlaceholder}
                 onChange={handleFieldChange}
               />
-            ))}
-            <PrescreenNotes
-              value={formValues.prescreenNotes}
-              label={ui.prescreenNotesLabel}
-              placeholder={ui.prescreenNotesPlaceholder}
-              onChange={handleFieldChange}
-            />
+            </SavedPrescreen>
           </FormSection>
 
           <FormSection title={ui.sections.owner}>
@@ -750,34 +788,48 @@ function HomePageContent() {
                   onChange={handleFieldChange}
                 />
               ))}
-              <p className="text-sm text-stone-600">
-                Please answer these questions for the second dog.
-              </p>
-              {secondPrescreenQuestions.map((question) => (
-                <PrescreenField
-                  key={question.name}
-                  name={question.name}
-                  label={question.label}
-                  value={String(formValues[question.name] ?? "")}
-                  error={errors[question.name]}
+              <SavedPrescreen
+                key={`${selectedSecondPetId}:${selectedSecondPet?.lastSubmittedAt || ""}`}
+                saved={Boolean(
+                  prefill?.authenticated &&
+                  hasSavedPrescreen(selectedSecondPet),
+                )}
+                dogName={formValues.secondPetName}
+                hasErrors={secondPrescreenQuestions.some((question) =>
+                  Boolean(errors[question.name]),
+                )}
+              >
+                <p className="text-sm text-stone-600">
+                  Please answer these questions for the second dog.
+                </p>
+                {secondPrescreenQuestions.map((question) => (
+                  <PrescreenField
+                    key={question.name}
+                    name={question.name}
+                    label={question.label}
+                    value={String(formValues[question.name] ?? "")}
+                    error={errors[question.name]}
+                    onChange={handleFieldChange}
+                  />
+                ))}
+                <PrescreenNotes
+                  value={formValues.secondPrescreenNotes}
+                  label="Additional notes for Dog 2"
+                  placeholder={ui.prescreenNotesPlaceholder}
                   onChange={handleFieldChange}
+                  name="secondPrescreenNotes"
                 />
-              ))}
-              <PrescreenNotes
-                value={formValues.secondPrescreenNotes}
-                label="Additional notes for Dog 2"
-                placeholder={ui.prescreenNotesPlaceholder}
-                onChange={handleFieldChange}
-                name="secondPrescreenNotes"
-              />
+              </SavedPrescreen>
               <button
                 type="button"
-                onClick={() =>
+                onClick={() => {
+                  chosenPets.current.second = "";
+                  setSelectedSecondPetId("");
                   setFormValues((current) => ({
                     ...current,
                     hasSecondDog: false,
-                  }))
-                }
+                  }));
+                }}
                 className="rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50"
               >
                 Remove Second Dog

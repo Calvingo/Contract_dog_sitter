@@ -162,3 +162,11 @@ Technical references: [Vercel cron scheduling](https://vercel.com/docs/cron-jobs
 Acceptance subjects/headings include “Payments Requirements,” with a prominent red 20% deposit reminder. Zelle name/recipient come from Admin → Settings; if absent, the email asks the customer to contact Qi (Christine) Zhang instead of inventing a recipient. Acceptance and meet-and-greet emails include the front-yard policy and Qi’s email, phone and WeChat.
 
 Migration `20261007000000_simple_marketing` adds campaign audience/image fields and persistent image storage. It preserves existing campaigns and customer preferences. PNG/JPEG/WebP uploads are limited to 2 MB, checked by MIME type and file signature, and served through opaque public image URLs so email clients can display them. Deploy with the existing `vercel-build` command to apply the migration before serving the updated app.
+
+### Saved pre-screening for returning customers
+
+Each submitted booking already stores separate pre-screening answers and notes for each dog; edits retain the previous revision. After email verification, `/api/me/prefill` restores the latest per-dog answers, with a fallback for older single-dog bookings. Both authenticated GET requests and lookups of the signed-in customer's own email return private, non-cacheable pre-screening data. Public email lookup and lookups of other customers do not expose it.
+
+The booking form loads a saved dog automatically after verification, supports switching dogs and adding a second saved dog, and displays completed answers under “Review or update saved answers.” Customers only need to change information that has changed. Missing answers remain blank. Returning to an open booking tab after verifying in another tab reloads saved answers; focusing an already verified form preserves unsaved edits. No schema migration is required.
+
+`npm run test:prescreen-prefill` checks answer mapping and incomplete records. With the isolated `TEST_DATABASE_URL` on port 55439, it also verifies persistence, rebooking, revisions, multiple dogs, legacy records, email authentication, cache headers and customer isolation without sending email.
