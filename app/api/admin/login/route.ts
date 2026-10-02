@@ -19,7 +19,7 @@ export async function POST(request: Request) {
   const email = String(body?.email || "");
   const password = String(body?.password || "");
 
-  if (!verifyAdminCredentials(email, password)) {
+  if (!(await verifyAdminCredentials(email, password))) {
     return NextResponse.json(
       { error: "Invalid admin email or password" },
       { status: 401 },

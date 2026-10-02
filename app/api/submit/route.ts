@@ -6,21 +6,40 @@ import type { FormValues } from "@/lib/form-config";
 import { sendSubmissionEmails } from "@/lib/email";
 import { createSubmissionRecord } from "@/lib/services/submission-service";
 import { signatureToBuffer, validateSubmission } from "@/lib/validate";
+import { allowRequest, requestIp } from "@/lib/platform/rate-limit";
+import { prisma } from "@/lib/db";
+import { normalizeEmail } from "@/lib/submission-data";
 
 export async function POST(request: Request) {
   try {
     const session = await getCustomerSession();
-    if (!session)
-      return NextResponse.json(
-        { error: "Please sign in before booking." },
-        { status: 401 },
-      );
     const data = (await request.json()) as FormValues;
     const validationError = validateSubmission(data);
 
     if (validationError) {
       return NextResponse.json({ error: validationError }, { status: 400 });
     }
+    if (
+      !(await allowRequest("booking-ip", requestIp(request), 10, 3600)) ||
+      !(await allowRequest(
+        "booking-email",
+        normalizeEmail(data.email),
+        5,
+        3600,
+      ))
+    )
+      return NextResponse.json(
+        { error: "Too many booking requests. Please try again later." },
+        { status: 429 },
+      );
+    const owner = session
+      ? await prisma.customer.findUnique({
+          where: { id: session.customerId },
+          select: { id: true, email: true },
+        })
+      : null;
+    const verifiedOwnerId =
+      owner?.email === normalizeEmail(data.email) ? owner.id : undefined;
 
     try {
       dateRange(data.dropoffDate, data.pickupDate);
@@ -36,10 +55,7 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     const signatureBuffer = signatureToBuffer(data.signature);
-    const { submission } = await createSubmissionRecord(
-      data,
-      session.customerId,
-    );
+    const { submission } = await createSubmissionRecord(data, verifiedOwnerId);
     let emailWarning = false;
     try {
       await sendSubmissionEmails(data, signatureBuffer, submission.id, {
@@ -54,6 +70,7 @@ export async function POST(request: Request) {
       ok: true,
       submissionId: submission.id,
       emailWarning,
+      accountAccess: Boolean(verifiedOwnerId),
     });
   } catch (error) {
     if (error instanceof BookingConflict)

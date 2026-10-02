@@ -8,6 +8,12 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+model AdminCredential {
+  email        String   @id
+  passwordHash String
+  updatedAt    DateTime @updatedAt
+}
+
 enum SubmissionStatus {
   PENDING
   ACCEPTED
@@ -359,5 +365,18 @@ model RequestRateLimit {
   count     Int @default(1)
   expiresAt DateTime
 
+  @@index([expiresAt])
+}
+
+model AdminLoginChallenge {
+  id        String @id
+  email     String
+  codeHash  String
+  attempts  Int @default(0)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([email, createdAt])
   @@index([expiresAt])
 }

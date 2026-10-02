@@ -1,5 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
+import { prisma } from "@/lib/db";
+import { verifyAdminPassword } from "@/lib/auth/admin-password";
 
 const ADMIN_SESSION_COOKIE = "spr_admin_session";
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
@@ -45,24 +47,29 @@ function secureCompare(a: string, b: string): boolean {
   return aBuffer.length === bBuffer.length && timingSafeEqual(aBuffer, bBuffer);
 }
 
-export function verifyAdminCredentials(
+export async function verifyAdminCredentials(
   email: string,
   password: string,
-): boolean {
+): Promise<boolean> {
   const normalizedEmail = email.trim().toLowerCase();
   const normalizedPassword = password.trim();
   if (
     !normalizedEmail ||
     !normalizedPassword ||
+    normalizedPassword.length > 1024 ||
     !isAdminEmail(normalizedEmail)
   ) {
     return false;
   }
   const configuredPassword = getAdminPassword();
-  return (
-    Boolean(configuredPassword) &&
-    secureCompare(normalizedPassword, configuredPassword)
-  );
+  if (configuredPassword)
+    return secureCompare(normalizedPassword, configuredPassword);
+  const credential = await prisma.adminCredential.findUnique({
+    where: { email: normalizedEmail },
+  });
+  return credential
+    ? verifyAdminPassword(normalizedPassword, credential.passwordHash)
+    : false;
 }
 
 function createAdminSessionToken(email: string): string {

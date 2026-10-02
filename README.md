@@ -35,7 +35,7 @@ Prisma CLI does not automatically load `.env.local`: supply `DATABASE_URL` and `
 | Admin    | `/admin/marketing`       | Email campaigns, annual holiday rules, audiences, delivery logs and exclusions        |
 | Admin    | `/admin/settings`        | Default capacity, hold rules, and payment recipients                                  |
 
-Users must verify their email before reading profiles or making new bookings. Supplying an email query parameter does not reveal that account. Booking ownership is checked on the server. Admin sessions are separate. Old signed booking-edit links continue to work, including the previous `/?editToken=...` URLs.
+Customers can open `/book` and submit without signing in. As explicitly chosen for this site, entering an email automatically looks up the saved name, phone and basic dog profiles; anyone who knows that email can retrieve those fields. Lookup uses a rate-limited POST and never creates a login session. It excludes emergency contacts, care notes and booking history. Full account history still requires email verification, and booking ownership is checked on the server. Guest bookings preserve submitted details in booking snapshots without overwriting existing customer or dog profiles. Admin sessions are separate. Old signed booking-edit links continue to work, including the previous `/?editToken=...` URLs.
 
 ## Booking business rules
 
@@ -60,17 +60,17 @@ The existing production app stores booking timestamps as local civil date/time v
 
 ## Configuration
 
-| Variable                                          | Purpose                                                            |
-| ------------------------------------------------- | ------------------------------------------------------------------ |
-| `DATABASE_URL`, `DIRECT_URL`                      | PostgreSQL runtime and migration connections                       |
-| `GMAIL_USER`, `GMAIL_APP_PASSWORD`                | Existing email transport; no message is sent without configuration |
-| `ADMIN_EMAIL`                                     | Comma-separated admin allowlist / notification recipients          |
-| `ADMIN_PASSWORD`                                  | Required shared admin password; there is no built-in fallback      |
-| `APP_SECRET`                                      | Signing secret, at least 16 characters                             |
-| `CUSTOMER_SESSION_SECRET`, `ADMIN_SESSION_SECRET` | Optional separate session secrets, falling back to `APP_SECRET`    |
-| `LOGIN_TOKEN_TTL_MINUTES`                         | Magic-link lifetime; defaults to 30 minutes                        |
-| `APP_BASE_URL`                                    | Public HTTPS origin for email links                                |
-| `NEXT_PUBLIC_APP_URL`                             | Optional public origin fallback                                    |
+| Variable                                          | Purpose                                                                      |
+| ------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `DATABASE_URL`, `DIRECT_URL`                      | PostgreSQL runtime and migration connections                                 |
+| `GMAIL_USER`, `GMAIL_APP_PASSWORD`                | Existing email transport; no message is sent without configuration           |
+| `ADMIN_EMAIL`                                     | Comma-separated admin allowlist / notification recipients                    |
+| `ADMIN_PASSWORD`                                  | Optional shared admin password override; otherwise per-email database hashes |
+| `APP_SECRET`                                      | Signing secret, at least 16 characters                                       |
+| `CUSTOMER_SESSION_SECRET`, `ADMIN_SESSION_SECRET` | Optional separate session secrets, falling back to `APP_SECRET`              |
+| `LOGIN_TOKEN_TTL_MINUTES`                         | Magic-link lifetime; defaults to 30 minutes                                  |
+| `APP_BASE_URL`                                    | Public HTTPS origin for email links                                          |
+| `NEXT_PUBLIC_APP_URL`                             | Optional public origin fallback                                              |
 
 Configure the real Zelle enrolled identifier / recipient name and Venmo username / recipient name in **Admin → Settings**. Empty values disable that method. No real payment details are seeded by migrations.
 
@@ -116,7 +116,7 @@ Promotional emails use the existing Gmail / SMTP connection. There is no SMS int
 ### Production configuration and deployment
 
 1. Back up the production database and confirm the existing Vercel project / domain before release. Use an isolated database for preview deployments. Never copy local demo customers or payment settings into production.
-2. Keep the current database, SMTP and public URL settings. Set a strong `ADMIN_PASSWORD` (no fallback password exists). Run `npm run check:production` against the intended environment; it checks configuration without printing secrets or sending messages.
+2. Keep the current database, SMTP and public URL settings. Admins can use a one-time email code sent only to an address in `ADMIN_EMAIL`. `ADMIN_PASSWORD` is an optional override; without it, password sign-in verifies the per-email scrypt hash in `AdminCredential`. There is no built-in password. Provision credentials with `node scripts/set-admin-password.mjs` using JSON `{ "email": ..., "password": ... }` on stdin, through a secure input channel; do not put passwords in committed files. The email must be listed in `ADMIN_EMAIL`. Run `npm run check:production` against the intended environment; it checks configuration without printing secrets or sending messages.
 3. For promotions, configure `MARKETING_POSTAL_ADDRESS`, `MARKETING_TOKEN_SECRET` and `CRON_SECRET` (separate random values of at least 32 characters). `MARKETING_FROM` is optional and defaults to the existing SMTP user; only use an authorized sender. Start with `MARKETING_ENABLED=false`. Missing promotional settings do not prevent normal bookings or draft preparation.
 4. Use `npm run vercel-build` as the Vercel build command. It generates the Prisma client, applies the two additive platform/campaign migrations, then builds. Do not use production database credentials for preview builds. The new tables are empty; annual rules and campaigns are not automatically enabled or seeded.
 5. After deployment verify admin sign-in, customer magic-link sign-in, availability, a known historical booking, exports and payment recipients. Configure actual Zelle / Venmo identifiers in Admin → Settings; blank methods stay disabled. Verify SMTP connectivity with `npm run check:smtp` (no email sent).
@@ -134,3 +134,11 @@ TEST_DATABASE_URL=postgresql://USER@127.0.0.1:55439/postgres npm run test:market
 Admin password attempts and customer login-link requests now use database-backed rate limits. Vercel's trusted proxy IP header is used in production; forwarded headers from arbitrary clients are not accepted.
 
 Technical references: [Vercel cron scheduling](https://vercel.com/docs/cron-jobs/usage-and-pricing), [cron authentication](https://vercel.com/docs/cron-jobs/manage-cron-jobs), [SMTP transport](https://nodemailer.com/smtp). Promotional mailing-address requirements: [FTC commercial email guide](https://www.ftc.gov/business-guidance/resources/can-spam-act-compliance-guide-business).
+
+## Booking entry and admin access
+
+- The booking calendar owns both dates and both drop-off / pick-up times; the lower form does not repeat them. Allowed times remain 8:30 AM–9 PM, and pricing and server validation use the same values.
+- Email-only lookup is a convenience feature, **not identity verification**. Guest submissions never grant access to an existing account or silently update its saved contact/dog details. A customer can still verify their email separately to manage account history.
+- `/admin/login` defaults to a six-digit email code; existing configured password login remains available. Only `ADMIN_EMAIL` allowlisted addresses receive codes. Codes expire in ten minutes, allow five guesses, and are atomically consumed once. Request and verification endpoints are rate-limited. A new code invalidates older codes. Admin codes are stored as keyed hashes and do not share customer magic-link tokens.
+- Migration `20261003000000_admin_email_login` adds the admin challenge table without changing customers or bookings. Production deployment applies it through the existing Vercel build command.
+- `TEST_DATABASE_URL=postgresql://USER@127.0.0.1:55439/postgres npm run test:booking-entry` checks guest profile preservation, submitted dates/times and admin code expiry / replay / concurrency / allowlist / attempt limits with an injected fake sender. Add `TEST_BASE_URL=http://127.0.0.1:3100` to test public lookup, account isolation, guest submission and actual admin session creation. Use the same isolated preview configuration described above; no real email is sent.

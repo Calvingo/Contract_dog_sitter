@@ -1,98 +1,180 @@
 "use client";
-
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-
 export default function AdminLoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
+  const [challengeId, setChallengeId] = useState("");
+  const [method, setMethod] = useState<"code" | "password">("password");
   const [error, setError] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setIsSubmitting(true);
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function submit(sendCode = false) {
+    setBusy(true);
     setError("");
-
+    setMessage("");
     try {
-      const response = await fetch("/api/admin/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (!response.ok) {
-        const data = (await response.json().catch(() => null)) as {
-          error?: string;
-        } | null;
-        throw new Error(data?.error || "Login failed");
+      const passwordLogin = method === "password" && !sendCode;
+      const verify = !sendCode && Boolean(challengeId);
+      const response = await fetch(
+        passwordLogin ? "/api/admin/login" : "/api/admin/login/code",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(
+            passwordLogin
+              ? { email, password }
+              : {
+                  email,
+                  action: verify ? "verify" : "request",
+                  code,
+                  challengeId,
+                },
+          ),
+        },
+      );
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Unable to sign in.");
+      if (data.challengeId) {
+        setChallengeId(data.challengeId);
+        setCode("");
+        setMessage(data.message);
+      } else {
+        router.push("/admin");
+        router.refresh();
       }
-
-      router.push("/admin");
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Unable to sign in.");
     } finally {
-      setIsSubmitting(false);
+      setBusy(false);
     }
-  };
-
+  }
   return (
-    <main className="min-h-screen px-4 py-10">
-      <div className="mx-auto flex max-w-md flex-col gap-6">
-        <header>
-          <Link href="/" className="text-sm font-semibold text-orange-700">
-            Back to booking form
-          </Link>
-          <h1 className="mt-6 text-3xl font-bold text-stone-950">
-            Admin Login
-          </h1>
-          <p className="mt-2 text-sm text-stone-600">
-            Use an approved admin email and the shared admin password.
-          </p>
-        </header>
-
+    <main className="platform-login">
+      <Link href="/" className="brand">
+        Silicon Paws <span>Retreat</span>
+      </Link>
+      <section className="panel login-card">
+        <p className="eyebrow">ADMIN ACCESS</p>
+        <h1>Admin sign in</h1>
+        <p>
+          Sign in with your admin email and password. You can also choose an
+          email verification code.
+        </p>
+        <div className="platform-tabs" aria-label="Admin sign-in method">
+          <button
+            type="button"
+            className={method === "code" ? "button" : "button secondary"}
+            aria-pressed={method === "code"}
+            onClick={() => {
+              setMethod("code");
+              setError("");
+            }}
+          >
+            Email verification code
+          </button>
+          <button
+            type="button"
+            className={method === "password" ? "button" : "button secondary"}
+            aria-pressed={method === "password"}
+            onClick={() => {
+              setMethod("password");
+              setError("");
+            }}
+          >
+            Password
+          </button>
+        </div>
         <form
-          onSubmit={handleSubmit}
-          className="space-y-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-orange-100"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submit();
+          }}
         >
-          <label className="block">
-            <span className="text-sm font-medium text-stone-700">Email</span>
+          <label>
+            Admin email
             <input
               type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              className="mt-2 w-full rounded-xl border border-orange-100 bg-white px-4 py-3 text-stone-900 outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100"
               autoComplete="email"
+              maxLength={254}
               required
+              value={email}
+              onChange={(event) => {
+                setEmail(event.target.value);
+                setChallengeId("");
+                setCode("");
+                setMessage("");
+              }}
+              placeholder="you@example.com"
             />
           </label>
-
-          <label className="block">
-            <span className="text-sm font-medium text-stone-700">Password</span>
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="mt-2 w-full rounded-xl border border-orange-100 bg-white px-4 py-3 text-stone-900 outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100"
-              autoComplete="current-password"
-              required
-            />
-          </label>
-
-          {error ? <p className="text-sm text-red-600">{error}</p> : null}
-
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full rounded-xl bg-stone-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isSubmitting ? "Signing in..." : "Sign in"}
+          {method === "password" ? (
+            <label>
+              Password
+              <input
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+              />
+            </label>
+          ) : challengeId ? (
+            <label>
+              Six-digit code
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                required
+                value={code}
+                onChange={(event) =>
+                  setCode(event.target.value.replace(/\D/g, ""))
+                }
+              />
+            </label>
+          ) : null}
+          <button className="button" disabled={busy}>
+            {busy
+              ? "Please wait…"
+              : method === "password" || challengeId
+                ? "Sign in"
+                : "Email me a verification code"}
           </button>
+          {method === "code" && challengeId && (
+            <button
+              className="button secondary"
+              type="button"
+              disabled={busy}
+              onClick={() => void submit(true)}
+            >
+              Send another code
+            </button>
+          )}
         </form>
-      </div>
+        {error && (
+          <p role="alert" className="notice error">
+            {error}
+          </p>
+        )}
+        {message && (
+          <p role="status" className="notice">
+            {message}
+          </p>
+        )}
+        <p className="small">
+          Codes expire after 10 minutes and can only be used once. Only approved
+          admin email addresses can access this dashboard.
+        </p>
+      </section>
+      <Link href="/book" className="subtle-link">
+        Book a stay →
+      </Link>
     </main>
   );
 }

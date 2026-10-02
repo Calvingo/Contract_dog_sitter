@@ -18,7 +18,7 @@ import {
 
 export async function createSubmissionRecord(
   data: FormValues,
-  customerId: string,
+  customerId?: string,
 ) {
   const customerSnapshot = buildCustomerSnapshot(data);
   const petSnapshots = buildPetSnapshots(data);
@@ -31,8 +31,10 @@ export async function createSubmissionRecord(
 
   return prisma.$transaction(async (tx) => {
     await lockCapacity(tx);
-    const owner = await tx.customer.findUnique({ where: { id: customerId } });
-    if (!owner || owner.email !== customerSnapshot.email)
+    const owner = customerId
+      ? await tx.customer.findUnique({ where: { id: customerId } })
+      : null;
+    if (customerId && (!owner || owner.email !== customerSnapshot.email))
       throw new BookingConflict("Please use your signed-in email address.");
     await assertCapacity(tx, dropoffAt, pickupAt, petSnapshots.length);
     const settings = await getSettings(tx);
@@ -44,19 +46,21 @@ export async function createSubmissionRecord(
         wechatId: customerSnapshot.wechatId,
         lastSeenAt: now,
       },
-      update: {
-        ...(owner.phone !== customerSnapshot.phone
-          ? { smsMarketingOptIn: false }
-          : {}),
-        firstName: customerSnapshot.firstName,
-        lastName: customerSnapshot.lastName,
-        phone: customerSnapshot.phone,
-        backupContact: customerSnapshot.backupContact,
-        emergencyContactName: customerSnapshot.emergencyContactName,
-        emergencyContactPhone: customerSnapshot.emergencyContactPhone,
-        wechatId: customerSnapshot.wechatId,
-        lastSeenAt: now,
-      },
+      update: owner
+        ? {
+            ...(owner.phone !== customerSnapshot.phone
+              ? { smsMarketingOptIn: false }
+              : {}),
+            firstName: customerSnapshot.firstName,
+            lastName: customerSnapshot.lastName,
+            phone: customerSnapshot.phone,
+            backupContact: customerSnapshot.backupContact,
+            emergencyContactName: customerSnapshot.emergencyContactName,
+            emergencyContactPhone: customerSnapshot.emergencyContactPhone,
+            wechatId: customerSnapshot.wechatId,
+            lastSeenAt: now,
+          }
+        : {},
     });
 
     const pets = [];
@@ -67,11 +71,13 @@ export async function createSubmissionRecord(
             customerId_name: { customerId: customer.id, name: snapshot.name },
           },
           create: { customerId: customer.id, ...snapshot },
-          update: {
-            breed: snapshot.breed,
-            weightLb: snapshot.weightLb,
-            ageYears: snapshot.ageYears,
-          },
+          update: owner
+            ? {
+                breed: snapshot.breed,
+                weightLb: snapshot.weightLb,
+                ageYears: snapshot.ageYears,
+              }
+            : {},
         }),
       );
     }

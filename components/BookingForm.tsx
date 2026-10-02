@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AvailabilityCalendar } from "@/components/AvailabilityCalendar";
 import { PublicNav } from "@/components/PlatformShell";
@@ -74,6 +74,8 @@ function HomePageContent() {
   const [prefill, setPrefill] = useState<PrefillResponse | null>(null);
   const [selectedPetId, setSelectedPetId] = useState("");
   const [editNotice, setEditNotice] = useState("");
+  const lookupGeneration = useRef(0);
+  const loadedEmail = useRef("");
 
   const today = new Date().toLocaleDateString("en-US", {
     year: "numeric",
@@ -208,6 +210,7 @@ function HomePageContent() {
 
   const applyPrefill = useCallback(
     (data: PrefillResponse) => {
+      loadedEmail.current = data.customer.email.trim().toLowerCase();
       setPrefill(data);
       applyCustomerPrefill(data.customer);
       if (data.pets.length === 1) {
@@ -219,12 +222,14 @@ function HomePageContent() {
   );
 
   const loadPrefill = useCallback(async () => {
+    const generation = lookupGeneration.current;
     try {
       const response = await fetch("/api/me/prefill");
       if (!response.ok) return;
 
       const data = (await response.json()) as PrefillResponse;
-      if (!data.authenticated) return;
+      if (!data.authenticated || generation !== lookupGeneration.current)
+        return;
 
       applyPrefill(data);
     } catch {
@@ -236,6 +241,56 @@ function HomePageContent() {
     if (editToken) return;
     void loadPrefill();
   }, [editToken, loadPrefill]);
+
+  const lookupEmail = formValues.email.trim().toLowerCase();
+  useEffect(() => {
+    if (
+      editToken ||
+      loadedEmail.current === lookupEmail ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(lookupEmail)
+    )
+      return;
+    const controller = new AbortController();
+    const generation = lookupGeneration.current;
+    const timer = window.setTimeout(async () => {
+      setReturningStatus("Looking for your saved details…");
+      try {
+        const response = await fetch("/api/me/prefill", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: lookupEmail }),
+          signal: controller.signal,
+        });
+        const data = await response.json();
+        if (
+          controller.signal.aborted ||
+          generation !== lookupGeneration.current
+        )
+          return;
+        if (!response.ok)
+          throw new Error(
+            data.error ||
+              "Lookup unavailable. You can still fill in your details below.",
+          );
+        if (data.found) applyPrefill(data);
+        else
+          setReturningStatus(
+            "No saved profile found. Fill in your details below to make your first booking.",
+          );
+      } catch (error) {
+        if (!controller.signal.aborted)
+          setReturningStatus(
+            error instanceof Error
+              ? error.message
+              : "Lookup unavailable. Please fill in your details below.",
+          );
+      }
+    }, 450);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [lookupEmail, editToken, applyPrefill]);
 
   useEffect(() => {
     if (!editToken) return;
@@ -275,6 +330,24 @@ function HomePageContent() {
   }, [editToken]);
 
   const handleFieldChange = (name: keyof FormValues, value: string) => {
+    if (name === "email") {
+      lookupGeneration.current++;
+      loadedEmail.current = "";
+      setPrefill(null);
+      setSelectedPetId("");
+      setReturningStatus("");
+      setFormValues((current) => ({
+        ...initialFormValues,
+        email: value,
+        dropoffDate: current.dropoffDate,
+        pickupDate: current.pickupDate,
+        dropoffTime: current.dropoffTime,
+        pickupTime: current.pickupTime,
+      }));
+      setHasReadAgreement(false);
+      setErrors({});
+      return;
+    }
     setFormValues((current) => {
       const next = { ...current, [name]: value };
       if (name === "backupContact" && value !== "wechat") {
@@ -410,7 +483,7 @@ function HomePageContent() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Submit failed");
       router.push(
-        editToken
+        editToken || !result.accountAccess
           ? `/success${result.emailWarning ? "?emailWarning=1" : ""}`
           : `/account/bookings/${result.submissionId}${result.emailWarning ? "?emailWarning=1" : ""}`,
       );
@@ -422,12 +495,23 @@ function HomePageContent() {
   };
 
   const bookingFields = formFields.filter(
-    (field) => field.section === "booking",
+    (field) =>
+      field.section === "booking" &&
+      !["dropoffDate", "pickupDate", "dropoffTime", "pickupTime"].includes(
+        field.name,
+      ),
   );
   const ownerFields = formFields.filter(
-    (field) => field.section === "owner" && field.name !== "wechatId",
+    (field) =>
+      field.section === "owner" && !["wechatId", "email"].includes(field.name),
   );
-  const petFields = formFields.filter((field) => field.section === "pet");
+  const petFields = formFields.filter(
+    (field) =>
+      field.section === "pet" &&
+      !["dropoffDate", "pickupDate", "dropoffTime", "pickupTime"].includes(
+        field.name,
+      ),
+  );
   const wechatField = formFields.find((field) => field.name === "wechatId");
 
   const canSubmit =
@@ -454,25 +538,58 @@ function HomePageContent() {
           start={formValues.dropoffDate}
           end={formValues.pickupDate}
           editToken={editToken}
-          onSelect={(dropoffDate, pickupDate) =>
+          dropoffTime={formValues.dropoffTime}
+          pickupTime={formValues.pickupTime}
+          onTimeChange={handleFieldChange}
+          errors={errors}
+          onSelect={(dropoffDate, pickupDate) => {
+            setErrors((current) => ({
+              ...current,
+              dropoffDate: undefined,
+              pickupDate: undefined,
+            }));
             setFormValues((current) => ({
               ...current,
               dropoffDate,
               pickupDate,
-            }))
-          }
+            }));
+          }}
         />
         <BoardingChecklist />
 
         <section className="space-y-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-orange-100">
           <div>
             <h2 className="text-lg font-semibold text-stone-800">
-              Your saved profile
+              Find your details
             </h2>
             <p className="mt-1 text-sm text-stone-600">
-              Your saved profile is loaded securely after sign-in.
+              Enter your email to automatically find your saved contact and dog
+              details. No sign-in link is needed.
             </p>
           </div>
+
+          <label className="block space-y-2">
+            <span className="text-sm font-medium">Email address *</span>
+            <input
+              type="email"
+              name="bookingEmail"
+              value={formValues.email}
+              onChange={(event) =>
+                handleFieldChange("email", event.target.value)
+              }
+              readOnly={Boolean(editToken)}
+              autoComplete="email"
+              maxLength={254}
+              className="w-full rounded-xl border border-stone-200 px-4 py-3"
+              placeholder="you@example.com"
+              aria-invalid={Boolean(errors.email)}
+            />
+            {errors.email && (
+              <span role="alert" className="text-sm text-red-600">
+                {errors.email}
+              </span>
+            )}
+          </label>
 
           {prefill ? (
             <div className="space-y-3">

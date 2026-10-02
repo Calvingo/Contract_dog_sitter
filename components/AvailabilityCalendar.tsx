@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { dateKey, todayKey } from "@/lib/platform/rules";
+import { getPickupDropoffTimeOptions } from "@/lib/booking-time";
 type Day = { date: string; remaining: number; closed: boolean };
 export function AvailabilityCalendar({
   dogs = 1,
@@ -8,12 +9,22 @@ export function AvailabilityCalendar({
   end = "",
   onSelect,
   editToken,
+  dropoffTime = "",
+  pickupTime = "",
+  onTimeChange,
+  errors,
 }: {
   dogs?: number;
   start?: string;
   end?: string;
   onSelect?: (start: string, end: string) => void;
   editToken?: string | null;
+  dropoffTime?: string;
+  pickupTime?: string;
+  onTimeChange?: (name: "dropoffTime" | "pickupTime", value: string) => void;
+  errors?: Partial<
+    Record<"dropoffDate" | "pickupDate" | "dropoffTime" | "pickupTime", string>
+  >;
 }) {
   const [month, setMonth] = useState(() => (start || todayKey()).slice(0, 7));
   const [days, setDays] = useState<Day[]>([]);
@@ -184,19 +195,74 @@ export function AvailabilityCalendar({
           ? !start || end
             ? "Select a drop-off date, then a pick-up date."
             : "Now choose a pick-up date."
-          : "Sign in to choose dates and submit a booking."}{" "}
+          : "Open Book a stay to choose dates and times."}{" "}
         {inclusive
           ? "Arrival and pick-up dates both count toward daily capacity."
           : "Capacity is counted by night; same-day stays use one day."}
       </p>
-      {start && (
+      {(start || onTimeChange) && (
         <div className="calendar-selection">
-          <span>
-            Drop-off <strong>{start}</strong>
-          </span>
-          <span>
-            Pick-up <strong>{end || "Select a date"}</strong>
-          </span>
+          {(
+            [
+              {
+                label: "Drop-off",
+                date: start,
+                name: "dropoffTime",
+                dateName: "dropoffDate",
+                time: dropoffTime,
+              },
+              {
+                label: "Pick-up",
+                date: end,
+                name: "pickupTime",
+                dateName: "pickupDate",
+                time: pickupTime,
+              },
+            ] as const
+          ).map((item) => (
+            <div key={item.name} className="min-w-0 flex-1 space-y-2">
+              <p>
+                {item.label}{" "}
+                <strong>{item.date || "Select a date above"}</strong>
+              </p>
+              {errors?.[item.dateName] && (
+                <p role="alert" className="text-sm text-red-600">
+                  {errors[item.dateName]}
+                </p>
+              )}
+              {onTimeChange && (
+                <label className="block space-y-2">
+                  <span>{item.label} time</span>
+                  <select
+                    name={item.name}
+                    aria-label={`${item.label} time`}
+                    value={item.time}
+                    onChange={(event) =>
+                      onTimeChange(item.name, event.target.value)
+                    }
+                    aria-invalid={Boolean(errors?.[item.name])}
+                    className="w-full rounded-xl border border-stone-200 bg-white px-3 py-3"
+                  >
+                    <option value="">Choose a time</option>
+                    {item.time &&
+                      !getPickupDropoffTimeOptions().some(
+                        (o) => o.value === item.time,
+                      ) && <option value={item.time}>{item.time}</option>}
+                    {getPickupDropoffTimeOptions().map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {errors?.[item.name] && (
+                <p role="alert" className="text-sm text-red-600">
+                  {errors[item.name]}
+                </p>
+              )}
+            </div>
+          ))}
         </div>
       )}
       <p className="small">

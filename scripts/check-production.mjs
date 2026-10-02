@@ -12,7 +12,7 @@ const required = [
 ];
 for (const key of required)
   if (!process.env[key]?.trim()) failures.push(`${key} is missing`);
-for (const key of ["APP_SECRET", "ADMIN_PASSWORD"])
+for (const key of ["APP_SECRET"])
   if ((process.env[key] || "").length < 16)
     failures.push(`${key} must contain at least 16 characters`);
 try {
@@ -43,6 +43,10 @@ for (const key of ["DATABASE_URL", "DIRECT_URL"])
       `${key} must point to the intended production PostgreSQL database`,
     );
   }
+if (!process.env.ADMIN_PASSWORD)
+  warnings.push(
+    "Admin password sign-in uses per-email database credentials; verify those credentials separately. Email codes are also available.",
+  );
 const marketingRequired = ["MARKETING_POSTAL_ADDRESS"];
 for (const key of marketingRequired)
   if (!process.env[key]?.trim())

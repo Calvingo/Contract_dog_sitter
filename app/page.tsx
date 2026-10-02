@@ -70,7 +70,7 @@ export default async function HomePage({
               <span>01</span>
               <div>
                 <h3>Meet your pack</h3>
-                <p>Sign in and save your dog’s profile.</p>
+                <p>Enter your email to find your dog’s saved details.</p>
               </div>
             </li>
             <li>
