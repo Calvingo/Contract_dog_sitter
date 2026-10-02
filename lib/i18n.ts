@@ -49,6 +49,6 @@ export const ui = {
   prescreenNotesPlaceholder:
     "Special habits, health conditions, behavior concerns, etc.",
   successTitle: "Agreement Submitted!",
-  successBody: "Thank you! A confirmation email has been sent to your inbox.",
+  successBody: "Thank you! Your request has been saved. Your confirmation email and signed PDF will arrive shortly. You do not need to submit again.",
   backHome: "Back to form",
 } as const;

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { BoardingChecklist } from "@/components/BoardingChecklist";
 import { ui } from "@/lib/i18n";
 
-export default function SuccessContent() {
+export default function SuccessContent({ emailWarning = false }: { emailWarning?: boolean }) {
   return (
     <main className="min-h-screen px-4 py-8">
       <div className="mx-auto flex max-w-2xl flex-col gap-6">
@@ -13,7 +13,9 @@ export default function SuccessContent() {
           <h1 className="text-2xl font-bold text-stone-900">
             {ui.successTitle}
           </h1>
-          <p className="mt-3 text-stone-600">{ui.successBody}</p>
+          <p className="mt-3 text-stone-600">{emailWarning
+            ? "Your request has been saved, but we could not start sending your receipt. Please contact us for a copy. You do not need to submit again."
+            : ui.successBody}</p>
         </div>
 
         <BoardingChecklist />

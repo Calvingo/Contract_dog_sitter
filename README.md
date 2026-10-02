@@ -174,7 +174,7 @@ After verification, the booking form prefills all saved owner fields, including 
 
 ### Customer and pet profile management
 
-Verified customers can correct contact details, dog names, basic details, care answers and notes directly in the booking form and choose **Save contact & dog details** without booking dates, an agreement or a signature. Verified booking submissions also save these updates. Pet IDs stay attached when names are corrected, so renaming a saved dog updates that profile instead of creating another. **Use a new dog** starts a separate profile. Email-only guests cannot update another customer's saved profile; their changes remain in the submitted booking snapshot until they verify their email and save.
+Verified customers can correct contact details, dog names, basic details, care answers and notes directly in the booking form. Changes save automatically after a 900 ms pause once required profile fields are complete, without booking dates, an agreement or a signature. Saves are serialized, preserve newer typing, and retry transient failures with backoff; validation and session errors remain visible until corrected. Verified booking submissions also save these updates. Pet IDs stay attached when names are corrected, so renaming a saved dog updates that profile instead of creating another. **Use a new dog** starts a separate profile. Email-only guests cannot update another customer's saved profile; their changes remain in the submitted booking snapshot until they verify their email and save.
 
 **My account → Profile** edits contact details and marketing preferences. The verified sign-in email is the account identity and is not changed through these forms. **My dogs** provides create, read, update, remove and restore operations, including care answers and notes. Removal archives a profile and hides it from future prefill; restoring it brings the same profile back. Existing bookings and signed agreement snapshots remain unchanged. Archived names remain reserved until the profile is restored or renamed.
 
@@ -183,3 +183,10 @@ Customers can deactivate their account from Profile after acknowledging that exi
 Migration `20261008000000_customer_profile_management` adds pet care/archive fields and customer account/session-version fields. Apply it before running the new application (the existing `vercel-build` command does this). The profile PATCH endpoint and account actions validate ownership and serialize updates per customer; batch saves are atomic. No production data is modified by local tests.
 
 Validation: `npm run test:account-profile-actions` checks account/admin authorization and consent handling without a database. `TEST_DATABASE_URL=postgresql://USER@127.0.0.1:55439/postgres npm run test:customer-crud` tests persistent correction, stable-ID renaming, archive/restore, isolation, rollback, historical snapshots and account/session lifecycle against the isolated local database. Both block real email delivery.
+
+
+### Booking response time and automatic profile saving
+
+New and edited booking requests return after the booking transaction commits. PDF generation and customer/admin emails run with Next.js `after`, with a 120-second route duration limit. This removes mail latency from the response; it is not a durable retry queue. Delivery failures are recorded in the email log and the existing admin receipt resend remains available. Success pages explain that the saved request's email and signed PDF will arrive shortly. The `Server-Timing` response header reports booking handler time.
+
+`npm run test:profile-autosave` checks profile-only payloads and preservation of newer edits/assigned pet IDs. With the isolated `TEST_DATABASE_URL` on port 55439, `npm run test:submission-response` verifies committed bookings respond within five seconds despite a simulated 12-second mail task, including edited bookings and failure logging. These tests do not send real email.

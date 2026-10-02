@@ -26,7 +26,7 @@ import { PriceEstimate } from "@/components/PriceEstimate";
 import { SignaturePad } from "@/components/SignaturePad";
 import { isPickupDropoffTimeAllowed } from "@/lib/booking-time";
 import { parseDateTime } from "@/lib/pricing";
-import { buildPetPrescreenAnswers, buildPetSnapshots } from "@/lib/submission-data";
+import { applySavedProfileIds, profileReadyToSave, profileSavePayload } from "@/lib/profile-autosave";
 import {
   formFields,
   initialFormValues,
@@ -68,6 +68,15 @@ function HomePageContent() {
   const [editNotice, setEditNotice] = useState("");
   const lookupGeneration = useRef(0);
   const loadedEmail = useRef("");
+  const latestValues = useRef(formValues);
+  latestValues.current = formValues;
+  const profileDirty = useRef(false);
+  const profileChangeVersion = useRef(0);
+  const profileSaveInFlight = useRef<Promise<void> | null>(null);
+  const lastSavedProfile = useRef("");
+  const [profileRetry, setProfileRetry] = useState(0);
+  const profileRetryCount = useRef(0);
+  const profileRetryBlocked = useRef(false);
 
   const today = new Date().toLocaleDateString("en-US", {
     year: "numeric",
@@ -298,9 +307,19 @@ function HomePageContent() {
   }, [editToken]);
 
   const handleFieldChange = (name: keyof FormValues, value: string) => {
-    setProfileSaveMessage("");
-    setProfileSaveError("");
+    if (!["email", "dropoffDate", "pickupDate", "dropoffTime", "pickupTime", "honeypot", "firstTimeBooking"].includes(name)) {
+      profileDirty.current = true;
+      profileChangeVersion.current++;
+      profileRetryCount.current = 0;
+      profileRetryBlocked.current = false;
+      setProfileSaveMessage("");
+      setProfileSaveError("");
+    }
     if (name === "email") {
+      profileDirty.current = false;
+      lastSavedProfile.current = "";
+      setProfileSaveMessage("");
+      setProfileSaveError("");
       lookupGeneration.current++;
       loadedEmail.current = "";
       currentPrefill.current = null;
@@ -346,56 +365,87 @@ function HomePageContent() {
     setProfileSaveError("");
   };
 
-  const saveProfileDetails = async () => {
-    if (!prefill?.authenticated || isSavingProfile) return;
+  const saveProfileDetails = useCallback(() => {
+    if (profileSaveInFlight.current) return profileSaveInFlight.current;
+    const sent = latestValues.current;
+    if (!currentPrefill.current?.authenticated || !profileDirty.current || !profileReadyToSave(sent))
+      return Promise.resolve();
+    const payload = profileSavePayload(sent);
+    const serialized = JSON.stringify(payload);
+    if (serialized === lastSavedProfile.current) {
+      profileDirty.current = false;
+      return Promise.resolve();
+    }
+    const generation = lookupGeneration.current;
+    const version = profileChangeVersion.current;
     setIsSavingProfile(true);
     setProfileSaveMessage("");
     setProfileSaveError("");
-    const generation = lookupGeneration.current;
-    const answers = buildPetPrescreenAnswers(formValues);
-    const pets = buildPetSnapshots(formValues).map((pet, index) => ({
-      ...pet,
-      id: (index === 0 ? formValues.savedPetId : formValues.savedSecondPetId) || undefined,
-      ageYears: (index === 0 ? formValues.petAgeYears : formValues.secondPetAgeYears) || null,
-      prescreenAnswers: answers[index],
-      prescreenNotes: index === 0 ? formValues.prescreenNotes : formValues.secondPrescreenNotes,
-    }));
-    try {
-      const response = await fetch("/api/me/profile", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          customer: {
-            firstName: formValues.firstName,
-            lastName: formValues.lastName,
-            phone: formValues.phone,
-            backupContact: formValues.backupContact,
-            emergencyContactName: formValues.emergencyContactName,
-            emergencyContactPhone: formValues.emergencyContactPhone,
-            wechatId: formValues.wechatId,
-          },
-          pets,
-        }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Unable to save your details.");
-      if (generation !== lookupGeneration.current) return;
-      const saved = data as PrefillResponse;
-      const first = saved.pets.find((pet) => pet.name === pets[0].name);
-      const second = pets[1] ? saved.pets.find((pet) => pet.name === pets[1].name) : undefined;
-      currentPrefill.current = saved;
-      setPrefill(saved);
-      chosenPets.current = { first: first?.id || "", second: second?.id || "" };
-      setSelectedPetId(first?.id || "");
-      setSelectedSecondPetId(second?.id || "");
-      setFormValues((current) => ({ ...current, savedPetId: first?.id, savedSecondPetId: second?.id }));
-      setProfileSaveMessage("Your contact and dog details are saved for next time. No booking has been submitted.");
-    } catch (error) {
-      setProfileSaveError(error instanceof Error ? error.message : "Unable to save your details. Please try again.");
-    } finally {
-      setIsSavingProfile(false);
+    const work = async () => {
+      try {
+        const response = await fetch("/api/me/profile", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: serialized,
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          profileRetryBlocked.current = response.status >= 400 && response.status < 500;
+          throw new Error(data.error || "Unable to save your details.");
+        }
+        if (generation !== lookupGeneration.current) return;
+        const saved = data as PrefillResponse;
+        const next = applySavedProfileIds(latestValues.current, sent, saved);
+        latestValues.current = next;
+        setFormValues(next);
+        currentPrefill.current = saved;
+        setPrefill(saved);
+        chosenPets.current = { first: next.savedPetId || "", second: next.savedSecondPetId || "" };
+        setSelectedPetId(next.savedPetId || "");
+        setSelectedSecondPetId(next.savedSecondPetId || "");
+        lastSavedProfile.current = JSON.stringify(profileSavePayload(applySavedProfileIds(sent, sent, saved)));
+        profileDirty.current = version !== profileChangeVersion.current;
+        profileRetryCount.current = 0;
+        if (!profileDirty.current) setProfileSaveMessage("Changes saved automatically.");
+      } catch (error) {
+        if (generation === lookupGeneration.current) {
+          profileRetryCount.current++;
+          setProfileSaveError(profileRetryBlocked.current
+            ? `Changes not saved: ${error instanceof Error ? error.message : "Please check your details."}`
+            : "Changes not saved yet. We’ll retry automatically. You can keep filling in your booking.");
+        }
+      } finally {
+        profileSaveInFlight.current = null;
+        setIsSavingProfile(false);
+      }
+    };
+    profileSaveInFlight.current = work();
+    return profileSaveInFlight.current;
+  }, []);
+
+  const profileSnapshot = JSON.stringify(profileSavePayload(formValues));
+  useEffect(() => {
+    if (editToken || !prefill?.authenticated || isSubmitting || isSavingProfile || !profileDirty.current || profileRetryBlocked.current)
+      return;
+    if (!profileReadyToSave(latestValues.current)) {
+      setProfileSaveMessage("Complete the required contact and dog details to save automatically.");
+      return;
     }
-  };
+    // One request at a time; changes typed during a save are sent afterwards.
+    // Back off on failure rather than sending a request on every keystroke.
+    const wait = profileRetryCount.current ? Math.min(30000, 3000 * 2 ** Math.min(profileRetryCount.current - 1, 4)) : 900;
+    const timer = window.setTimeout(() => { void saveProfileDetails(); }, wait);
+    return () => window.clearTimeout(timer);
+  }, [profileSnapshot, editToken, prefill?.authenticated, isSubmitting, isSavingProfile, profileRetry, saveProfileDetails]);
+
+  useEffect(() => {
+    const onOnline = () => {
+      profileRetryCount.current = 0;
+      setProfileRetry(value => value + 1);
+    };
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, []);
 
   const handleReachBottom = useCallback(() => {
     setHasReadAgreement(true);
@@ -507,27 +557,30 @@ function HomePageContent() {
     setSubmitError("");
 
     try {
+      await profileSaveInFlight.current;
+      const submissionValues = latestValues.current;
       const response = await fetch(
         editToken ? "/api/submission/edit" : "/api/submit",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(
-            editToken ? { token: editToken, values: formValues } : formValues,
+            editToken ? { token: editToken, values: submissionValues } : submissionValues,
           ),
         },
       );
 
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Submit failed");
+      const notificationQuery = result.emailWarning ? "?emailWarning=1" : "?emailPending=1";
       router.push(
         editToken || !result.accountAccess
-          ? `/success${result.emailWarning ? "?emailWarning=1" : ""}`
-          : `/account/bookings/${result.submissionId}${result.emailWarning ? "?emailWarning=1" : ""}`,
+          ? `/success${notificationQuery}`
+          : `/account/bookings/${result.submissionId}${notificationQuery}`,
       );
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : ui.submitError);
-    } finally {
+      // Keep Submit disabled after success while the destination loads.
       setIsSubmitting(false);
     }
   };
@@ -645,7 +698,7 @@ function HomePageContent() {
                         key={pet.id}
                         type="button"
                         disabled={selectedSecondPetId === pet.id || isSavingProfile || isSubmitting}
-                        onClick={() => applyPetPrefill(pet)}
+                        onClick={async () => { await saveProfileDetails(); applyPetPrefill(pet); }}
                         className={`rounded-xl border px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
                           selectedPetId === pet.id
                             ? "border-orange-500 bg-orange-600 text-white"
@@ -655,7 +708,7 @@ function HomePageContent() {
                         {pet.name}
                       </button>
                     ))}
-                    <button type="button" onClick={() => startNewDog()} disabled={isSavingProfile || isSubmitting}
+                    <button type="button" onClick={async () => { await saveProfileDetails(); startNewDog(); }} disabled={isSavingProfile || isSubmitting}
                       className="rounded-xl border border-orange-200 px-4 py-2 text-sm font-semibold text-orange-700 disabled:opacity-50">
                       Use a new dog
                     </button>
@@ -677,6 +730,11 @@ function HomePageContent() {
           {returningStatus ? (
             <p className="text-sm text-stone-600">{returningStatus}</p>
           ) : null}
+          {!editToken && prefill?.authenticated && (
+            <p role="status" aria-live="polite" className={`text-sm ${profileSaveError ? "text-red-700" : "text-stone-600"}`}>
+              {isSavingProfile ? "Saving changes…" : profileSaveError || profileSaveMessage || "Changes to your contact and dog details save automatically."}
+            </p>
+          )}
         </section>
 
         {editNotice ? (
@@ -686,7 +744,7 @@ function HomePageContent() {
         ) : null}
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          <fieldset disabled={isSavingProfile || isSubmitting} className="min-w-0 space-y-6">
+          <fieldset disabled={isSubmitting} className="min-w-0 space-y-6">
           <input
             type="text"
             name="honeypot"
@@ -777,7 +835,8 @@ function HomePageContent() {
             {!formValues.hasSecondDog ? (
               <button
                 type="button"
-                onClick={() => startNewDog(true)}
+                onClick={async () => { await saveProfileDetails(); startNewDog(true); }}
+                disabled={isSavingProfile}
                 className="w-full rounded-xl border-2 border-dashed border-orange-300 bg-orange-50 px-4 py-3 text-sm font-semibold text-orange-700 transition hover:bg-orange-100"
               >
                 + Add a Second Dog
@@ -797,8 +856,8 @@ function HomePageContent() {
                       <button
                         key={pet.id}
                         type="button"
-                        disabled={selectedPetId === pet.id}
-                        onClick={() => applySecondPetPrefill(pet)}
+                        disabled={selectedPetId === pet.id || isSavingProfile}
+                        onClick={async () => { await saveProfileDetails(); applySecondPetPrefill(pet); }}
                         className={`rounded-xl border px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${
                           selectedSecondPetId === pet.id
                             ? "border-orange-500 bg-orange-600 text-white"
@@ -808,7 +867,7 @@ function HomePageContent() {
                         {pet.name}
                       </button>
                     ))}
-                    <button type="button" onClick={() => startNewDog(true)}
+                    <button type="button" onClick={async () => { await saveProfileDetails(); startNewDog(true); }} disabled={isSavingProfile}
                       className="rounded-xl border border-orange-200 px-3 py-2 text-sm font-semibold text-orange-700">
                       Use a new dog
                     </button>
@@ -859,7 +918,9 @@ function HomePageContent() {
               </SavedPrescreen>
               <button
                 type="button"
-                onClick={() => {
+                disabled={isSavingProfile}
+                onClick={async () => {
+                  await saveProfileDetails();
                   chosenPets.current.second = "";
                   setSelectedSecondPetId("");
                   setFormValues((current) => ({
@@ -874,29 +935,6 @@ function HomePageContent() {
               </button>
             </FormSection>
           ) : null}
-
-          {!editToken && (
-            <section className="space-y-3 rounded-2xl bg-orange-50 p-5 ring-1 ring-orange-100">
-              <h2 className="font-semibold text-stone-800">Save your details for next time</h2>
-              <p className="text-sm text-stone-700">
-                {prefill?.authenticated
-                  ? "Corrections to your contact details, dog profiles, answers and notes are saved when you submit your booking. You can also save them now without choosing dates or signing an agreement."
-                  : "Verify your email to save corrections to your existing profile. Until then, your changes are used only for this booking request."}
-              </p>
-              {prefill?.authenticated ? (
-                <>
-                  <button type="button" onClick={saveProfileDetails} className="rounded-xl bg-orange-600 px-4 py-3 font-semibold text-white disabled:opacity-60">
-                    {isSavingProfile ? "Saving details…" : "Save contact & dog details"}
-                  </button>
-                  <p className="text-sm"><Link className="text-link" href="/account/profile">Manage contact details or deactivate account</Link>{" · "}<Link className="text-link" href="/account/dogs">Add, edit, remove or restore dogs</Link></p>
-                </>
-              ) : (
-                <Link className="text-link" href={`/login?next=/book&email=${encodeURIComponent(formValues.email)}`}>Verify email to save updates →</Link>
-              )}
-              {profileSaveMessage && <p role="status" className="text-sm font-semibold text-orange-800">{profileSaveMessage}</p>}
-              {profileSaveError && <p role="alert" className="text-sm text-red-700">{profileSaveError}</p>}
-            </section>
-          )}
 
           <FormSection title={ui.sections.agreement}>
             <AgreementPanel

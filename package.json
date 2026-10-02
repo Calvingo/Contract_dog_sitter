@@ -25,7 +25,9 @@
     "test:admin-workflow": "node scripts/test-admin-workflow.mjs",
     "test:prescreen-prefill": "node scripts/test-prescreen-prefill.mjs",
     "test:customer-crud": "node scripts/test-customer-crud.mjs",
-    "test:account-profile-actions": "node scripts/test-account-profile-actions.mjs"
+    "test:account-profile-actions": "node scripts/test-account-profile-actions.mjs",
+    "test:submission-response": "node scripts/test-submission-response.mjs",
+    "test:profile-autosave": "node scripts/test-profile-autosave.mjs"
   },
   "dependencies": {
     "@pdf-lib/fontkit": "^1.1.1",

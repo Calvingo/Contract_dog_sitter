@@ -18,9 +18,10 @@ export default async function BookingDetail({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ emailWarning?: string }>;
+  searchParams: Promise<{ emailWarning?: string; emailPending?: string }>;
 }) {
   const customer = await requireCustomer();
+  const notification = await searchParams;
   const { id } = await params;
   const booking = await prisma.submission.findFirst({
     where: { id, customerId: customer.id },
@@ -69,10 +70,16 @@ export default async function BookingDetail({
       <Link href="/account" className="text-link">
         ← All bookings
       </Link>
-      {(await searchParams).emailWarning && (
+      {notification.emailWarning && (
         <p role="status" className="notice">
           Your booking was saved, but the email notification could not be
           delivered. You can track it here.
+        </p>
+      )}
+      {!notification.emailWarning && notification.emailPending && (
+        <p role="status" className="notice">
+          Your request has been saved. Your confirmation email and signed PDF
+          will arrive shortly. You do not need to submit again.
         </p>
       )}
       <section className="metric-grid">

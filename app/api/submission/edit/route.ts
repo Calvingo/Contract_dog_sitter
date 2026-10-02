@@ -2,12 +2,15 @@ import { BookingConflict } from "@/lib/platform/capacity";
 import { SubmissionStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import type { FormValues } from "@/lib/form-config";
-import { sendSubmissionEmails } from "@/lib/email";
+import { scheduleSubmissionNotification } from "@/lib/services/submission-notification";
 import { findValidSubmissionEditToken } from "@/lib/submission-edit-token";
 import { formValuesFromSubmission } from "@/lib/submission-data";
 import { updateSubmissionRecord } from "@/lib/services/submission-service";
 import { signatureToBuffer, validateSubmission } from "@/lib/validate";
 import { setCustomerSession } from "@/lib/auth/customer-session";
+
+export const runtime = "nodejs";
+export const maxDuration = 120;
 
 function canEdit(status: SubmissionStatus): boolean {
   return (
@@ -57,6 +60,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const startedAt = performance.now();
   try {
     const body = (await request.json()) as {
       token?: string;
@@ -96,30 +100,26 @@ export async function POST(request: Request) {
       data: body.values,
     });
 
-    let emailWarning = false;
-    try {
-      await sendSubmissionEmails(
-        body.values,
-        signatureBuffer,
-        result.submission.id,
-        {
-          revision: result.submission.revision,
-          isUpdate: true,
-          previousStatus: result.previousStatus,
-        },
-      );
-    } catch (error) {
-      console.error("Changes saved; notification failed", error);
-      emailWarning = true;
-    }
+    const emailPending = await scheduleSubmissionNotification(
+      body.values,
+      signatureBuffer,
+      result.submission.id,
+      {
+        revision: result.submission.revision,
+        isUpdate: true,
+        previousStatus: result.previousStatus,
+        quote: result.quote,
+      },
+    );
 
     return NextResponse.json({
       ok: true,
-      emailWarning,
+      emailWarning: !emailPending,
+      emailPending,
       submissionId: result.submission.id,
       status: result.submission.status,
       revision: result.submission.revision,
-    });
+    }, { headers: { "Server-Timing": `booking;dur=${(performance.now() - startedAt).toFixed(1)}` } });
   } catch (error) {
     if (error instanceof BookingConflict)
       return NextResponse.json({ error: error.message }, { status: 409 });

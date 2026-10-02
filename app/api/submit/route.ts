@@ -3,14 +3,18 @@ import { BookingConflict } from "@/lib/platform/capacity";
 import { dateRange, todayKey } from "@/lib/platform/rules";
 import { NextResponse } from "next/server";
 import type { FormValues } from "@/lib/form-config";
-import { sendSubmissionEmails } from "@/lib/email";
+import { scheduleSubmissionNotification } from "@/lib/services/submission-notification";
 import { createSubmissionRecord } from "@/lib/services/submission-service";
 import { signatureToBuffer, validateSubmission } from "@/lib/validate";
 import { allowRequest, requestIp } from "@/lib/platform/rate-limit";
 import { prisma } from "@/lib/db";
 import { normalizeEmail } from "@/lib/submission-data";
 
+export const runtime = "nodejs";
+export const maxDuration = 120;
+
 export async function POST(request: Request) {
+  const startedAt = performance.now();
   try {
     const session = await getCustomerSession();
     const data = (await request.json()) as FormValues;
@@ -55,23 +59,21 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     const signatureBuffer = signatureToBuffer(data.signature);
-    const { submission } = await createSubmissionRecord(data, verifiedOwnerId);
-    let emailWarning = false;
-    try {
-      await sendSubmissionEmails(data, signatureBuffer, submission.id, {
+    const { submission, quote } = await createSubmissionRecord(data, verifiedOwnerId);
+    const emailPending = await scheduleSubmissionNotification(
+      data, signatureBuffer, submission.id, {
         revision: submission.revision,
-      });
-    } catch (error) {
-      console.error("Booking saved; notification failed", error);
-      emailWarning = true;
-    }
+        quote,
+      },
+    );
 
     return NextResponse.json({
       ok: true,
       submissionId: submission.id,
-      emailWarning,
+      emailWarning: !emailPending,
+      emailPending,
       accountAccess: Boolean(verifiedOwnerId),
-    });
+    }, { headers: { "Server-Timing": `booking;dur=${(performance.now() - startedAt).toFixed(1)}` } });
   } catch (error) {
     if (error instanceof BookingConflict)
       return NextResponse.json({ error: error.message }, { status: 409 });
