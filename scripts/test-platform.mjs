@@ -28,6 +28,16 @@ require.extensions[".ts"] = (module, filename) =>
     filename,
   );
 const rules = require(resolve(root, "lib/platform/rules.ts"));
+for (const [instant, expected] of [
+  ["2026-10-21T06:59:59Z", "2026-10-20"],
+  ["2026-10-21T07:00:00Z", "2026-10-21"],
+  ["2026-01-01T07:59:59Z", "2025-12-31"],
+  ["2026-01-01T08:00:00Z", "2026-01-01"],
+  ["2026-03-08T09:59:59Z", "2026-03-08"],
+  ["2026-03-08T10:00:00Z", "2026-03-08"],
+  ["2026-11-01T08:59:59Z", "2026-11-01"],
+  ["2026-11-01T09:00:00Z", "2026-11-01"],
+]) assert.equal(rules.todayKey(new Date(instant)), expected, `California date at ${instant}`);
 const { parseDateTime } = require(resolve(root, "lib/pricing.ts"));
 assert.equal(rules.validDate("2027-02-29"), false);
 assert.equal(rules.validDate("2028-02-29"), true);

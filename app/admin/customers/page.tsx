@@ -6,6 +6,8 @@ import {
 } from "@/lib/platform/customers";
 import { AdminShell } from "../admin-ui";
 import { CustomerAccountStatus } from "@/components/CustomerAccountStatus";
+import { prisma } from "@/lib/db";
+import { promotionStatus } from "@/lib/marketing/contacts";
 export default async function CustomersPage({
   searchParams,
 }: {
@@ -13,6 +15,11 @@ export default async function CustomersPage({
 }) {
   const admin = await requirePlatformAdmin();
   const filters = await searchParams;
+  const [totalCustomers, suppressions] = await Promise.all([
+    prisma.customer.count(),
+    prisma.marketingSuppression.findMany({ select: { email: true } }),
+  ]);
+  const suppressed = new Set(suppressions.map((item) => item.email.toLowerCase()));
   let result;
   let error = "";
   try {
@@ -34,7 +41,7 @@ export default async function CustomersPage({
       subtitle="One customer per row, with all their dogs and marketing preferences."
     >
       <section className="panel">
-        <form className="filter-form">
+        <form className="filter-form" key={query}>
           <label>
             Search customers or dogs
             <input
@@ -54,6 +61,9 @@ export default async function CustomersPage({
           <Link href="/admin/customers" className="button secondary">
             Reset
           </Link>
+          <Link href="/admin/marketing/contacts" className="button secondary">
+            Manage customer emails
+          </Link>
           {result && (
             <a
               className="button secondary"
@@ -66,15 +76,15 @@ export default async function CustomersPage({
         {error && <p className="notice error">{error}</p>}
       </section>
       <section className="panel table-scroll">
-        <p className="small">
-          {result?.customers.length ?? 0} customers · Promotion exports respect
-          the selected subscription filter.
+        <p className="customer-count" role="status">
+          <strong>{totalCustomers}</strong> total customers · {result?.customers.length ?? 0} shown
         </p>
         <p className="small">All customers includes deactivated accounts. Restoring an account restores sign-in access without resubscribing it to promotions.</p>
         <table className="platform-table">
           <thead>
             <tr>
               {[
+                "No.",
                 "Customer",
                 "Dogs",
                 "Email",
@@ -88,12 +98,13 @@ export default async function CustomersPage({
             </tr>
           </thead>
           <tbody>
-            {result?.customers.map((c) => {
+            {result?.customers.map((c, index) => {
               const last = [...c.submissions].sort(
                 (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
               )[0];
               return (
                 <tr key={c.id}>
+                  <td>{index + 1}</td>
                   <td>
                     <strong>
                       {`${c.firstName} ${c.lastName}`.trim() || "New customer"}
@@ -106,7 +117,7 @@ export default async function CustomersPage({
                   <td>{c.phone || "—"}</td>
                   <td>
                     <span className="small">
-                      Email: {c.emailMarketingOptIn ? "Subscribed" : "Off"}
+                      {promotionStatus(c, suppressed.has(c.email.toLowerCase()))}
                     </span>
                   </td>
                   <td><CustomerAccountStatus id={c.id} deactivated={Boolean(c.deactivatedAt)} /></td>

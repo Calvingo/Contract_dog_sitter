@@ -45,7 +45,7 @@ export function AgreementPanel({
       <p className="text-sm text-stone-600">{intro}</p>
       <div
         ref={scrollRef}
-        className="max-h-80 overflow-y-auto rounded-xl border border-orange-100 bg-orange-50/40 p-4 text-sm leading-6 text-stone-700"
+        className="max-h-80 overflow-y-auto rounded-xl border border-emerald-100 bg-emerald-50/40 p-4 text-sm leading-6 text-stone-700"
       >
         {agreementSections.map((section) => (
           <div key={section.title} className="mb-5 last:mb-0">
@@ -61,7 +61,7 @@ export function AgreementPanel({
         ))}
       </div>
       {!hasReadToBottom && scrollHint ? (
-        <p className="text-xs text-orange-600">{scrollHint}</p>
+        <p className="text-xs text-emerald-600">{scrollHint}</p>
       ) : null}
     </div>
   );

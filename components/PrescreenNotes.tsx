@@ -17,7 +17,7 @@ export function PrescreenNotes({ value, label, placeholder, name = "prescreenNot
         onChange={(event) => onChange(name, event.target.value)}
         placeholder={placeholder}
         rows={4}
-        className="w-full rounded-xl border border-orange-100 bg-white px-4 py-3 text-stone-800 outline-none transition placeholder:text-stone-400 focus:border-orange-300 focus:ring-2 focus:ring-orange-100"
+        className="w-full rounded-xl border border-emerald-100 bg-white px-4 py-3 text-stone-800 outline-none transition placeholder:text-stone-400 focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
       />
     </label>
   );

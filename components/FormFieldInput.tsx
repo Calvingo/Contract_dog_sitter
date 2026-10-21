@@ -24,7 +24,7 @@ export function FormFieldInput({
   onChange,
 }: Props) {
   const commonClass =
-    "w-full rounded-xl border border-orange-100 bg-white px-4 py-3 text-stone-800 outline-none transition focus:border-orange-300 focus:ring-2 focus:ring-orange-100";
+    "w-full rounded-xl border border-emerald-100 bg-white px-4 py-3 text-stone-800 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100";
   const numberMin =
     field.type === "number"
       ? field.name === "petAgeYears"

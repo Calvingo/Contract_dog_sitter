@@ -61,6 +61,7 @@ model Customer {
   emailMarketingOptIn       Boolean                 @default(false)
   smsMarketingOptIn         Boolean                 @default(false)
   marketingConsentUpdatedAt DateTime?
+  marketingEmailDeletedAt   DateTime?
   consentEvents             MarketingConsentEvent[]
   marketingDeliveries       MarketingDelivery[]
   pets                      Pet[]

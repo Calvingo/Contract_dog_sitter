@@ -23,7 +23,7 @@ function DogQuote({ name, quote }: { name: string; quote: PriceBreakdown }) {
         {quote.highEnergyDogFee > 0 ? <div className="flex justify-between gap-4"><dt>High-energy care fee</dt><dd className="font-medium">${quote.highEnergyDogFee.toFixed(2)}</dd></div> : null}
         {quote.specialCareFee > 0 ? <div className="flex justify-between gap-4"><dt>Special-care fee</dt><dd className="font-medium">${quote.specialCareFee.toFixed(2)}</dd></div> : null}
         {quote.holidayFee > 0 ? <div className="flex justify-between gap-4"><dt>Holiday fee</dt><dd className="font-medium">${quote.holidayFee.toFixed(2)}</dd></div> : null}
-        <div className="flex justify-between gap-4 border-t border-orange-100 pt-1.5"><dt className="font-semibold">Subtotal</dt><dd className="font-bold">${quote.totalPrice.toFixed(2)}</dd></div>
+        <div className="flex justify-between gap-4 border-t border-emerald-100 pt-1.5"><dt className="font-semibold">Subtotal</dt><dd className="font-bold">${quote.totalPrice.toFixed(2)}</dd></div>
       </dl>
     </div>
   );
@@ -46,7 +46,7 @@ export function PriceEstimate({ values, title, incompleteHint, holidayNote }: Pr
 
   if (!first || (values.hasSecondDog && !second)) {
     if (!hasPartial) return null;
-    return <div className="rounded-xl border border-dashed border-orange-200 bg-orange-50/50 px-4 py-3 text-sm text-stone-600">{incompleteHint}</div>;
+    return <div className="rounded-xl border border-dashed border-emerald-200 bg-emerald-50/50 px-4 py-3 text-sm text-stone-600">{incompleteHint}</div>;
   }
 
   const quotes = second ? [first, second] : [first];
@@ -54,16 +54,16 @@ export function PriceEstimate({ values, title, incompleteHint, holidayNote }: Pr
   const deposit = quotes.reduce((sum, quote) => sum + quote.depositAmount, 0);
 
   return (
-    <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-4">
+    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4">
       <h3 className="text-base font-semibold text-stone-900">{title}</h3>
       <div className="mt-3 space-y-3">
         <DogQuote name={values.petName || "Dog 1"} quote={first} />
         {second ? <DogQuote name={values.secondPetName || "Dog 2"} quote={second} /> : null}
       </div>
       <dl className="mt-3 space-y-2 text-sm">
-        <div className="flex justify-between border-t border-orange-200 pt-3 text-base"><dt className="font-semibold">Estimated total</dt><dd className="font-bold text-orange-700">${total.toFixed(2)}</dd></div>
-        <div className="flex justify-between"><dt className="font-semibold">Deposit ({DEPOSIT_PERCENT}% of total)</dt><dd className="font-bold text-orange-700">${deposit.toFixed(2)}</dd></div>
-        <div className="flex justify-between gap-4"><dt className="font-semibold">Remaining balance ({100 - DEPOSIT_PERCENT}% of total, due at drop-off)</dt><dd className="font-bold text-orange-700">${(total - deposit).toFixed(2)}</dd></div>
+        <div className="flex justify-between border-t border-emerald-200 pt-3 text-base"><dt className="font-semibold">Estimated total</dt><dd className="font-bold text-emerald-700">${total.toFixed(2)}</dd></div>
+        <div className="flex justify-between"><dt className="font-semibold">Deposit ({DEPOSIT_PERCENT}% of total)</dt><dd className="font-bold text-emerald-700">${deposit.toFixed(2)}</dd></div>
+        <div className="flex justify-between gap-4"><dt className="font-semibold">Remaining balance ({100 - DEPOSIT_PERCENT}% of total, due at drop-off)</dt><dd className="font-bold text-emerald-700">${(total - deposit).toFixed(2)}</dd></div>
       </dl>
       <div className="mt-4 text-sm font-bold text-red-600">
         <h4>{PAYMENT_EARLY_PICKUP_POLICY.title}</h4>

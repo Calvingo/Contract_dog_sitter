@@ -25,13 +25,14 @@ export async function GET(request: Request) {
       undefined,
       edit?.submissionId,
     );
+    const today = todayKey();
     return NextResponse.json(
       {
         includePickupDay: result.includePickupDay,
         days: result.days.map(({ date, remaining, closed }) => ({
           date,
-          remaining,
-          closed,
+          remaining: date < today ? 0 : remaining,
+          closed: date < today || closed,
         })),
       },
       { headers: { "Cache-Control": "no-store" } },

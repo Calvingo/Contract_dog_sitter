@@ -13,13 +13,13 @@ export const DEFAULT_SETTINGS = {
 export function dateKey(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
-export function todayKey(): string {
+export function todayKey(now = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Los_Angeles",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(new Date());
+  }).format(now);
 }
 export function validDate(value: string): boolean {
   return (

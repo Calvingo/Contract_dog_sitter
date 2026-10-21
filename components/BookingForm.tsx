@@ -25,6 +25,7 @@ import { PrescreenNotes } from "@/components/PrescreenNotes";
 import { PriceEstimate } from "@/components/PriceEstimate";
 import { SignaturePad } from "@/components/SignaturePad";
 import { isPickupDropoffTimeAllowed } from "@/lib/booking-time";
+import { todayKey } from "@/lib/platform/rules";
 import { parseDateTime } from "@/lib/pricing";
 import { applySavedProfileIds, profileReadyToSave, profileSavePayload } from "@/lib/profile-autosave";
 import {
@@ -79,6 +80,7 @@ function HomePageContent() {
   const profileRetryBlocked = useRef(false);
 
   const today = new Date().toLocaleDateString("en-US", {
+    timeZone: "America/Los_Angeles",
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -513,6 +515,10 @@ function HomePageContent() {
           "Please enter a different name for the second dog.";
     }
 
+    if (formValues.dropoffDate && formValues.dropoffDate < todayKey()) {
+      nextErrors.dropoffDate = "Choose today or a future date in California time.";
+    }
+
     const dropoff = parseDateTime(
       formValues.dropoffDate,
       formValues.dropoffTime,
@@ -610,7 +616,7 @@ function HomePageContent() {
     !!formValues.signature;
 
   return (
-    <main className="min-h-screen px-4 py-8">
+    <main className="booking-page min-h-screen px-4 py-8">
       <div className="mx-auto flex max-w-2xl flex-col gap-6">
         <PublicNav />
         <div>
@@ -646,7 +652,7 @@ function HomePageContent() {
         />
         <BoardingChecklist />
 
-        <section className="space-y-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-orange-100">
+        <section className="space-y-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-emerald-100">
           <div>
             <h2 className="text-lg font-semibold text-stone-800">
               Find your details
@@ -684,7 +690,7 @@ function HomePageContent() {
 
           {prefill ? (
             <div className="space-y-3">
-              <p className="text-sm font-medium text-orange-700">
+              <p className="text-sm font-medium text-emerald-700">
                 Welcome back, {prefill.customer.firstName}.
               </p>
               {prefill.pets.length > 0 ? (
@@ -701,15 +707,15 @@ function HomePageContent() {
                         onClick={async () => { await saveProfileDetails(); applyPetPrefill(pet); }}
                         className={`rounded-xl border px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
                           selectedPetId === pet.id
-                            ? "border-orange-500 bg-orange-600 text-white"
-                            : "border-orange-200 bg-white text-stone-700 hover:bg-orange-50"
+                            ? "border-emerald-500 bg-emerald-600 text-white"
+                            : "border-emerald-200 bg-white text-stone-700 hover:bg-emerald-50"
                         }`}
                       >
                         {pet.name}
                       </button>
                     ))}
                     <button type="button" onClick={async () => { await saveProfileDetails(); startNewDog(); }} disabled={isSavingProfile || isSubmitting}
-                      className="rounded-xl border border-orange-200 px-4 py-2 text-sm font-semibold text-orange-700 disabled:opacity-50">
+                      className="rounded-xl border border-emerald-200 px-4 py-2 text-sm font-semibold text-emerald-700 disabled:opacity-50">
                       Use a new dog
                     </button>
                   </div>
@@ -837,7 +843,7 @@ function HomePageContent() {
                 type="button"
                 onClick={async () => { await saveProfileDetails(); startNewDog(true); }}
                 disabled={isSavingProfile}
-                className="w-full rounded-xl border-2 border-dashed border-orange-300 bg-orange-50 px-4 py-3 text-sm font-semibold text-orange-700 transition hover:bg-orange-100"
+                className="w-full rounded-xl border-2 border-dashed border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
               >
                 + Add a Second Dog
               </button>
@@ -860,15 +866,15 @@ function HomePageContent() {
                         onClick={async () => { await saveProfileDetails(); applySecondPetPrefill(pet); }}
                         className={`rounded-xl border px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${
                           selectedSecondPetId === pet.id
-                            ? "border-orange-500 bg-orange-600 text-white"
-                            : "border-orange-200 bg-white text-stone-700 hover:bg-orange-50"
+                            ? "border-emerald-500 bg-emerald-600 text-white"
+                            : "border-emerald-200 bg-white text-stone-700 hover:bg-emerald-50"
                         }`}
                       >
                         {pet.name}
                       </button>
                     ))}
                     <button type="button" onClick={async () => { await saveProfileDetails(); startNewDog(true); }} disabled={isSavingProfile}
-                      className="rounded-xl border border-orange-200 px-3 py-2 text-sm font-semibold text-orange-700">
+                      className="rounded-xl border border-emerald-200 px-3 py-2 text-sm font-semibold text-emerald-700">
                       Use a new dog
                     </button>
                   </div>
@@ -944,7 +950,7 @@ function HomePageContent() {
               onReachBottom={handleReachBottom}
             />
             <label
-              className={`flex items-start gap-3 rounded-xl bg-orange-50/60 p-4 ${
+              className={`flex items-start gap-3 rounded-xl bg-emerald-50/60 p-4 ${
                 !hasReadAgreement ? "cursor-not-allowed opacity-60" : ""
               }`}
             >
@@ -959,7 +965,7 @@ function HomePageContent() {
                   }));
                   setErrors((current) => ({ ...current, agreed: undefined }));
                 }}
-                className="mt-1 h-4 w-4 rounded border-orange-300 text-orange-600 focus:ring-orange-500 disabled:cursor-not-allowed"
+                className="mt-1 h-4 w-4 rounded border-emerald-300 text-emerald-600 accent-emerald-700 focus:ring-emerald-500 disabled:cursor-not-allowed"
               />
               <span className="text-sm text-stone-700">{ui.agreeLabel}</span>
             </label>
@@ -970,11 +976,11 @@ function HomePageContent() {
 
           <FormSection title={ui.sections.signature}>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl bg-orange-50/60 px-4 py-3 text-sm">
+              <div className="rounded-xl bg-emerald-50/60 px-4 py-3 text-sm">
                 <div className="font-medium text-stone-700">{ui.ownerName}</div>
                 <div className="mt-1 text-stone-900">{ownerName || "—"}</div>
               </div>
-              <div className="rounded-xl bg-orange-50/60 px-4 py-3 text-sm">
+              <div className="rounded-xl bg-emerald-50/60 px-4 py-3 text-sm">
                 <div className="font-medium text-stone-700">{ui.dogName}</div>
                 <div className="mt-1 text-stone-900">
                   {[
@@ -986,7 +992,7 @@ function HomePageContent() {
                 </div>
               </div>
             </div>
-            <div className="rounded-xl bg-orange-50/60 px-4 py-3 text-sm">
+            <div className="rounded-xl bg-emerald-50/60 px-4 py-3 text-sm">
               <div className="font-medium text-stone-700">{ui.date}</div>
               <div className="mt-1 text-stone-900">{today}</div>
             </div>
@@ -1013,7 +1019,7 @@ function HomePageContent() {
           <button
             type="submit"
             disabled={!canSubmit}
-            className="w-full rounded-2xl bg-orange-600 px-6 py-4 text-base font-semibold text-white shadow-sm transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-70"
+            className="w-full rounded-2xl bg-emerald-600 px-6 py-4 text-base font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {isSubmitting ? ui.submitting : ui.submit}
           </button>

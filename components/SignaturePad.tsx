@@ -63,7 +63,7 @@ export function SignaturePad({
         className={`relative overflow-hidden rounded-xl border border-dashed ${
           disabled
             ? "border-stone-300 bg-stone-100"
-            : "border-orange-200 bg-white"
+            : "border-emerald-200 bg-white"
         }`}
       >
         <SignatureCanvas
@@ -83,7 +83,7 @@ export function SignaturePad({
         type="button"
         onClick={handleClear}
         disabled={disabled}
-        className="rounded-lg border border-orange-200 px-4 py-2 text-sm font-medium text-orange-700 hover:bg-orange-50 disabled:cursor-not-allowed disabled:border-stone-200 disabled:text-stone-400 disabled:hover:bg-transparent"
+        className="rounded-lg border border-emerald-200 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:border-stone-200 disabled:text-stone-400 disabled:hover:bg-transparent"
       >
         {clearLabel}
       </button>

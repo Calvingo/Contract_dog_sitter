@@ -36,7 +36,7 @@ export function DateTimeInput({
           required={field.required}
           value={value}
           onChange={(event) => onChange(field.name, event.target.value)}
-          className="w-full rounded-xl border border-orange-100 bg-white px-4 py-3 text-stone-800 outline-none transition focus:border-orange-300 focus:ring-2 focus:ring-orange-100"
+          className="w-full rounded-xl border border-emerald-100 bg-white px-4 py-3 text-stone-800 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
           aria-label={field.label}
         >
           <option value="">{emptyHint}</option>
@@ -68,7 +68,7 @@ export function DateTimeInput({
           max={max}
           value={value}
           onChange={(event) => onChange(field.name, event.target.value)}
-          className={`w-full rounded-xl border border-orange-100 bg-white px-4 py-3 text-stone-800 outline-none transition focus:border-orange-300 focus:ring-2 focus:ring-orange-100 ${
+          className={`w-full rounded-xl border border-emerald-100 bg-white px-4 py-3 text-stone-800 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100 ${
             isEmpty ? "dt-empty" : ""
           }`}
           aria-label={field.label}

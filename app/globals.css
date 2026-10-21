@@ -390,16 +390,16 @@ summary:focus-visible {
   color: #3f674c;
   line-height: 1.4;
 }
-/* Match both calendars to the orange booking form and admin pages. */
+/* Shared green palette for booking and capacity calendars. */
 .availability,
 .admin-capacity-calendar {
   --ink: #292524;
   --muted: #57534e;
-  --line: #ffedd5;
-  --accent: #c2410c;
-  --calendar-available: #fff7ed;
-  --calendar-range: #fed7aa;
-  --calendar-text: #9a3412;
+  --line: #d1fae5;
+  --accent: #047857;
+  --calendar-available: #ecfdf5;
+  --calendar-range: #a7f3d0;
+  --calendar-text: #065f46;
   color: var(--ink);
   border-radius: 16px;
   box-shadow: 0 1px 2px rgb(0 0 0 / 5%);
@@ -427,10 +427,10 @@ summary:focus-visible {
   outline-offset: 3px;
 }
 .admin-capacity-calendar .button:hover {
-  background: #9a3412;
+  background: #065f46;
 }
 .admin-capacity-calendar .button.secondary {
-  border-color: #fed7aa;
+  border-color: #a7f3d0;
 }
 .admin-capacity-calendar .button.secondary:hover {
   background: var(--calendar-available);
@@ -458,7 +458,7 @@ summary:focus-visible {
 }
 .calendar-toolbar button:hover:not(:disabled) {
   background: var(--calendar-available);
-  border-color: #fed7aa;
+  border-color: #a7f3d0;
 }
 .calendar-grid {
   display: grid;
@@ -1101,5 +1101,111 @@ fieldset {
   .calendar-mode-tabs .button {
     padding: 10px;
     font-size: 12px;
+  }
+}
+
+
+.booking-page {
+  background: #f5faf6;
+}
+.calendar-day:disabled,
+.calendar-toolbar button:disabled {
+  cursor: not-allowed;
+}
+.calendar-day.past {
+  background: #e5e7eb;
+  color: #6b7280;
+  opacity: 1;
+  border-color: #d1d5db;
+}
+.email-management-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.marketing-customer-search {
+  width: 100%;
+  min-width: 0;
+}
+.email-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+.email-summary > * {
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: white;
+}
+.email-summary span {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+.email-summary strong {
+  color: var(--ink);
+  font-size: 28px;
+}
+.email-summary a:hover {
+  background: #ecfdf5;
+}
+.customer-count {
+  margin-bottom: 18px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.customer-count strong {
+  font-size: 24px;
+  color: var(--ink);
+}
+.email-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.email-contact-actions {
+  min-width: 230px;
+}
+.email-action-buttons .button {
+  padding: 9px 12px;
+  font-size: 12px;
+}
+.button.email-delete {
+  color: #b91c1c;
+  background: white;
+  border: 1px solid #fecaca;
+}
+.button.email-delete:hover:not(:disabled) {
+  background: #fef2f2;
+}
+.promotion-status {
+  display: inline-flex;
+  padding: 5px 9px;
+  border-radius: 6px;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+}
+.promotion-status.on {
+  color: #065f46;
+  background: #d1fae5;
+}
+.promotion-status.off {
+  color: #57534e;
+  background: #f1f1ef;
+}
+.email-contacts-table td:nth-child(3) {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .email-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .email-summary > * {
+    padding: 16px;
   }
 }

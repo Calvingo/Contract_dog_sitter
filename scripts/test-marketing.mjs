@@ -82,6 +82,8 @@ const { canReceiveMarketing } = require("../lib/marketing/audience.ts");
 assert.equal(canReceiveMarketing({ emailMarketingOptIn: false, marketingConsentUpdatedAt: null }, true), true);
 assert.equal(canReceiveMarketing({ emailMarketingOptIn: false, marketingConsentUpdatedAt: new Date() }, true), false);
 assert.equal(canReceiveMarketing({ emailMarketingOptIn: false, marketingConsentUpdatedAt: null }, false), false);
+assert.equal(canReceiveMarketing({ emailMarketingOptIn: true, marketingConsentUpdatedAt: null, marketingEmailDeletedAt: new Date() }, true), false);
+assert.equal(canReceiveMarketing({ emailMarketingOptIn: true, marketingConsentUpdatedAt: null, marketingEmailDeletedAt: new Date() }, false), false);
 const { validateMarketingImage } = require("../lib/marketing/images.ts");
 validateMarketingImage(Buffer.from([137,80,78,71,13,10,26,10]), "image/png");
 assert.throws(() => validateMarketingImage(Buffer.from("<svg onload='alert(1)'/>"), "image/png"));

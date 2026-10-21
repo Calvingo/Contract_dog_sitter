@@ -18,6 +18,7 @@
     "check:smtp": "node scripts/check-smtp.mjs",
     "test:platform": "node scripts/test-platform.mjs",
     "test:marketing": "node scripts/test-marketing.mjs",
+    "test:marketing-contacts": "node scripts/test-marketing-contacts.mjs",
     "check:production": "node scripts/check-production.mjs",
     "test:booking-entry": "node scripts/test-booking-entry.mjs",
     "test:customer-email-links": "node scripts/test-customer-email-links.mjs",

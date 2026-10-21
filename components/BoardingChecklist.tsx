@@ -8,12 +8,12 @@ export function BoardingChecklist() {
   return (
     <section
       aria-labelledby="boarding-checklist-title"
-      className="rounded-2xl bg-orange-50 p-6 shadow-sm ring-1 ring-orange-200"
+      className="rounded-2xl bg-emerald-50 p-6 shadow-sm ring-1 ring-emerald-200"
     >
       <div className="flex items-start gap-4">
         <div
           aria-hidden="true"
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-xl shadow-sm ring-1 ring-orange-100"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-xl shadow-sm ring-1 ring-emerald-100"
         >
           🐾
         </div>
@@ -34,9 +34,9 @@ export function BoardingChecklist() {
         {BOARDING_CHECKLIST_ITEMS.map((item) => (
           <li
             key={item}
-            className="flex items-start gap-3 rounded-xl bg-white px-4 py-3 text-sm leading-6 text-stone-700 ring-1 ring-orange-100"
+            className="flex items-start gap-3 rounded-xl bg-white px-4 py-3 text-sm leading-6 text-stone-700 ring-1 ring-emerald-100"
           >
-            <span aria-hidden="true" className="font-bold text-orange-600">
+            <span aria-hidden="true" className="font-bold text-emerald-600">
               ✓
             </span>
             <span>{item}</span>

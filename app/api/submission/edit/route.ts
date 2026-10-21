@@ -8,6 +8,7 @@ import { formValuesFromSubmission } from "@/lib/submission-data";
 import { updateSubmissionRecord } from "@/lib/services/submission-service";
 import { signatureToBuffer, validateSubmission } from "@/lib/validate";
 import { setCustomerSession } from "@/lib/auth/customer-session";
+import { todayKey } from "@/lib/platform/rules";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -92,6 +93,12 @@ export async function POST(request: Request) {
     const validationError = validateSubmission(body.values);
     if (validationError) {
       return NextResponse.json({ error: validationError }, { status: 400 });
+    }
+    if (body.values.dropoffDate < todayKey()) {
+      return NextResponse.json(
+        { error: "Choose today or a future drop-off date in California time." },
+        { status: 400 },
+      );
     }
 
     const signatureBuffer = signatureToBuffer(body.values.signature);

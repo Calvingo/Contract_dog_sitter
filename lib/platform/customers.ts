@@ -57,7 +57,7 @@ export async function customerAudience(filters: CustomerFilters) {
         include: { submissionPets: true, payments: true },
       },
     },
-    orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+    orderBy: [{ lastName: "asc" }, { firstName: "asc" }, { id: "asc" }],
   });
   const excluded = filters.start
     ? customers.filter((c) => c.submissions.some((s) => reservesCapacity(s)))

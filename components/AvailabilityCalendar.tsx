@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { dateKey, todayKey } from "@/lib/platform/rules";
 import { getPickupDropoffTimeOptions } from "@/lib/booking-time";
+import { useCaliforniaToday } from "@/lib/use-california-today";
 type Day = { date: string; remaining: number; closed: boolean };
 export function AvailabilityCalendar({
   dogs = 1,
@@ -26,6 +27,7 @@ export function AvailabilityCalendar({
     Record<"dropoffDate" | "pickupDate" | "dropoffTime" | "pickupTime", string>
   >;
 }) {
+  const today = useCaliforniaToday();
   const [month, setMonth] = useState(() => (start || todayKey()).slice(0, 7));
   const [days, setDays] = useState<Day[]>([]);
   const [error, setError] = useState("");
@@ -64,8 +66,8 @@ export function AvailabilityCalendar({
     return () => controller.abort();
   }, [first, last, tokenQuery, reload]);
   async function select(date: string) {
-    if (!onSelect) return;
-    if (!start || end || date < start) {
+    if (!onSelect || date < todayKey()) return;
+    if (!start || start < todayKey() || end || date < start) {
       onSelect(date, "");
       setError("");
       return;
@@ -114,7 +116,7 @@ export function AvailabilityCalendar({
           type="button"
           aria-label="Previous month"
           onClick={() => shift(-1)}
-          disabled={month <= todayKey().slice(0, 7) || checking}
+          disabled={month <= today.slice(0, 7) || checking}
         >
           ←
         </button>
@@ -130,7 +132,7 @@ export function AvailabilityCalendar({
           aria-label="Next month"
           onClick={() => shift(1)}
           disabled={
-            Number(month.slice(0, 4)) > Number(todayKey().slice(0, 4)) + 1 ||
+            Number(month.slice(0, 4)) > Number(today.slice(0, 4)) + 1 ||
             checking
           }
         >
@@ -151,27 +153,29 @@ export function AvailabilityCalendar({
         )}
         {!loading &&
           days.map((day) => {
+            const past = day.date < today;
             const full = day.closed || day.remaining < dogs;
             const pickupOnly = Boolean(
-              onSelect && start && !end && !inclusive && day.date > start,
+              onSelect && start && start >= today && !end && !inclusive && day.date > start,
             );
             const disabled =
-              checking || day.date < todayKey() || (full && !pickupOnly);
-            const selected = day.date === start || day.date === end;
-            const between = start && end && day.date > start && day.date < end;
+              checking || past || (full && !pickupOnly);
+            const selected = !past && (day.date === start || day.date === end);
+            const between = !past && start && end && day.date > start && day.date < end;
             return (
               <button
                 type="button"
                 key={day.date}
                 disabled={disabled}
                 onClick={() => void select(day.date)}
-                className={`calendar-day ${full ? "full" : "available"} ${selected ? "selected" : ""} ${between ? "in-range" : ""}`}
-                aria-label={`${day.date}: ${day.closed ? "closed" : full ? "not enough space" : `${day.remaining} spaces available`}`}
+                className={`calendar-day ${past ? "past" : full ? "full" : "available"} ${selected ? "selected" : ""} ${between ? "in-range" : ""}`}
+                aria-label={`${day.date}: ${past ? "past date, unavailable" : day.closed ? "closed" : full ? "not enough space" : `${day.remaining} spaces available`}`}
+                aria-current={day.date === today ? "date" : undefined}
                 aria-pressed={selected}
               >
                 <strong>{Number(day.date.slice(8))}</strong>
                 <span>
-                  {day.closed ? "Closed" : full ? "Full" : "Available"}
+                  {past ? "Past" : day.closed ? "Closed" : full ? "Full" : "Available"}
                 </span>
               </button>
             );
@@ -241,7 +245,7 @@ export function AvailabilityCalendar({
                       onTimeChange(item.name, event.target.value)
                     }
                     aria-invalid={Boolean(errors?.[item.name])}
-                    className="w-full rounded-xl border border-orange-100 bg-white px-3 py-3 text-stone-800"
+                    className="w-full rounded-xl border border-emerald-100 bg-white px-3 py-3 text-stone-800"
                   >
                     <option value="">Choose a time</option>
                     {item.time &&
@@ -267,7 +271,7 @@ export function AvailabilityCalendar({
       )}
       <p className="small">
         Availability is checked again when you submit. Dates are in Pacific
-        local time.
+        local time (California). Past dates are unavailable.
       </p>
     </section>
   );

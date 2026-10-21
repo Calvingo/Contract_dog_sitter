@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db";
 import { getMarketingConfig } from "@/lib/marketing/config";
 import { customerAudience } from "@/lib/platform/customers";
 import { ActionForm } from "@/components/ActionForm";
+import { MarketingCustomerSearch } from "@/components/MarketingCustomerSearch";
+import { marketingContacts } from "@/lib/marketing/contacts";
 import {
   saveCampaign,
   suppressEmail,
@@ -15,7 +17,7 @@ import { AdminShell } from "../admin-ui";
 
 export default async function MarketingPage() {
   const admin = await requirePlatformAdmin();
-  const [config, audience, campaigns, rules] = await Promise.all([
+  const [config, audience, campaigns, rules, contacts] = await Promise.all([
     getMarketingConfig(),
     customerAudience({ channel: "saved" }),
     prisma.marketingCampaign.findMany({
@@ -24,13 +26,31 @@ export default async function MarketingPage() {
       include: { _count: { select: { deliveries: true } } },
     }),
     prisma.marketingRule.findMany({ where: { enabled: true } }),
+    marketingContacts(),
   ]);
+  const emailCount = contacts.filter((contact) => !contact.marketingEmailDeletedAt).length;
   return (
     <AdminShell
       email={admin.email}
       title="Email marketing"
       subtitle="Edit your message, add a photo, and send to your customers."
     >
+      <section className="panel email-management-entry">
+        <div>
+          <h2>Customer emails</h2>
+          <p><strong>{emailCount} emails</strong> · {audience.customers.length} with promotions on</p>
+          <p className="small">View all customer emails, enable or block promotions, and delete addresses from your marketing list.</p>
+        </div>
+        <Link className="button" href="/admin/marketing/contacts">Manage customer emails →</Link>
+        <MarketingCustomerSearch contacts={contacts.map((contact) => ({
+          id: contact.id,
+          name: `${contact.firstName} ${contact.lastName}`.trim(),
+          email: contact.email,
+          status: contact.status,
+          deleted: Boolean(contact.marketingEmailDeletedAt),
+          inactive: Boolean(contact.deactivatedAt),
+        }))} />
+      </section>
       <section className="panel">
         <h2>Create an email</h2>
         <p>
