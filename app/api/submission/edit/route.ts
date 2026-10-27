@@ -13,12 +13,13 @@ import { todayKey } from "@/lib/platform/rules";
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
-function canEdit(status: SubmissionStatus): boolean {
+function canEdit(status: SubmissionStatus, acceptedDropoffAt: Date | null): boolean {
   return (
     status === SubmissionStatus.PENDING ||
     status === SubmissionStatus.ACCEPTED ||
     status === SubmissionStatus.NEEDS_REVIEW ||
-    status === SubmissionStatus.MEET_GREET_REQUESTED
+    status === SubmissionStatus.MEET_GREET_REQUESTED ||
+    (status === SubmissionStatus.REJECTED && Boolean(acceptedDropoffAt))
   );
 }
 
@@ -34,7 +35,7 @@ export async function GET(request: Request) {
     );
   }
 
-  if (!canEdit(editToken.submission.status)) {
+  if (!canEdit(editToken.submission.status, editToken.submission.acceptedDropoffAt)) {
     return NextResponse.json(
       {
         error:
@@ -66,6 +67,7 @@ export async function POST(request: Request) {
     const body = (await request.json()) as {
       token?: string;
       values?: FormValues;
+      revision?: number;
     };
     const editToken = await findValidSubmissionEditToken(body.token || null);
 
@@ -76,7 +78,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!canEdit(editToken.submission.status)) {
+    if (!canEdit(editToken.submission.status, editToken.submission.acceptedDropoffAt)) {
       return NextResponse.json(
         { error: "This request can no longer be edited" },
         { status: 409 },
@@ -105,6 +107,7 @@ export async function POST(request: Request) {
     const result = await updateSubmissionRecord({
       submissionId: editToken.submissionId,
       data: body.values,
+      expectedRevision: body.revision ?? editToken.submission.revision,
     });
 
     const emailPending = await scheduleSubmissionNotification(

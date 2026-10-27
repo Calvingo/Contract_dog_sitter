@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { requirePlatformAdmin } from "@/lib/platform/auth";
-import { availability, getSettings } from "@/lib/platform/capacity";
-import { dateKey, todayKey, validDate } from "@/lib/platform/rules";
+import { acceptedOccupancyWhere, availability, getSettings } from "@/lib/platform/capacity";
+import { acceptedStay, reservesCapacity, stayDates, dateKey, todayKey, validDate } from "@/lib/platform/rules";
 import { prisma } from "@/lib/db";
-import { submissionDogNames } from "@/lib/submission-pets";
+import { acceptedBookingDetails } from "@/lib/platform/accepted-booking";
 import { AdminCapacityCalendar } from "@/components/AdminCapacityCalendar";
 import { AdminShell, StatusBadge } from "../admin-ui";
 export default async function AdminCalendarPage({
@@ -20,30 +20,25 @@ export default async function AdminCalendarPage({
     end = dateKey(
       new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5)), 0)),
     );
-  const [result, settings, bookings, overrides] = await Promise.all([
-    availability(start, end),
-    getSettings(),
-    prisma.submission.findMany({
-      where: {
-        dropoffAt: { lte: new Date(`${end}T23:59:59Z`) },
-        pickupAt: { gte: new Date(`${start}T00:00:00Z`) },
-        status: { notIn: ["CANCELLED", "REJECTED"] },
-      },
-      orderBy: { dropoffAt: "asc" },
-      include: {
-        pet: true,
-        customer: true,
-        submissionPets: {
-          orderBy: { position: "asc" },
-          include: { pet: true },
+  // Counts and detail rows share one database snapshot, even during acceptance.
+  const { result, settings, bookings, overrides } = await prisma.$transaction(async (tx) => {
+    const [result, settings, bookings, overrides] = await Promise.all([
+      availability(start, end, tx),
+      getSettings(tx),
+      tx.submission.findMany({
+        where: acceptedOccupancyWhere(start, end),
+        orderBy: { acceptedDropoffAt: "asc" },
+        include: {
+          pet: true, customer: true, revisions: true,
+          submissionPets: { orderBy: { position: "asc" }, include: { pet: true } },
         },
-      },
-    }),
-    prisma.dailyCapacity.findMany({
-      where: { date: { gte: start, lte: end } },
-      orderBy: { date: "asc" },
-    }),
-  ]);
+      }),
+      tx.dailyCapacity.findMany({
+        where: { date: { gte: start, lte: end } }, orderBy: { date: "asc" },
+      }),
+    ]);
+    return { result, settings, bookings, overrides };
+  }, { isolationLevel: "RepeatableRead" });
   const blocks: { start: string; end: string; note: string }[] = [];
   for (const row of overrides.filter(
     (row) => row.blocked || row.capacity === 0,
@@ -77,9 +72,7 @@ export default async function AdminCalendarPage({
         blocks={blocks}
       />
       <p className="small">
-        Counts come from website reservations, including active holds and
-        verified deposits. Expired unpaid holds release their space
-        automatically. Notion data is not connected yet.
+        Counts use the last administrator-accepted dates and dog count, including stays with pending changes. Payment and request expiry do not change occupancy.
       </p>
       <section className="panel table-scroll">
         <h2>Stays in this month</h2>
@@ -90,22 +83,22 @@ export default async function AdminCalendarPage({
               <th>Owner</th>
               <th>Dates</th>
               <th>Status</th>
-              <th>Hold deadline</th>
+              <th>Request window (does not expire accepted stays)</th>
             </tr>
           </thead>
           <tbody>
-            {bookings.map((b) => (
+            {bookings.filter(b => reservesCapacity(b) && stayDates(acceptedStay(b).dropoffAt, acceptedStay(b).pickupAt, settings.includePickupDay).some(date => date >= start && date <= end)).map((b) => (
               <tr key={b.id}>
                 <td>
                   <Link href={`/admin/submissions/${b.id}`}>
-                    {submissionDogNames(b.submissionPets, b.pet.name)}
+                    {acceptedBookingDetails(b).dogNames} · {acceptedStay(b).dogs} accepted dogs
                   </Link>
                 </td>
                 <td>
                   {b.customer.firstName} {b.customer.lastName}
                 </td>
                 <td>
-                  {dateKey(b.dropoffAt)} → {dateKey(b.pickupAt)}
+                  {dateKey(acceptedStay(b).dropoffAt)} → {dateKey(acceptedStay(b).pickupAt)}
                 </td>
                 <td>
                   <StatusBadge status={b.status} />
@@ -115,7 +108,7 @@ export default async function AdminCalendarPage({
                     ? b.holdExpiresAt.toLocaleString("en-US", {
                         timeZone: "America/Los_Angeles",
                       })
-                    : "Legacy reservation"}
+                    : "No request deadline"}
                 </td>
               </tr>
             ))}

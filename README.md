@@ -1,6 +1,6 @@
 # Silicon Paws Retreat
 
-A Next.js / PostgreSQL dog boarding platform with a customer portal, booking agreements, capacity management, manual Zelle / Venmo payment verification, and scheduled email marketing.
+A Next.js / PostgreSQL dog boarding platform with a customer portal, booking agreements, capacity management, Zelle / Venmo payment notifications, and scheduled email marketing.
 
 ## Local setup
 
@@ -31,7 +31,7 @@ Prisma CLI does not automatically load `.env.local`: supply `DATABASE_URL` and `
 | Admin    | `/admin/requests`        | Booking review and cancellation request indicators                                    |
 | Admin    | `/admin/calendar`        | Monthly occupancy and date-range capacity overrides                                   |
 | Admin    | `/admin/customers`       | Searchable customer table and `.xlsx` export                                          |
-| Admin    | `/admin/payments`        | Verify reported transfers and record completed full refunds                           |
+| Admin    | `/admin/payments`        | View payment notifications and record actual refunds                           |
 | Admin    | `/admin/marketing`       | Email campaigns, annual holiday rules, audiences, delivery logs and exclusions        |
 | Admin    | `/admin/settings`        | Default capacity, hold rules, and payment recipients                                  |
 
@@ -42,14 +42,15 @@ Customers can open `/book` and submit without signing in. As explicitly chosen f
 - Default capacity is **17 dogs**. Every dog in a booking counts. Legacy submissions without a `SubmissionPet` row count as one dog.
 - Arrival and pick-up dates both consume a slot by default. Admin can select night-based counting; same-day visits still consume one day.
 - Daily overrides replace the default; `0` closes the date to new reservations. Reducing a limit preserves existing bookings and flags over-capacity dates.
-- New requests have a **24-hour hold**. Approval starts a fresh payment window. The duration is configurable (1–168 hours); changing it does not rewrite existing deadlines.
-- Expired unpaid requests release capacity dynamically. An expired request can only be approved if capacity is available again. A verified deposit keeps space reserved; cancellation and rejection release it.
-- Legacy reservations have a null hold deadline and remain reserved. Review them in the admin calendar instead of silently expiring old bookings. Historical payments are not invented; existing reservations do not request another deposit through the new payment page. Handle their balances directly with the customer.
-- A Postgres transaction-scoped advisory lock serializes capacity-changing writes. New bookings, edits, admin changes, email decisions, payment verification and limit changes use the same lock, with occupancy read afterward.
-- Existing **20% deposit** pricing is retained. Payment instructions appear after approval and while a hold is valid. Customer-reported payments are unverified until an admin checks the transfer. A report extends the verification window once; duplicate pending reports are blocked.
-- Admin records the actual received amount. Partial verified payments leave a remaining deposit. Full verification triggers a confirmation email; delivery failure is logged and does not roll back payment or invite another transfer.
-- This site does not initiate Zelle / Venmo transfers or refunds and has no automatic reconciliation. Full refunds are recorded after being sent in the payment app. Partial refunds and balance collection are not part of this first phase.
-- Cancellation is a request: the booking stays active until admin changes its status to `CANCELLED`. Refunds are separate. Modifying a booking requires review again.
+- Only administrator-accepted versions consume capacity. The accepted dates, dog count and revision are stored separately from pending edits. Only formal cancellation releases that stay; rejecting a proposed edit keeps the previously accepted version.
+- The operational request window defaults to **72 hours** (configurable 1–168). Its deadline never expires an accepted stay. Edit links remain 14 days and decision links remain 7 days.
+- A Postgres transaction-scoped advisory lock serializes accepts, edits, blocklist writes and capacity changes. Acceptance checks every stay date after acquiring the lock. Duplicate/stale decisions are rejected.
+- Existing **20% deposit** pricing and Zelle / Venmo instructions remain. Report Payment records an unverified notification; it never confirms funds, changes occupancy or extends a reservation. Duplicate notifications are blocked. There is no Verify Deposit workflow.
+- Actual refunds are recorded separately with an amount and reference after using the payment app. Federal-holiday stays retain the full 20% deposit, while other recorded funds remain eligible. The website does not transfer money or automatically reconcile funds.
+- Federal-holiday deposit policy uses OPM nationwide actual/observed dates, independently of holiday surcharges. New signatures store a policy snapshot/version; old signatures keep old terms when resent, and revisions archive the previous agreement.
+- Sundays from 3:00 PM (inclusive) until 6:00 PM (exclusive) prohibit both drop-off and pickup in California local calendar time. Other Sunday hours stay open.
+- Cancellation requires a signed-in POST confirmation. Email links open booking details without cancelling. The request commits once before SMTP attempts to all configured admins; delivery failures are recorded in EmailLog. Accepted capacity stays until admin sets CANCELLED.
+- Admin → Customers has a PostgreSQL Booking Blocklist with normalized emails, internal reasons and an operation audit. It blocks new guest/signed-in requests without changing marketing preferences or past orders.
 - Historical agreement and price snapshots remain separate from the editable dog profile. The current booking form supports **up to two dogs per booking**, while the account can store more dogs.
 - Promotions support email only. Customer profiles default to no email marketing subscription, and preference changes have an audit record. Phone numbers remain available for booking contact and customer exports. Legacy SMS database fields remain for compatibility, but there is no SMS audience, export column, subscription control, or sending feature.
 - Audience exclusions use **stay dates** and active reservations, not order creation dates. Cancelled/rejected/expired unpaid requests do not suppress a customer. Exports recalculate the current audience and write literal Excel strings, including names beginning with `=`.
@@ -195,3 +196,9 @@ Validation: `npm run test:account-profile-actions` checks account/admin authoriz
 New and edited booking requests return after the booking transaction commits. PDF generation and customer/admin emails run with Next.js `after`, with a 120-second route duration limit. This removes mail latency from the response; it is not a durable retry queue. Delivery failures are recorded in the email log and the existing admin receipt resend remains available. Success pages explain that the saved request's email and signed PDF will arrive shortly. The `Server-Timing` response header reports booking handler time.
 
 `npm run test:profile-autosave` checks profile-only payloads and preservation of newer edits/assigned pet IDs. With the isolated `TEST_DATABASE_URL` on port 55439, `npm run test:submission-response` verifies committed bookings respond within five seconds despite a simulated 12-second mail task, including edited bookings and failure logging. These tests do not send real email.
+
+## Accepted booking refactor verification
+
+`TEST_DATABASE_URL=postgresql://USER@127.0.0.1:55439/postgres npm run test:booking-domain` exercises accepted snapshots, real concurrent acceptance, retained occupancy during edits/cancellation requests, holiday refund limits, legacy migration backfills, Sunday create/edit API validation and private booking-block enforcement for guests and signed-in customers. It refuses other database hosts/ports and uses fake mail delivery. Run test scripts sequentially because they share local capacity settings.
+
+See [the delivery report](docs/booking-capacity-refactor.md) for the changed-file list, data flow, migration strategy, manual release checks and complete Mermaid lifecycle diagram, and [the recorded verification output](docs/booking-test-results.txt) for the results.

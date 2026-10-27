@@ -6,6 +6,7 @@ import { updateSubmissionActionWithState } from "../actions";
 
 type EditOrderFormProps = {
   submissionId: string;
+  revision: number;
   defaultStatus: SubmissionStatus;
   defaultDropoffAt: string;
   defaultPickupAt: string;
@@ -15,6 +16,7 @@ type EditOrderFormProps = {
 
 export function EditOrderForm({
   submissionId,
+  revision,
   defaultStatus,
   defaultDropoffAt,
   defaultPickupAt,
@@ -29,6 +31,7 @@ export function EditOrderForm({
   return (
     <form action={formAction} className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-orange-100">
       <input type="hidden" name="submissionId" value={submissionId} />
+      <input type="hidden" name="revision" value={revision} />
       <h2 className="text-xl font-bold text-stone-950">Edit Order</h2>
       <div className="mt-4 grid gap-4">
         <label className="block">

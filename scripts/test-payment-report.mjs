@@ -39,7 +39,7 @@ const tx = {
   },
   payment: {
     create: async ({ data }) => {
-      assert.equal(capacityChecked, true);
+      assert.equal(capacityChecked, false, "Payment reporting never checks or changes capacity");
       saved = { ...data, status: "REPORTED" };
       booking.payments.push(saved);
       return saved;
@@ -74,18 +74,15 @@ assert.equal(saved.method, "TRANSFER");
 assert.equal(saved.payerName, "", "Do not invent transfer details");
 assert.equal(saved.reference, "");
 assert.equal(saved.status, "REPORTED", "Reporting never verifies funds");
-assert.match((await reportPayment({}, form)).error, /already awaiting review/);
+assert.match((await reportPayment({}, form)).error, /already recorded/);
 assert.equal(booking.payments.length, 2, "Duplicate clicks cannot create another report");
 
 for (const [change, error] of [
   [() => { booking.customerId = "another-customer"; }, /approved/],
   [() => { booking.status = "PENDING"; }, /approved/],
   [() => { booking.status = "CANCELLED"; }, /approved/],
-  [() => { booking.holdExpiresAt = null; }, /existing reservation/],
-  [() => { booking.holdExpiresAt = new Date(0); }, /expired/],
-  [() => { booking.payments = [{ amount: 20, status: "VERIFIED" }]; }, /already verified/],
+  [() => { booking.payments = [{ amount: 20, status: "VERIFIED" }]; }, /already been recorded/],
   [() => { settings.zelleRecipient = settings.zelleName = ""; }, /not currently available/],
-  [() => { capacityAvailable = false; }, /No capacity/],
 ]) {
   reset();
   change();
@@ -96,4 +93,10 @@ reset();
 settings = { ...settings, zelleName: "", zelleRecipient: "", venmoName: "Recipient", venmoUsername: "recipient" };
 assert.ok((await reportPayment({}, form)).message, "A Venmo-only configuration works too");
 assert.ok((await reportPayment({}, new FormData())).error);
-console.log("PASS one-click payment reporting, server-calculated amount, pending verification, duplicate prevention, ownership, approval, expiry, capacity and configured recipients. No database writes or transfers performed.");
+console.log("PASS one-click payment reporting, server-calculated amount, non-blocking notifications, duplicate prevention, ownership, approval, expiry/capacity independence and configured recipients. No database writes or transfers performed.");
+
+for (const deadline of [null, new Date(0)]) {
+  reset(); booking.holdExpiresAt = deadline; capacityAvailable = false;
+  assert.ok((await reportPayment({}, form)).message, "Accepted stay can report payment after expiry, even if limit was lowered");
+  assert.equal(booking.holdExpiresAt, deadline);
+}

@@ -1,3 +1,5 @@
+import { ActionForm } from "@/components/ActionForm";
+import { setBookingBlock } from "../booking-blocklist-actions";
 import Link from "next/link";
 import { requirePlatformAdmin } from "@/lib/platform/auth";
 import {
@@ -15,6 +17,7 @@ export default async function CustomersPage({
 }) {
   const admin = await requirePlatformAdmin();
   const filters = await searchParams;
+  const bookingBlocks = await prisma.bookingBlocklist.findMany({orderBy:{updatedAt:"desc"}});
   const [totalCustomers, suppressions] = await Promise.all([
     prisma.customer.count(),
     prisma.marketingSuppression.findMany({ select: { email: true } }),
@@ -40,6 +43,15 @@ export default async function CustomersPage({
       title="Customers"
       subtitle="One customer per row, with all their dogs and marketing preferences."
     >
+      <section className="panel">
+        <h2>Booking Blocklist</h2>
+        <ActionForm action={setBookingBlock} label="Save booking block">
+          <label>Email<input name="email" type="email" required /></label>
+          <label>Action<select name="blocked"><option value="true">Block new bookings</option><option value="false">Unblock</option></select></label>
+          <label>Internal reason<textarea name="reason" maxLength={1000} /></label>
+        </ActionForm>
+        {bookingBlocks.filter(b => b.blocked).map(b => <div key={b.email}><p>{b.email} — {b.reason} · {b.updatedBy} · {b.updatedAt.toISOString()}</p><ActionForm action={setBookingBlock} label="Unblock"><input type="hidden" name="email" value={b.email}/><input type="hidden" name="blocked" value="false"/></ActionForm></div>)}
+      </section>
       <section className="panel">
         <form className="filter-form" key={query}>
           <label>
@@ -120,7 +132,8 @@ export default async function CustomersPage({
                       {promotionStatus(c, suppressed.has(c.email.toLowerCase()))}
                     </span>
                   </td>
-                  <td><CustomerAccountStatus id={c.id} deactivated={Boolean(c.deactivatedAt)} /></td>
+                  <td><CustomerAccountStatus id={c.id} deactivated={Boolean(c.deactivatedAt)} />
+                    <ActionForm action={setBookingBlock} label={bookingBlocks.some(b => b.email === c.email.toLowerCase() && b.blocked) ? "Unblock booking" : "Block booking"}><input type="hidden" name="email" value={c.email}/><input type="hidden" name="blocked" value={bookingBlocks.some(b => b.email === c.email.toLowerCase() && b.blocked) ? "false" : "true"}/></ActionForm></td>
                   <td>
                     {last ? (
                       <Link href={`/admin/submissions/${last.id}`}>

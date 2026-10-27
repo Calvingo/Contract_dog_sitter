@@ -1,9 +1,10 @@
 import { PDFDocument, rgb, type PDFPage, type PDFFont } from "pdf-lib";
 import { embedPdfFonts } from "./pdf-fonts";
+import { depositPolicy, DEPOSIT_POLICY_VERSION } from "./federal-holidays";
 import type { FormValues } from "./form-config";
 import {
   PAYMENT_EARLY_PICKUP_POLICY,
-  agreementSections,
+  agreementSectionsForVersion,
   formFields,
   getOptionLabel,
   prescreenQuestions,
@@ -113,9 +114,9 @@ function drawRow(ctx: PdfContext, label: string, value: string): PdfContext {
   return drawLines(ctx, lines, 10, ctx.font);
 }
 
-function drawAgreementTerms(ctx: PdfContext): PdfContext {
+function drawAgreementTerms(ctx: PdfContext, agreementVersion: string): PdfContext {
   let next = drawSectionTitle(ctx, "Pet Boarding & Daycare Agreement — Terms");
-  for (const section of agreementSections) {
+  for (const section of agreementSectionsForVersion(agreementVersion)) {
     const bodyFont = section.highlighted ? next.bold : next.font;
     const highlightColor = rgb(0.86, 0.15, 0.15);
     next = ensureSpace(next, MARGIN + 20);
@@ -160,7 +161,8 @@ function drawBoardingChecklist(ctx: PdfContext): PdfContext {
 export async function generateSubmissionPdf(
   data: FormValues,
   quote: SubmissionQuote,
-  signatureBuffer: Buffer
+  signatureBuffer: Buffer,
+  agreementVersion = "2026-10-federal-v1"
 ): Promise<Buffer> {
   const doc = await PDFDocument.create();
   const { font, bold } = await embedPdfFonts(doc);
@@ -277,6 +279,13 @@ export async function generateSubmissionPdf(
     `Deposit (${DEPOSIT_PERCENT}% of total)`,
     `$${quote.depositAmount.toFixed(2)}`
   );
+  if (agreementVersion === DEPOSIT_POLICY_VERSION) {
+    const policy = depositPolicy(data.dropoffDate, data.pickupDate, quote.totalPrice);
+    if (policy.nonRefundable) {
+      ctx = drawRow(ctx, "Non-refundable holiday deposit", `$${policy.nonRefundableAmount.toFixed(2)}`);
+      ctx = drawRow(ctx, "Federal holidays in this stay", policy.holidays.map(day => `${day.name} (${day.date})`).join(", "));
+    }
+  }
   ctx = drawRow(
     ctx,
     `Remaining balance (${100 - DEPOSIT_PERCENT}% of total, due at drop-off)`,
@@ -328,7 +337,7 @@ export async function generateSubmissionPdf(
     ctx = drawRow(ctx, "Age (years)", data.secondPetAgeYears);
   }
 
-  ctx = drawAgreementTerms(ctx);
+  ctx = drawAgreementTerms(ctx, agreementVersion);
 
   ctx = drawSectionTitle(ctx, "Owner Acknowledgment");
   ctx = drawLines(

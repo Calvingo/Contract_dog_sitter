@@ -1,3 +1,5 @@
+import { ActionForm } from "@/components/ActionForm";
+import { setBookingBlock } from "../../booking-blocklist-actions";
 import Link from "next/link";
 import { BookingRequestActions } from "@/components/BookingRequestActions";
 import { notFound, redirect } from "next/navigation";
@@ -45,6 +47,7 @@ export default async function AdminSubmissionDetailPage(props: {
 
   if (!submission) notFound();
 
+  const bookingBlock = await prisma.bookingBlocklist.findUnique({where:{email:submission.customer.email.toLowerCase()}});
   return (
     <AdminShell
       email={session.email}
@@ -63,6 +66,7 @@ export default async function AdminSubmissionDetailPage(props: {
               </p>
             </div>
           )}
+        <ActionForm action={setBookingBlock} label={bookingBlock?.blocked ? "Unblock customer bookings" : "Block customer bookings"}><input type="hidden" name="email" value={submission.customer.email}/><input type="hidden" name="blocked" value={bookingBlock?.blocked ? "false" : "true"}/><label>Internal booking block reason<textarea name="reason" maxLength={1000}/></label></ActionForm>
         <Link className="text-link" href="/admin/payments">
           Review payments and refunds →
         </Link>
@@ -87,6 +91,7 @@ export default async function AdminSubmissionDetailPage(props: {
 
         <section className="grid gap-6 lg:grid-cols-2">
           <EditOrderForm
+            revision={submission.revision}
             key={`${submission.revision}:${submission.status}`}
             submissionId={submission.id}
             defaultStatus={submission.status}

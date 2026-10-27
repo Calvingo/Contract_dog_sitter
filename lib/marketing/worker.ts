@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { createCustomerEmailUrl } from "@/lib/auth/customer-email-link";
 import { reservesCapacity } from "@/lib/platform/rules";
+import { acceptedOccupancyWhere } from "@/lib/platform/capacity";
 import { marketingAudienceWhere, canReceiveMarketing } from "./audience";
 import { getMarketingConfig } from "./config";
 import {
@@ -163,14 +164,7 @@ export async function runMarketing(
           submissions: {
             where: item.campaign.allCustomers
               ? { id: "" }
-              : {
-                  dropoffAt: {
-                    lte: new Date(`${item.campaign.excludeEnd}T23:59:59.999Z`),
-                  },
-                  pickupAt: {
-                    gte: new Date(`${item.campaign.excludeStart}T00:00:00Z`),
-                  },
-                },
+              : acceptedOccupancyWhere(item.campaign.excludeStart, item.campaign.excludeEnd),
             include: { submissionPets: true, payments: true },
           },
         },

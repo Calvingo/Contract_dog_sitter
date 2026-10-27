@@ -94,7 +94,7 @@ try {
     pickupDate: end,
     dropoffTime: "10:00",
     pickupTime: "10:00",
-    signature: "test-only",
+    signature: "data:image/png;base64,dGVzdA==",
     agreed: true,
     ...Object.fromEntries(
       [...prescreenQuestions, ...secondPrescreenQuestions].map((q) => [
@@ -117,7 +117,7 @@ try {
   assert.ok(
     result.days.every(
       (d) =>
-        d.closed && d.remaining === 0 && d.capacity === 5 && d.occupied === 1,
+        d.closed && d.remaining === 5 && d.capacity === 5 && d.occupied === 0,
     ),
   );
   await assert.rejects(createSubmissionRecord(values), /not enough space/);
@@ -129,7 +129,7 @@ try {
   await updateCalendarRange({ start, end, mode: "unblock" });
   assert.ok(
     (await availability(start, end)).days.every(
-      (d) => !d.closed && d.capacity === 6 && d.occupied === 1,
+      (d) => !d.closed && d.capacity === 6 && d.occupied === 0,
     ),
   );
   await updateCalendarRange({ start, end, mode: "capacity", capacity: 1 });
@@ -137,9 +137,9 @@ try {
   await updateCalendarRange({ start, end, mode: "unblock" });
   assert.ok(
     (await availability(start, end)).days.every(
-      (d) => !d.closed && d.remaining === 0,
+      (d) => !d.closed && d.remaining === 1,
     ),
-    "Unblocking does not open full dates",
+    "Pending requests do not consume capacity",
   );
   await assert.rejects(
     updateCalendarRange({ start: end, end: start, mode: "block" }),

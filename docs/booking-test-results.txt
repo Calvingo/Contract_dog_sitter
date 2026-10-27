@@ -1,0 +1,126 @@
+Verification: isolated local PostgreSQL, 127.0.0.1:55439/postgres; SMTP mocked.
+
+npm run typecheck: PASS
+npm run lint: PASS
+npm run build: PASS (39 routes/pages)
+Browser: Sunday options removed and invalid times cleared; Sunday 18:00 and Monday 15:00 selectable. No booking submitted.
+
+test:pricing: PASS
+
+> contract_dog_sitter@0.1.0 test:pricing
+> node scripts/test-pricing.mjs
+
+Pricing checks passed: age/neuter rates, medical care, proration, 2027 holiday calendar, Christmas/New Year rates, stay boundaries, totals, deposits, and multi-dog quotes.
+
+
+test:platform: PASS
+
+> contract_dog_sitter@0.1.0 test:platform
+> node scripts/test-platform.mjs
+
+Passed: date validation, UTC wall-clock parsing, multi-dog accepted occupancy, checkout rules, pending exclusion, expiry and payment independence.
+Passed: real Postgres concurrent acceptance, all-days capacity, accepted edit retention, owner isolation, expiry persistence, cancellation, closure, multi-dog capacity, oversubscription warnings and audience exclusions.
+
+
+test:marketing: PASS
+
+> contract_dog_sitter@0.1.0 test:marketing
+> node scripts/test-marketing.mjs
+
+PASS holiday dates, email escaping and validation
+PASS all-customer audience, existing reservations, explicit opt-outs, queued unsubscribe, personalized links and persistent image uploads
+PASS authenticated cron, consent, suppression, booking exclusion, concurrency, deduplication, SMTP failure handling, pause, recipient snapshot, global settings, admin-only test emails and rate limits (zero actual emails)
+
+
+test:marketing-contacts: PASS
+
+> contract_dog_sitter@0.1.0 test:marketing-contacts
+> node scripts/test-marketing-contacts.mjs
+
+PASS admin authorization, email listing/status, promotion toggle, queue suppression, deletion/restoration, retained bookings, audience exclusion and audit history
+
+
+test:booking-entry: PASS
+
+> contract_dog_sitter@0.1.0 test:booking-entry
+> node scripts/test-booking-entry.mjs
+
+PASS hashed admin password, environment override, invalid passwords and email allowlist; admin code allowlist, expiry, attempt limits, replay/race protection, SMTP failure; guest booking, preserved profiles, dates/times, public prefill without account access. No real emails sent.
+
+
+test:customer-email-links: PASS
+
+> contract_dog_sitter@0.1.0 test:customer-email-links
+> node scripts/test-customer-email-links.mjs
+
+PASS customer email links: hashed storage, direct destination, repeat clicks, recipient session, tampering, expiry, revocation, unsafe redirects, receipt/acceptance/meet-and-greet/payment emails and legacy edit links. No database or real emails used.
+
+
+test:payment-report: PASS
+
+> contract_dog_sitter@0.1.0 test:payment-report
+> node scripts/test-payment-report.mjs
+
+PASS one-click payment reporting, server-calculated amount, non-blocking notifications, duplicate prevention, ownership, approval, expiry/capacity independence and configured recipients. No database writes or transfers performed.
+
+
+test:admin-workflow: PASS
+
+> contract_dog_sitter@0.1.0 test:admin-workflow
+> node scripts/test-admin-workflow.mjs
+
+PASS inclusive cross-month blocks, preserved reservations and limits, full-day unblocking, invalid ranges, decision transitions, stale revisions and concurrent/double-click protection. No real email sent.
+
+
+test:prescreen-prefill: PASS
+
+> contract_dog_sitter@0.1.0 test:prescreen-prefill
+> node scripts/test-prescreen-prefill.mjs
+
+PASS all owner fields, both dogs' details/answers/notes, zero/missing age, verified selection, explicit clearing, public selection, current booking dates and fresh agreement/signature
+PASS every owner/pet field and answer through save/rebook/edit and verified form prefill, public privacy boundaries, multiple dogs, legacy fallback, revision history, private caching and cross-customer isolation; no real emails sent
+
+
+test:customer-crud: PASS
+
+> contract_dog_sitter@0.1.0 test:customer-crud
+> node scripts/test-customer-crud.mjs
+
+PASS owner correction/reload, profile-only save, both dog renames without duplicates, answers/notes and explicit clearing, create/archive/restore, private/public prefill, immutable booking history, authenticated booking updates, guest protection, cross-customer isolation and atomic rollback; account deactivation/restore, session and token revocation, privacy and preserved history; no real emails sent
+
+
+test:account-profile-actions: PASS
+
+> contract_dog_sitter@0.1.0 test:account-profile-actions
+> node scripts/test-account-profile-actions.mjs
+
+PASS account action authorization, verified identity, atomic contact/consent changes, care data mapping, scoped archive/restore, confirmed deactivation and admin-only restoration. No database or real email used.
+
+
+test:submission-response: PASS
+
+> contract_dog_sitter@0.1.0 test:submission-response
+> node scripts/test-submission-response.mjs
+
+New submission response: 33ms; simulated slow mail background: 12002ms
+PASS: new/edit responses, committed data, background receipt, failure logging, validation and scheduling fallback
+
+
+test:profile-autosave: PASS
+
+> contract_dog_sitter@0.1.0 test:profile-autosave
+> node scripts/test-profile-autosave.mjs
+
+PASS autosave payloads: consent excluded, incomplete fields deferred, both pets, assigned IDs and newer edits preserved
+
+
+test:booking-domain: PASS
+
+> contract_dog_sitter@0.1.0 test:booking-domain
+> node scripts/test-booking-domain.mjs
+
+PASS Sunday boundaries, 11 nationwide federal holidays, observed/year-crossing policy, surcharge separation, 72h, legacy dog count, deduplication and accepted edit snapshot.
+PASS accepted names/dates/deposit after edits, rejected-change re-edit, consistent marketing exclusions, admin agreement archive/policy/stale edit, private guest/signed-in API blocklist and Sunday create/edit API validation.
+PASS migration recovers last accepted revision, preserves original signed terms, extends exact 24h deadlines to 72h and retains custom hold settings.
+PASS cancellation ownership/deduplication, all admin recipients, persisted SMTP failure, accepted capacity preservation, admin-only block/unblock audit and marketing isolation; holiday refund retains only 20%, Verify disabled, duplicate refund rejected.
+PASS real PostgreSQL concurrent acceptance, repeat acceptance, three-day/two-dog occupancy, edited and reaccepted dates, expiry persistence, block/unblock, reduced limit, cancellation, normalized blocklist enforcement and unblock/marketing isolation.

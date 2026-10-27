@@ -50,6 +50,7 @@ function HomePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editToken = searchParams.get("editToken");
+  const [editRevision, setEditRevision] = useState<number | undefined>(undefined);
   const [formValues, setFormValues] = useState<FormValues>(initialFormValues);
   const [errors, setErrors] = useState<
     Partial<Record<keyof FormValues, string>>
@@ -281,6 +282,7 @@ function HomePageContent() {
         );
         const data = (await response.json()) as {
           values?: FormValues;
+          revision?: number;
           notice?: string;
           error?: string;
         };
@@ -292,6 +294,7 @@ function HomePageContent() {
           return;
         }
 
+        setEditRevision(data.revision);
         setFormValues({
           ...data.values,
           agreed: false,
@@ -526,13 +529,13 @@ function HomePageContent() {
     const pickup = parseDateTime(formValues.pickupDate, formValues.pickupTime);
     if (
       formValues.dropoffTime &&
-      !isPickupDropoffTimeAllowed(formValues.dropoffTime)
+      !isPickupDropoffTimeAllowed(formValues.dropoffTime, formValues.dropoffDate)
     ) {
       nextErrors.dropoffTime = ui.pickupDropoffTimeRestricted;
     }
     if (
       formValues.pickupTime &&
-      !isPickupDropoffTimeAllowed(formValues.pickupTime)
+      !isPickupDropoffTimeAllowed(formValues.pickupTime, formValues.pickupDate)
     ) {
       nextErrors.pickupTime = ui.pickupDropoffTimeRestricted;
     }
@@ -565,13 +568,17 @@ function HomePageContent() {
     try {
       await profileSaveInFlight.current;
       const submissionValues = latestValues.current;
+      if (!editToken) {
+        const eligibility = await fetch("/api/booking-eligibility", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:submissionValues.email})});
+        if (!eligibility.ok) throw new Error((await eligibility.json()).error || ui.submitError);
+      }
       const response = await fetch(
         editToken ? "/api/submission/edit" : "/api/submit",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(
-            editToken ? { token: editToken, values: submissionValues } : submissionValues,
+            editToken ? { token: editToken, revision: editRevision, values: submissionValues } : submissionValues,
           ),
         },
       );

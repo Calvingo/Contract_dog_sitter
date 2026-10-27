@@ -1,3 +1,4 @@
+import { HOLIDAY_BOOKING_POLICY } from "./federal-holidays";
 export type FormValues = {
   firstTimeBooking: string;
   prescreenAggression: string;
@@ -355,7 +356,7 @@ export const agreementSections: AgreementSection[] = [
   },
   {
     title: "8. Cancellation Policy",
-    body: "Deposits are non-refundable for cancellations made less than 7 days before the booking date.",
+    body: "Deposits are non-refundable for cancellations made less than 7 days before the booking date. " + HOLIDAY_BOOKING_POLICY,
   },
   {
     title: "9. Special Care Fees",
@@ -403,3 +404,8 @@ export const allSubmittableFieldKeys: (keyof FormValues)[] = [
   "pickupDate",
   "pickupTime",
 ];
+
+// Legacy signed agreements retain their original cancellation terms on resend.
+export function agreementSectionsForVersion(version: string) {
+  return version === "2026-10-federal-v1" ? agreementSections : agreementSections.map(section => ({...section, body: section.body.replace(" " + HOLIDAY_BOOKING_POLICY, "")}));
+}

@@ -35,7 +35,7 @@ export const ui = {
   wechatIdRequired: "Please enter your WeChat ID",
   pickupBeforeDropoff: "Pick-up must be after drop-off date and time",
   pickupDropoffTimeRestricted:
-    "Drop-offs and pick-ups are available from 8:30 AM to 9:00 PM.",
+    "Drop-offs and pick-ups are available from 8:30 AM to 9:00 PM, except Sundays from 3:00 PM until 6:00 PM (California time).",
   pickupDropoffTimeNote:
     "Kindly note: To maintain a good relationship with our neighbors and to respect the sitter family's rest time, we are unable to accommodate drop-offs or pick-ups before 8:30 AM or after 9:00 PM.",
   invalidWeight: "Please enter a valid weight in lbs",

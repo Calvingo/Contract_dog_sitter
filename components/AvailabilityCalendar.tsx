@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { dateKey, todayKey } from "@/lib/platform/rules";
-import { getPickupDropoffTimeOptions } from "@/lib/booking-time";
+import { getPickupDropoffTimeOptions, isPickupDropoffTimeAllowed } from "@/lib/booking-time";
 import { useCaliforniaToday } from "@/lib/use-california-today";
 type Day = { date: string; remaining: number; closed: boolean };
 export function AvailabilityCalendar({
@@ -27,6 +27,10 @@ export function AvailabilityCalendar({
     Record<"dropoffDate" | "pickupDate" | "dropoffTime" | "pickupTime", string>
   >;
 }) {
+  useEffect(() => {
+    if (dropoffTime && !isPickupDropoffTimeAllowed(dropoffTime, start)) onTimeChange?.("dropoffTime", "");
+    if (pickupTime && !isPickupDropoffTimeAllowed(pickupTime, end)) onTimeChange?.("pickupTime", "");
+  }, [start, end, dropoffTime, pickupTime, onTimeChange]);
   const today = useCaliforniaToday();
   const [month, setMonth] = useState(() => (start || todayKey()).slice(0, 7));
   const [days, setDays] = useState<Day[]>([]);
@@ -248,11 +252,7 @@ export function AvailabilityCalendar({
                     className="w-full rounded-xl border border-emerald-100 bg-white px-3 py-3 text-stone-800"
                   >
                     <option value="">Choose a time</option>
-                    {item.time &&
-                      !getPickupDropoffTimeOptions().some(
-                        (o) => o.value === item.time,
-                      ) && <option value={item.time}>{item.time}</option>}
-                    {getPickupDropoffTimeOptions().map((option) => (
+                    {getPickupDropoffTimeOptions(item.date).map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
                       </option>

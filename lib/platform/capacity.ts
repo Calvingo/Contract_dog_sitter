@@ -21,6 +21,16 @@ export async function getSettings(
     DEFAULT_SETTINGS
   );
 }
+export function acceptedOccupancyWhere(start: string, end: string, excludeId?: string): Prisma.SubmissionWhereInput {
+  return {
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+        status: { not: "CANCELLED" },
+        OR: [
+          { acceptedDropoffAt: { lte: new Date(`${end}T23:59:59.999Z`) }, acceptedPickupAt: { gte: new Date(`${start}T00:00:00Z`) } },
+          { status: "ACCEPTED", acceptedDropoffAt: null, dropoffAt: { lte: new Date(`${end}T23:59:59.999Z`) }, pickupAt: { gte: new Date(`${start}T00:00:00Z`) } },
+        ],
+  };
+}
 export async function availability(
   start: string,
   end: string,
@@ -31,13 +41,8 @@ export async function availability(
   const settings = await getSettings(db);
   const [bookings, overrides] = await Promise.all([
     db.submission.findMany({
-      where: {
-        ...(excludeId ? { id: { not: excludeId } } : {}),
-        dropoffAt: { lte: new Date(`${end}T23:59:59.999Z`) },
-        pickupAt: { gte: new Date(`${start}T00:00:00Z`) },
-        status: { notIn: ["CANCELLED", "REJECTED"] },
-      },
-      include: { submissionPets: { select: { id: true } }, payments: true },
+      where: acceptedOccupancyWhere(start, end, excludeId),
+      include: { submissionPets: { select: { id: true } } },
     }),
     db.dailyCapacity.findMany({ where: { date: { gte: start, lte: end } } }),
   ]);
@@ -54,7 +59,7 @@ export async function availability(
         date,
         capacity,
         occupied,
-        remaining: closed ? 0 : Math.max(0, capacity - occupied),
+        remaining: Math.max(0, capacity - occupied),
         closed,
         overCapacity: occupied > capacity,
       };
@@ -71,7 +76,7 @@ export async function assertCapacity(
   const settings = await getSettings(tx);
   const days = stayDates(start, end, settings.includePickupDay);
   const result = await availability(days[0], days.at(-1)!, tx, excludeId);
-  const unavailable = result.days.find((day) => day.remaining < dogs);
+  const unavailable = result.days.find((day) => day.closed || day.remaining < dogs);
   if (unavailable)
     throw new BookingConflict(
       `There is not enough space for ${dogs} dog${dogs === 1 ? "" : "s"} on ${unavailable.date}. Please choose different dates.`,
@@ -99,7 +104,8 @@ export async function prepareStatusChange(
     throw new BookingConflict(
       "This booking changed. Refresh and review the latest details.",
     );
-  if (!["REJECTED", "CANCELLED"].includes(status)) {
+  if (status === "ACCEPTED") {
+    if (current.status === "ACCEPTED") throw new BookingConflict("This booking is already accepted.");
     if (["CANCELLED", "REJECTED"].includes(current.status))
       throw new BookingConflict(
         "This booking is closed. Create a new request instead.",
@@ -114,6 +120,13 @@ export async function prepareStatusChange(
   }
   const settings = await getSettings(tx);
   return {
+    ...(status === "ACCEPTED" ? {
+      acceptedDropoffAt: current.dropoffAt,
+      acceptedPickupAt: current.pickupAt,
+      acceptedDogs: Math.max(1, current.submissionPets.length),
+      acceptedRevision: current.revision,
+      acceptedDepositPolicySnapshot: current.depositPolicySnapshot ?? Prisma.JsonNull,
+    } : {}),
     holdExpiresAt:
       current.holdExpiresAt === null
         ? null

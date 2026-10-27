@@ -9,7 +9,7 @@ export async function sendPaymentConfirmation(submissionId: string) {
     where: { id: submissionId },
     include: { customer: true },
   });
-  const subject = `[${BRAND_NAME}] Deposit verified — booking confirmed`;
+  const subject = `[${BRAND_NAME}] Payment record updated`;
   try {
     const bookingUrl = await createCustomerEmailUrl(
       booking.customer.email,
@@ -19,7 +19,7 @@ export async function sendPaymentConfirmation(submissionId: string) {
       from: `"${BRAND_NAME}" <${getEnv("GMAIL_USER")}>`,
       to: booking.customer.email,
       subject,
-      html: `<p>Your deposit has been verified and your booking is confirmed.</p><p><a href="${bookingUrl.replaceAll("&", "&amp;")}">View your dates, payment history, and booking details</a></p><p>Thank you,<br />${BRAND_NAME}</p>`,
+      html: `<p>Your payment record has been updated. Booking confirmation is determined by administrator acceptance.</p><p><a href="${bookingUrl.replaceAll("&", "&amp;")}">View your dates, payment history, and booking details</a></p><p>Thank you,<br />${BRAND_NAME}</p>`,
     });
     await logEmail({
       submissionId,

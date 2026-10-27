@@ -85,7 +85,7 @@ export default async function HomePage({
               <div>
                 <h3>Make it official</h3>
                 <p>
-                  Once approved, send your deposit. We’ll verify it and confirm
+                  Our acceptance confirms your booking. Then send your deposit for
                   your booking.
                 </p>
               </div>

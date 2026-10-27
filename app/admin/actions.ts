@@ -6,7 +6,7 @@ import {
   getSettings,
 } from "@/lib/platform/capacity";
 import type { ActionState } from "@/components/ActionForm";
-import { SubmissionStatus } from "@prisma/client";
+import { Prisma, SubmissionStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { clearAdminSession, getAdminSession } from "@/lib/auth/admin-session";
@@ -20,7 +20,11 @@ import {
 import { sendSubmissionEmails } from "@/lib/email";
 import type { DecisionAction } from "@/lib/decision-emails";
 import { signatureToBuffer } from "@/lib/validate";
-import { DEPOSIT_PERCENT } from "@/lib/pricing";
+import { isPickupDropoffTimeAllowed } from "@/lib/booking-time";
+import { DEPOSIT_PERCENT, parseDateTime } from "@/lib/pricing";
+import { dateKey, dateRange } from "@/lib/platform/rules";
+import { depositPolicy, DEPOSIT_POLICY_VERSION } from "@/lib/federal-holidays";
+import { archiveSubmissionRevision } from "@/lib/services/submission-revision";
 
 async function requireAdmin() {
   const session = await getAdminSession();
@@ -147,6 +151,7 @@ async function sendLatestSubmissionReceipt(submissionId: string) {
       isUpdate: true,
       quote: buildAdminReceiptQuote(values, submission.quotedTotal.toNumber()),
       sendAdminNotification: true,
+      agreementVersion: submission.agreementVersion,
     },
   );
 
@@ -167,27 +172,32 @@ async function updateSubmissionInternal(formData: FormData) {
     throw new Error("Invalid submission update.");
   }
 
-  const dropoffDate = new Date(`${dropoffAt}:00Z`);
-  const pickupDate = new Date(`${pickupAt}:00Z`);
+  const dropoffDate = parseDateTime(dropoffAt.slice(0, 10), dropoffAt.slice(11));
+  const pickupDate = parseDateTime(pickupAt.slice(0, 10), pickupAt.slice(11));
   const quotedTotalNumber = Number(quotedTotal);
 
   if (
-    Number.isNaN(dropoffDate.getTime()) ||
-    Number.isNaN(pickupDate.getTime()) ||
+    !dropoffDate ||
+    !pickupDate ||
     pickupDate <= dropoffDate ||
+    !isPickupDropoffTimeAllowed(dropoffAt.slice(11,16), dropoffAt.slice(0,10)) ||
+    !isPickupDropoffTimeAllowed(pickupAt.slice(11,16), pickupAt.slice(0,10)) ||
     !Number.isFinite(quotedTotalNumber) ||
-    quotedTotalNumber < 0
+    quotedTotalNumber < 0 ||
+    Math.abs(quotedTotalNumber * 100 - Math.round(quotedTotalNumber * 100)) > 0.000001
   ) {
     throw new Error("Invalid date or price.");
   }
 
+  dateRange(dateKey(dropoffDate), dateKey(pickupDate));
   await prisma.$transaction(async (tx) => {
     await lockCapacity(tx);
     const current = await tx.submission.findUniqueOrThrow({
       where: { id: submissionId },
       include: { submissionPets: true },
     });
-    if (!["REJECTED", "CANCELLED"].includes(status))
+    if (Number(formData.get("revision")) !== current.revision) throw new Error("This booking changed. Refresh before editing.");
+    if (status === "ACCEPTED")
       await assertCapacity(
         tx,
         dropoffDate,
@@ -196,10 +206,16 @@ async function updateSubmissionInternal(formData: FormData) {
         current.id,
       );
     const settings = await getSettings(tx);
+    await archiveSubmissionRevision(tx, current);
+    // Apply only the policy the customer actually signed; legacy terms stay legacy.
+    const policy = current.agreementVersion === DEPOSIT_POLICY_VERSION
+      ? depositPolicy(dateKey(dropoffDate), dateKey(pickupDate), quotedTotalNumber)
+      : null;
     await tx.submission.update({
       where: { id: submissionId },
       data: {
         status,
+        ...(status === "ACCEPTED" ? {acceptedDropoffAt:dropoffDate, acceptedPickupAt:pickupDate, acceptedDogs:Math.max(1,current.submissionPets.length), acceptedRevision:current.revision + 1, acceptedDepositPolicySnapshot:policy ?? Prisma.DbNull} : {}),
         holdExpiresAt:
           current.holdExpiresAt === null
             ? null
@@ -207,6 +223,7 @@ async function updateSubmissionInternal(formData: FormData) {
         dropoffAt: dropoffDate,
         pickupAt: pickupDate,
         quotedTotal: quotedTotalNumber,
+        depositPolicySnapshot: policy ?? Prisma.DbNull,
         prescreenNotes: prescreenNotes || null,
         lastEditedAt: new Date(),
         revision: { increment: 1 },

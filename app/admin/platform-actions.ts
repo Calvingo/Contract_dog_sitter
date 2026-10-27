@@ -3,12 +3,8 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requirePlatformAdmin } from "@/lib/platform/auth";
 import {
-  assertCapacity,
-  getSettings,
   lockCapacity,
 } from "@/lib/platform/capacity";
-import { sendPaymentConfirmation } from "@/lib/platform/payment-email";
-import { depositDue, verifiedAmount } from "@/lib/platform/rules";
 import {
   updateCalendarRange,
   type CalendarMode,
@@ -113,114 +109,24 @@ export async function saveDailyCapacity(
   }
 }
 
-export async function reviewPayment(
-  _state: ActionState,
-  form: FormData,
-): Promise<ActionState> {
+export async function reviewPayment(_state: ActionState, form: FormData): Promise<ActionState> {
   const admin = await requirePlatformAdmin();
-  const id = text(form, "id"),
-    status = text(form, "status"),
-    note = text(form, "note").slice(0, 1000),
-    amount = Number(text(form, "amount"));
-  if (
-    !["VERIFIED", "REJECTED", "REFUNDED"].includes(status) ||
-    form.get("checked") !== "on"
-  )
-    return {
-      error: "Choose a result and confirm you checked the real transfer.",
-    };
-  if (
-    status === "VERIFIED" &&
-    (!Number.isFinite(amount) ||
-      amount <= 0 ||
-      amount > 100000 ||
-      Math.abs(Math.round(amount * 100) - amount * 100) > 0.000001)
-  )
-    return {
-      error:
-        "Enter the actual received amount, with at most two decimal places.",
-    };
-  if (status !== "VERIFIED" && !note)
-    return { error: "Add a reason or refund reference for the customer." };
+  if (text(form, "status") !== "REFUNDED" || form.get("checked") !== "on") return {error: "Confirm the actual refund in your payment app."};
+  const note = text(form, "note").slice(0,1000);
+  const amount = Number(text(form, "amount"));
+  if (!note || !Number.isFinite(amount) || amount <= 0 || Math.abs(Math.round(amount*100) - amount*100) > 0.000001) return {error: "Enter a refund amount and reference."};
   try {
-    const confirmationBookingId = await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async tx => {
       await lockCapacity(tx);
-      const payment = await tx.payment.findUniqueOrThrow({
-        where: { id },
-        include: {
-          submission: { include: { submissionPets: true, payments: true } },
-        },
-      });
-      if (
-        status === "REFUNDED"
-          ? payment.status !== "VERIFIED"
-          : payment.status !== "REPORTED"
-      )
-        throw new Error(
-          "This payment has already been reviewed. Refresh to see its status.",
-        );
-      const booking = payment.submission;
-      if (
-        status === "VERIFIED" &&
-        !["CANCELLED", "REJECTED"].includes(booking.status)
-      )
-        await assertCapacity(
-          tx,
-          booking.dropoffAt,
-          booking.pickupAt,
-          Math.max(1, booking.submissionPets.length),
-          booking.id,
-        );
-      await tx.payment.update({
-        where: { id },
-        data: {
-          status: status as "VERIFIED" | "REJECTED" | "REFUNDED",
-          ...(status === "VERIFIED" ? { amount } : {}),
-          reviewNote: note || null,
-          reviewedAt: new Date(),
-          reviewedBy: admin.email,
-        },
-      });
-      if (status === "VERIFIED") {
-        const settings = await getSettings(tx);
-        await tx.submission.update({
-          where: { id: booking.id },
-          data: {
-            holdExpiresAt: new Date(Date.now() + settings.holdHours * 3600000),
-          },
-        });
-      }
-      const paidBefore = verifiedAmount(booking);
-      return status === "VERIFIED" &&
-        booking.status === "ACCEPTED" &&
-        paidBefore < depositDue(Number(booking.quotedTotal)) &&
-        paidBefore + amount >= depositDue(Number(booking.quotedTotal))
-        ? booking.id
-        : null;
+      const payment = await tx.payment.findUniqueOrThrow({where:{id:text(form,"id")}, include:{submission:true}});
+      if (!["VERIFIED", "REPORTED"].includes(payment.status)) throw new Error("Refund already recorded.");
+      const policy = (payment.submission.acceptedRevision !== null ? payment.submission.acceptedDepositPolicySnapshot : payment.submission.depositPolicySnapshot) as {nonRefundableAmount?: number} | null;
+      const refunded = await tx.payment.aggregate({where:{submissionId:payment.submissionId}, _sum:{refundedAmount:true}});
+      const recorded = await tx.payment.aggregate({where:{submissionId:payment.submissionId, status:{in:["VERIFIED","REPORTED","REFUNDED"]}},_sum:{amount:true}});
+      const maximum = Math.max(0, Number(recorded._sum.amount ?? 0) - Number(refunded._sum.refundedAmount ?? 0) - (policy?.nonRefundableAmount ?? 0));
+      if (amount > maximum || amount > Number(payment.amount)) throw new Error("Refund exceeds the refundable recorded amount; the holiday deposit must be retained.");
+      await tx.payment.update({where:{id:payment.id},data:{status:"REFUNDED",refundedAmount:amount,reviewNote:note,reviewedBy:admin.email,reviewedAt:new Date()}});
     });
-    refresh();
-    if (confirmationBookingId) {
-      try {
-        await sendPaymentConfirmation(confirmationBookingId);
-      } catch {
-        return {
-          message:
-            "Payment verified and booking confirmed. The confirmation email could not be delivered; contact the customer and check the email log.",
-        };
-      }
-    }
-    return {
-      message:
-        status === "REFUNDED"
-          ? "Actual refund recorded. No money was transferred by this website."
-          : "Payment review saved.",
-    };
-  } catch (error) {
-    return {
-      error:
-        error instanceof Error
-          ? error.message
-          : "Unable to review this payment.",
-    };
-  }
+    refresh(); return {message:"Actual refund recorded. No money was transferred by this website."};
+  } catch(error) {return {error:error instanceof Error ? error.message : "Unable to record refund."};}
 }

@@ -14,12 +14,11 @@ export default async function PaymentsPage() {
     <AdminShell
       email={admin.email}
       title="Payments"
-      subtitle="Verify actual Zelle or Venmo transfers, then record the result here."
+      subtitle="Customer payment notifications and refund history. Payment notifications do not prove receipt."
     >
       <div className="notice">
         Refunds must be sent in your payment app first. Recording a refund here
-        does not transfer money. If an expired booking has no capacity, resolve
-        its dates or cancel it before verifying payment.
+        does not transfer money. Accepted bookings remain confirmed independently of payment.
       </div>
       <div className="booking-grid">
         {payments.length ? (
@@ -37,6 +36,7 @@ export default async function PaymentsPage() {
               {payment.reference && (
                 <p className="small">Reference: {payment.reference}</p>
               )}
+              {payment.submission.acceptedDepositPolicySnapshot && <p className="notice">Holiday deposit retained: ${Number((payment.submission.acceptedDepositPolicySnapshot as {nonRefundableAmount?:number}).nonRefundableAmount || 0).toFixed(2)}. Record only funds actually refunded; other amounts remain separate from the deposit.</p>}
               <p className="small">
                 Booking status: {payment.submission.status}
               </p>
@@ -47,7 +47,7 @@ export default async function PaymentsPage() {
                 Review booking →
               </Link>
               {["REPORTED", "VERIFIED"].includes(payment.status) ? (
-                <ActionForm action={reviewPayment} label="Save payment review">
+                <ActionForm action={reviewPayment} label="Record refund">
                   <input type="hidden" name="id" value={payment.id} />
                   <label>
                     Result
@@ -55,23 +55,12 @@ export default async function PaymentsPage() {
                       <option value="" disabled>
                         Select result
                       </option>
-                      {payment.status === "REPORTED" ? (
-                        <>
-                          <option value="VERIFIED">
-                            Verified — funds received
-                          </option>
-                          <option value="REJECTED">
-                            Not received / invalid report
-                          </option>
-                        </>
-                      ) : (
-                        <option value="REFUNDED">Refund sent in full</option>
-                      )}
+                      <option value="REFUNDED">Record actual refund</option>
                     </select>
                   </label>
-                  {payment.status === "REPORTED" && (
+                  {(
                     <label>
-                      Actual amount received ($)
+                      Actual refund amount ($)
                       <input
                         type="number"
                         name="amount"
@@ -90,7 +79,7 @@ export default async function PaymentsPage() {
                   <label className="check-label">
                     <input type="checkbox" name="checked" required />
                     <span>
-                      I checked the actual transfer or completed the full refund
+                      I checked the actual transfer or completed the refund
                       in the payment app.
                     </span>
                   </label>

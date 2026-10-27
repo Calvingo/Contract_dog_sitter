@@ -1,4 +1,5 @@
 "use server";
+import { saveCancellationRequest } from "@/lib/services/cancellation";
 import { getVenmoDetails } from "@/lib/platform/payment-details";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -9,12 +10,10 @@ import { createSubmissionEditToken } from "@/lib/submission-edit-token";
 import {
   lockCapacity,
   getSettings,
-  assertCapacity,
 } from "@/lib/platform/capacity";
 import {
   depositDue,
-  reservesCapacity,
-  verifiedAmount,
+  recordedPaymentAmount,
 } from "@/lib/platform/rules";
 import type { ActionState } from "@/components/ActionForm";
 import { prescreenQuestions } from "@/lib/form-config";
@@ -171,7 +170,8 @@ export async function editBooking(form: FormData) {
     where: {
       id: text(form, "id"),
       customerId: customer.id,
-      status: { notIn: ["CANCELLED", "REJECTED"] },
+      status: { not: "CANCELLED" },
+      OR: [{ status: { not: "REJECTED" } }, { acceptedDropoffAt: { not: null } }],
     },
   });
   if (!booking) redirect("/account");
@@ -189,19 +189,8 @@ export async function requestCancellation(
       error:
         "Please briefly explain the cancellation request (up to 1,000 characters).",
     };
-  const result = await prisma.submission.updateMany({
-    where: {
-      id: text(form, "id"),
-      customerId: customer.id,
-      status: { notIn: ["CANCELLED", "REJECTED"] },
-      cancellationRequestedAt: null,
-    },
-    data: { cancellationRequestedAt: new Date(), cancellationReason: reason },
-  });
-  if (!result.count)
-    return {
-      error: "This request is already recorded or the booking is closed.",
-    };
+  const saved = await saveCancellationRequest(text(form,"id"), customer.id, reason);
+  if (!saved) return {error:"This request is already recorded or the booking is closed."};
   revalidatePath(`/account/bookings/${text(form, "id")}`);
   revalidatePath("/account");
   revalidatePath("/admin/requests");
@@ -226,34 +215,19 @@ export async function reportPayment(
       });
       if (!booking || booking.status !== "ACCEPTED")
         throw new Error("Payment is available after your booking is approved.");
-      if (booking.holdExpiresAt === null)
-        throw new Error(
-          "Contact us about payment for this existing reservation before transferring money.",
-        );
-      if (!reservesCapacity(booking))
-        throw new Error(
-          "Your hold has expired. Contact us before sending payment.",
-        );
       if (booking.payments.some((p) => p.status === "REPORTED"))
-        throw new Error("Your payment is already awaiting review.");
+        throw new Error("Your payment notification is already recorded.");
       const amount = Math.max(
         0,
-        depositDue(Number(booking.quotedTotal)) - verifiedAmount(booking),
+        depositDue(Number(booking.quotedTotal)) - recordedPaymentAmount(booking),
       );
-      if (!amount) throw new Error("Your deposit is already verified.");
+      if (!amount) throw new Error("Your deposit has already been recorded.");
       const settings = await getSettings(tx);
       if (
         !(settings.zelleRecipient && settings.zelleName) &&
         !getVenmoDetails(settings)
       )
         throw new Error("Payment is not currently available.");
-      await assertCapacity(
-        tx,
-        booking.dropoffAt,
-        booking.pickupAt,
-        Math.max(1, booking.submissionPets.length),
-        booking.id,
-      );
       await tx.payment.create({
         data: {
           submissionId: id,
@@ -263,24 +237,14 @@ export async function reportPayment(
           amount,
         },
       });
-      await tx.submission.update({
-        where: { id },
-        data: {
-          holdExpiresAt: new Date(
-            Math.max(
-              booking.holdExpiresAt?.getTime() ?? 0,
-              Date.now() + settings.holdHours * 3600000,
-            ),
-          ),
-        },
-      });
+
     });
     revalidatePath(`/account/bookings/${id}`);
     revalidatePath("/account");
     revalidatePath("/admin/payments");
     return {
       message:
-        "Payment submitted for verification. We will confirm after checking the actual transfer.",
+        "Payment notification recorded. This is not proof of receipt. Your accepted booking remains confirmed.",
     };
   } catch (error) {
     return failed(error);

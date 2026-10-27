@@ -175,7 +175,8 @@ export async function processDecision(
 
     if (
       submission.status !== SubmissionStatus.PENDING &&
-      submission.status !== SubmissionStatus.NEEDS_REVIEW
+      submission.status !== SubmissionStatus.NEEDS_REVIEW &&
+      !(submission.status === SubmissionStatus.MEET_GREET_REQUESTED && decisionAction !== "meet_greet")
     ) {
       return {
         ok: false,
