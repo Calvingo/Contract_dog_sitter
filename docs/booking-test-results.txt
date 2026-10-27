@@ -1,9 +1,9 @@
-Verification: isolated local PostgreSQL, 127.0.0.1:55439/postgres; SMTP mocked.
+Verification: isolated local PostgreSQL, 127.0.0.1:55439/spr_payment_reports_20261027; SMTP mocked.
 
 npm run typecheck: PASS
 npm run lint: PASS
-npm run build: PASS (39 routes/pages)
-Browser: Sunday options removed and invalid times cleared; Sunday 18:00 and Monday 15:00 selectable. No booking submitted.
+npm run build: PASS
+Migration: all 15 migrations applied to a new isolated database; Payment retains exactly its original 11 columns.
 
 test:pricing: PASS
 
@@ -62,6 +62,7 @@ test:payment-report: PASS
 > node scripts/test-payment-report.mjs
 
 PASS one-click payment reporting, server-calculated amount, non-blocking notifications, duplicate prevention, ownership, approval, expiry/capacity independence and configured recipients. No database writes or transfers performed.
+PASS read-only admin report: distinct notification/history totals, cent rounding, retained notes/references, no payment/refund controls and admin authorization.
 
 
 test:admin-workflow: PASS
@@ -102,7 +103,7 @@ test:submission-response: PASS
 > contract_dog_sitter@0.1.0 test:submission-response
 > node scripts/test-submission-response.mjs
 
-New submission response: 33ms; simulated slow mail background: 12002ms
+New submission response: 36ms; simulated slow mail background: 12002ms
 PASS: new/edit responses, committed data, background receipt, failure logging, validation and scheduling fallback
 
 
@@ -122,5 +123,5 @@ test:booking-domain: PASS
 PASS Sunday boundaries, 11 nationwide federal holidays, observed/year-crossing policy, surcharge separation, 72h, legacy dog count, deduplication and accepted edit snapshot.
 PASS accepted names/dates/deposit after edits, rejected-change re-edit, consistent marketing exclusions, admin agreement archive/policy/stale edit, private guest/signed-in API blocklist and Sunday create/edit API validation.
 PASS migration recovers last accepted revision, preserves original signed terms, extends exact 24h deadlines to 72h and retains custom hold settings.
-PASS cancellation ownership/deduplication, all admin recipients, persisted SMTP failure, accepted capacity preservation, admin-only block/unblock audit and marketing isolation; holiday refund retains only 20%, Verify disabled, duplicate refund rejected.
+PASS cancellation ownership/deduplication, all admin recipients, persisted SMTP failure, accepted capacity preservation, admin-only block/unblock audit and marketing isolation; read-only financial summaries preserve historical amounts/status/notes and the original Payment schema.
 PASS real PostgreSQL concurrent acceptance, repeat acceptance, three-day/two-dog occupancy, edited and reaccepted dates, expiry persistence, block/unblock, reduced limit, cancellation, normalized blocklist enforcement and unblock/marketing isolation.

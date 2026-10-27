@@ -58,10 +58,26 @@ export type OccupancyBooking = {
   pickupAt: Date;
   submissionPets: unknown[];
 };
-type PaymentRecord = { status: string; amount: {toString(): string} | number; refundedAmount?: {toString():string} | number };
-// A notification is a record of the customer's claim, never proof of receipt.
-export function recordedPaymentAmount(booking: {payments: PaymentRecord[]}): number {
-  return Math.round(booking.payments.filter(p => ["REPORTED","VERIFIED","REFUNDED"].includes(p.status)).reduce((sum,p) => sum + Math.max(0, Number(p.amount) - (p.status === "REFUNDED" ? Number(p.refundedAmount ?? p.amount) : 0)),0)*100)/100;
+type PaymentRecord = { status: string; amount: { toString(): string } | number };
+
+// These are reported/historical records, not a reconciliation of offline funds.
+export function paymentSummary(payments: PaymentRecord[]) {
+  const totalFor = (status: string) => Math.round(payments
+    .filter(payment => payment.status === status)
+    .reduce((sum, payment) => sum + Number(payment.amount), 0) * 100) / 100;
+  return {
+    reportedCount: payments.filter(payment => payment.status === "REPORTED").length,
+    reportedAmount: totalFor("REPORTED"),
+    historicalVerifiedAmount: totalFor("VERIFIED"),
+    historicalRefundedAmount: totalFor("REFUNDED"),
+  };
+}
+
+// A notification is a customer's claim, never proof of receipt.
+export function recordedPaymentAmount(booking: { payments: PaymentRecord[] }): number {
+  return Math.round(booking.payments
+    .filter(payment => ["REPORTED", "VERIFIED"].includes(payment.status))
+    .reduce((sum, payment) => sum + Number(payment.amount), 0) * 100) / 100;
 }
 
 export function verifiedAmount(

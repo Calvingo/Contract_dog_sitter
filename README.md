@@ -31,7 +31,7 @@ Prisma CLI does not automatically load `.env.local`: supply `DATABASE_URL` and `
 | Admin    | `/admin/requests`        | Booking review and cancellation request indicators                                    |
 | Admin    | `/admin/calendar`        | Monthly occupancy and date-range capacity overrides                                   |
 | Admin    | `/admin/customers`       | Searchable customer table and `.xlsx` export                                          |
-| Admin    | `/admin/payments`        | View payment notifications and record actual refunds                           |
+| Admin    | `/admin/payments`        | Read-only payment notifications and historical totals                           |
 | Admin    | `/admin/marketing`       | Email campaigns, annual holiday rules, audiences, delivery logs and exclusions        |
 | Admin    | `/admin/settings`        | Default capacity, hold rules, and payment recipients                                  |
 
@@ -46,7 +46,7 @@ Customers can open `/book` and submit without signing in. As explicitly chosen f
 - The operational request window defaults to **72 hours** (configurable 1–168). Its deadline never expires an accepted stay. Edit links remain 14 days and decision links remain 7 days.
 - A Postgres transaction-scoped advisory lock serializes accepts, edits, blocklist writes and capacity changes. Acceptance checks every stay date after acquiring the lock. Duplicate/stale decisions are rejected.
 - Existing **20% deposit** pricing and Zelle / Venmo instructions remain. Report Payment records an unverified notification; it never confirms funds, changes occupancy or extends a reservation. Duplicate notifications are blocked. There is no Verify Deposit workflow.
-- Actual refunds are recorded separately with an amount and reference after using the payment app. Federal-holiday stays retain the full 20% deposit, while other recorded funds remain eligible. The website does not transfer money or automatically reconcile funds.
+- Payments and refunds are handled entirely offline. Admin → Payments is a read-only report of customer notifications and historical verified/refunded records, with separate totals; it does not confirm receipt, record new refunds or reconcile account balances. The original Payment table is unchanged. Federal-holiday deposit policies remain visible to guide offline handling.
 - Federal-holiday deposit policy uses OPM nationwide actual/observed dates, independently of holiday surcharges. New signatures store a policy snapshot/version; old signatures keep old terms when resent, and revisions archive the previous agreement.
 - Sundays from 3:00 PM (inclusive) until 6:00 PM (exclusive) prohibit both drop-off and pickup in California local calendar time. Other Sunday hours stay open.
 - Cancellation requires a signed-in POST confirmation. Email links open booking details without cancelling. The request commits once before SMTP attempts to all configured admins; delivery failures are recorded in EmailLog. Accepted capacity stays until admin sets CANCELLED.
@@ -199,6 +199,6 @@ New and edited booking requests return after the booking transaction commits. PD
 
 ## Accepted booking refactor verification
 
-`TEST_DATABASE_URL=postgresql://USER@127.0.0.1:55439/postgres npm run test:booking-domain` exercises accepted snapshots, real concurrent acceptance, retained occupancy during edits/cancellation requests, holiday refund limits, legacy migration backfills, Sunday create/edit API validation and private booking-block enforcement for guests and signed-in customers. It refuses other database hosts/ports and uses fake mail delivery. Run test scripts sequentially because they share local capacity settings.
+`TEST_DATABASE_URL=postgresql://USER@127.0.0.1:55439/postgres npm run test:booking-domain` exercises accepted snapshots, real concurrent acceptance, retained occupancy during edits/cancellation requests, read-only financial summaries, unchanged historical payment columns, legacy migration backfills, Sunday create/edit API validation and private booking-block enforcement for guests and signed-in customers. It refuses other database hosts/ports and uses fake mail delivery. Run test scripts sequentially because they share local capacity settings.
 
 See [the delivery report](docs/booking-capacity-refactor.md) for the changed-file list, data flow, migration strategy, manual release checks and complete Mermaid lifecycle diagram, and [the recorded verification output](docs/booking-test-results.txt) for the results.

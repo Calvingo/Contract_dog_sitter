@@ -15,7 +15,7 @@ Occupied = 当日有效接受快照的狗只数总和。Remaining = max(0, Limit
 ## Payment、取消和黑名单
 
 - 删除 Verify Deposit 入口及服务端 VERIFIED 更新能力。历史 VERIFIED / REPORTED / REFUNDED 数据保留。Report Payment 是未核实的付款通知，不能证明到账，也不改变容量或续期。已记录金额用于避免重复索款，历史核实金额单独保留。
-- 退款仍需管理员先在支付应用实际操作，再记录金额和参考号。接受版 holiday policy 决定应保留的 20% 押金，其余记录金额可退款。网站不执行实际转账。一次付款记录的退款提交不能重复执行。
+- 收款、到账确认与退款全部在线下处理。Admin → Payments 仅为只读基本报表，分别汇总付款通知数量/金额、历史已核实金额和历史退款金额，保留原金额、状态、备注与参考号。网站没有 Verify Deposit 或退款操作，不新增 Payment 字段或退款数据表，也不推断实际到账余额。签署的 holiday policy 继续显示应保留的 20% 押金，供线下处理参考。预约报表中的报价统一标注 Booking Value，而非实际到账 Revenue。
 - 客户邮件中的 Cancel Booking 是已有安全邮件登录链接，打开自己的订单详情和确认表单。GET 不取消订单；具有客户身份的 Server Action POST 才保存申请。原子 updateMany 防重，先提交申请，再尝试所有 ADMIN_EMAIL 收件人；EmailLog 记录每人的成功或失败，邮件失败不回滚申请。客户申请保留接受占位。
 - Booking Blocklist 与营销系统分离，独立 PostgreSQL 表和操作事件记录管理员、时间、内部原因。Customers 支持手动邮箱和行内 Block / Unblock，订单详情也支持操作。邮箱 trim/lowercase、唯一主键。前端提交前进行通用资格检查，创建服务在事务内再次强制检查，覆盖访客与登录用户；客户端没有内部原因。营销订阅及历史订单不变。
 
@@ -44,9 +44,10 @@ Occupied = 当日有效接受快照的狗只数总和。Remaining = max(0, Limit
 1. Submission 增加接受日期、只数、revision、接受政策和当前签署政策快照。
 2. 回填现有 ACCEPTED 的当前日期与 SubmissionPet 数量；对于有此前接受标记的待审修改，从最后一个 ACCEPTED SubmissionRevision 恢复日期和只数。
 3. PlatformSettings 的 holdHours 默认 72，迁移旧默认值及可识别的 24 小时操作期限。
-4. Payment 增加 refundedAmount；历史 REFUNDED 回填原退款金额，保留原付款金额。
-5. 新增 BookingBlocklist 和 BookingBlocklistEvent，增加事件邮箱/时间索引。
-6. SubmissionRevision 增加 agreementVersion 和 depositPolicySnapshot，以保留再次签署前的历史条款。
+4. 新增 BookingBlocklist 和 BookingBlocklistEvent，增加事件邮箱/时间索引。
+5. SubmissionRevision 增加 agreementVersion 和 depositPolicySnapshot，以保留再次签署前的历史条款。
+
+Payment 保持原有列、记录和金额；本迁移不修改 Payment 表。
 
 没有删除业务表、清空数据或运行生产迁移。最终全部 15 个迁移已在全新的本机隔离 PostgreSQL 数据库成功执行；迁移回填还通过了历史接受版本恢复测试。
 
@@ -57,9 +58,10 @@ Occupied = 当日有效接受快照的狗只数总和。Remaining = max(0, Limit
 - `npm run build`：PASS，39 个页面/路由构建完成。
 - 本地浏览器实测：先在周六选 15:00 / 17:30，切到周日后非法已选时间自动清空，周日选项移除 15:00–17:30；18:00 可选；周一 15:00 可选。没有提交真实订单。
 - 14 个自动化测试脚本全部 PASS：pricing、platform、marketing、marketing-contacts、booking-entry、customer-email-links、payment-report、admin-workflow、prescreen-prefill、customer-crud、account-profile-actions、submission-response、profile-autosave、booking-domain。
-- 使用本机 127.0.0.1:55439 全新专用 PostgreSQL；测试脚本拒绝非指定本机端口的数据库。SMTP 使用替身，没有实际发邮件、收款或退款。
-- booking-domain 覆盖连续三天、两只狗、历史一只狗、相同订单去重、未接受状态不占位、编辑保留与重新接受、并发及重复 Accept、取消、Hold 过期、限额降低、Block/Unblock、取消通知防重与失败日志、黑名单规范化/权限/审计/营销隔离、20% 押金保护和历史协议恢复。
+- 使用本机 127.0.0.1:55439/spr_payment_reports_20261027 全新专用 PostgreSQL；测试脚本拒绝非指定本机端口的数据库。SMTP 使用替身，没有实际发邮件、收款或退款。
+- booking-domain 覆盖连续三天、两只狗、历史一只狗、相同订单去重、未接受状态不占位、编辑保留与重新接受、并发及重复 Accept、取消、Hold 过期、限额降低、Block/Unblock、取消通知防重与失败日志、黑名单规范化/权限/审计/营销隔离、联邦节假日定金政策快照和历史协议恢复。
 - 新建/编辑 API 的周日拒绝、访客/登录用户的黑名单拒绝、管理员旧协议归档/陈旧版本拒绝、已拒绝修改重新编辑、原接受日期的营销排除及旧 24h deadline 延长/自定义值保留集成测试全部通过。
+- 支付报表测试验证分类汇总、分币精度、管理员权限、没有收退款操作控件、历史备注/参考号保留，以及新数据库 Payment 仍为原有 11 个字段。
 - 周六/周日/周一 14:30、15:00、17:30、18:00 边界通过；2026 Thanksgiving、Christmas、2027 New Year、observed 和跨年测试通过；加价日期不自动成为定金不可退日期。
 - 完整输出见 `docs/booking-test-results.txt`。`test:decision-urls` 是生成真实操作链接的辅助脚本，不是自动化断言套件，未纳入回归计数。
 
@@ -108,7 +110,9 @@ flowchart TD
   POLICY[OPM Federal Holiday Domain] --> QUOTE[报价 / 签署政策快照 / 邮件]
   QUOTE --> F
   QUOTE --> S
-  HISTORY --> REFUND[管理员记录实际退款 / 保留接受版不可退押金]
+  HISTORY --> REPORTS[管理员只读报表: 通知 / 历史核实 / 历史退款分别统计]
+  POLICY -. 政策参考 .-> OFFLINE[线下收款与退款 / 不通过网站处理]
+  REPORTS -. 人工核对 .-> OFFLINE
   CONF --> EMAIL[客户邮件: Cancel Booking 安全入口]
   EMAIL --> GET[GET 打开订单详情 / 无取消副作用]
   GET --> POST[客户确认 POST]
@@ -133,6 +137,7 @@ flowchart TD
 - `app/admin/page.tsx`
 - `app/admin/payments/page.tsx`
 - `app/admin/platform-actions.ts`
+- `app/admin/reports/page.tsx`
 - `app/admin/settings/page.tsx`
 - `app/admin/submissions/[id]/page.tsx`
 - `app/admin/submissions/_edit-order-form.tsx`

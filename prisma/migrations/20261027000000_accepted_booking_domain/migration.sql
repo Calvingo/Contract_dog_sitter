@@ -8,8 +8,6 @@ ALTER TABLE "PlatformSettings" ALTER COLUMN "holdHours" SET DEFAULT 72;
 UPDATE "PlatformSettings" SET "holdHours"=72 WHERE "holdHours"=24;
 -- Extend existing 24-hour operational deadlines, never shorten custom deadlines.
 UPDATE "Submission" SET "holdExpiresAt"="holdExpiresAt" + INTERVAL '48 hours' WHERE "holdExpiresAt" IS NOT NULL AND "holdExpiresAt" - COALESCE("lastEditedAt", "createdAt") BETWEEN INTERVAL '23 hours 59 minutes' AND INTERVAL '24 hours 1 minute';
-ALTER TABLE "Payment" ADD COLUMN "refundedAmount" DECIMAL(10,2) NOT NULL DEFAULT 0;
-UPDATE "Payment" SET "refundedAmount"=amount WHERE status='REFUNDED';
 CREATE TABLE "BookingBlocklist" (email TEXT PRIMARY KEY, blocked BOOLEAN NOT NULL DEFAULT true, reason TEXT, "updatedBy" TEXT NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL);
 CREATE TABLE "BookingBlocklistEvent" (id TEXT PRIMARY KEY, email TEXT NOT NULL, blocked BOOLEAN NOT NULL, reason TEXT, "actorEmail" TEXT NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE INDEX "BookingBlocklistEvent_email_createdAt_idx" ON "BookingBlocklistEvent"(email,"createdAt");

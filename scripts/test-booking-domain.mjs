@@ -59,7 +59,7 @@ for (const [date, name] of [
 ]) assert.ok(depositPolicy(date, date, 100).holidays.some(h => h.name === name), `OPM 2026: ${date}`);
 assert.equal(federalHolidays(2026).filter(h=>!h.name.includes("observed")).length,11);
 assert.equal(rules.DEFAULT_SETTINGS.holdHours,72);
-assert.equal(rules.recordedPaymentAmount({payments:[{status:"REFUNDED",amount:100,refundedAmount:80}]}),20,"Retained deposit is not requested again after a partial refund");
+assert.equal(rules.recordedPaymentAmount({payments:[{status:"REFUNDED",amount:100}]}),0,"Historical refunded records are not payment notifications or proof of a remaining balance");
 const booking={id:"a",status:"ACCEPTED",dropoffAt:new Date("2026-11-01"),pickupAt:new Date("2026-11-03"),submissionPets:[{},{}],payments:[],quotedTotal:100,holdExpiresAt:new Date(0)};
 assert.deepEqual([...rules.occupancyByDay([booking,booking],true).values()],[2,2,2],"Duplicate records do not double count");
 assert.equal(rules.occupancyByDay([{...booking,submissionPets:[]}],true).get("2026-11-01"),1);
@@ -137,12 +137,11 @@ try {
   assert.equal(await prisma.emailLog.count({where:{submissionId:restored.submission.id,status:"FAILED"}}),1);
   assert.equal((await availability("2090-04-01","2090-04-03")).days[0].occupied,1,"Cancellation request preserves accepted occupancy");
   assert.ok((await prisma.submission.findUnique({where:{id:restored.submission.id}})).cancellationRequestedAt);
-  // Refund action remains admin-only and retains just the holiday deposit.
+  // Booking block management remains admin-only; financial records are read-only.
   const oldLoad=Module._load;
   Module._load=function(request,parent,...args){if(request==="next/cache")return {revalidatePath:()=>{}};return oldLoad.call(this,request,parent,...args);};
   const auth=require("../lib/platform/auth.ts");let isAdmin=true;
   auth.requirePlatformAdmin=async()=>{if(!isAdmin)throw new Error("Unauthorized");return {email:"admin@example.test"};};
-  const {reviewPayment}=require("../app/admin/platform-actions.ts");
   const {setBookingBlock}=require("../app/admin/booking-blocklist-actions.ts");
   const form=new FormData();form.set("email","  MIXED@example.test ");form.set("blocked","true");form.set("reason","internal-only");
   await setBookingBlock({},form);
@@ -173,14 +172,20 @@ try {
   assert.equal((await availability("2090-04-01", "2090-04-03")).days[0].occupied, 1, "Declined changes can be revised without releasing the confirmed stay");
   // An edit's new policy cannot replace the accepted cancellation policy.
   await prisma.submission.update({where:{id:restored.submission.id},data:{acceptedDepositPolicySnapshot:depositPolicy("2026-12-25","2026-12-26",100)}});
-  const payment=await prisma.payment.create({data:{submissionId:restored.submission.id,method:"TRANSFER",amount:100,payerName:"",reference:""}});
-  const refund=new FormData();refund.set("id",payment.id);refund.set("status","VERIFIED");refund.set("checked","on");refund.set("note","actual-refund-reference");refund.set("amount","100");
-  assert.ok((await reviewPayment({},refund)).error,"Verify deposit endpoint is disabled");
-  refund.set("status","REFUNDED");assert.match((await reviewPayment({},refund)).error,/holiday deposit/);
-  refund.set("amount","80");assert.ok((await reviewPayment({},refund)).message);
-  assert.equal(Number((await prisma.payment.findUnique({where:{id:payment.id}})).refundedAmount),80);
-  assert.ok((await reviewPayment({},refund)).error,"Duplicate refund rejected");
-  assert.equal((await availability("2090-04-01","2090-04-03")).days[0].occupied,1,"Refund does not change occupancy");
+  const history = await prisma.payment.createMany({ data: [
+    { submissionId: restored.submission.id, method: "TRANSFER", amount: 20, payerName: "", reference: "notification", status: "REPORTED" },
+    { submissionId: restored.submission.id, method: "ZELLE", amount: 30, payerName: "Legacy payer", reference: "legacy-verified", status: "VERIFIED", reviewNote: "Historical confirmation" },
+    { submissionId: restored.submission.id, method: "VENMO", amount: 40, payerName: "Legacy payer", reference: "legacy-refund", status: "REFUNDED", reviewNote: "Historical refund" },
+  ] });
+  assert.equal(history.count, 3);
+  const beforeReport = await prisma.payment.findMany({ where: { submissionId: restored.submission.id }, orderBy: { id: "asc" } });
+  assert.deepEqual(rules.paymentSummary(beforeReport), {
+    reportedCount: 1, reportedAmount: 20, historicalVerifiedAmount: 30, historicalRefundedAmount: 40,
+  });
+  assert.deepEqual(await prisma.payment.findMany({ where: { submissionId: restored.submission.id }, orderBy: { id: "asc" } }), beforeReport, "Reporting preserves original payment amounts, status and notes");
+  const columns = await prisma.$queryRaw`SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'Payment' ORDER BY column_name`;
+  assert.deepEqual(columns.map(column => column.column_name), ["amount", "createdAt", "id", "method", "payerName", "reference", "reviewNote", "reviewedAt", "reviewedBy", "status", "submissionId"], "Payment retains its original database columns");
+  assert.equal((await availability("2090-04-01","2090-04-03")).days[0].occupied,1,"Historical payment and refund records do not change occupancy");
   // Admin edits archive the signed agreement and recompute only its existing policy.
   const adminSession = require("../lib/auth/admin-session.ts");
   adminSession.getAdminSession = async () => ({ email: "admin@example.test" });
@@ -248,7 +253,7 @@ try {
   assert.ok(!agreementSectionsForVersion("2026-05").some(section=>section.body.includes("Holiday Booking Policy")));
   assert.ok(agreementSectionsForVersion("2026-10-federal-v1").some(section=>section.body.includes("Holiday Booking Policy")));
   console.log("PASS migration recovers last accepted revision, preserves original signed terms, extends exact 24h deadlines to 72h and retains custom hold settings.");
-  console.log("PASS cancellation ownership/deduplication, all admin recipients, persisted SMTP failure, accepted capacity preservation, admin-only block/unblock audit and marketing isolation; holiday refund retains only 20%, Verify disabled, duplicate refund rejected.");
+  console.log("PASS cancellation ownership/deduplication, all admin recipients, persisted SMTP failure, accepted capacity preservation, admin-only block/unblock audit and marketing isolation; read-only financial summaries preserve historical amounts/status/notes and the original Payment schema.");
   console.log("PASS real PostgreSQL concurrent acceptance, repeat acceptance, three-day/two-dog occupancy, edited and reaccepted dates, expiry persistence, block/unblock, reduced limit, cancellation, normalized blocklist enforcement and unblock/marketing isolation.");
 } finally {
   await prisma.bookingBlocklistEvent.deleteMany({where:{email:"mixed@example.test"}});

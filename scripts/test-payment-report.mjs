@@ -100,3 +100,48 @@ for (const deadline of [null, new Date(0)]) {
   assert.ok((await reportPayment({}, form)).message, "Accepted stay can report payment after expiry, even if limit was lowered");
   assert.equal(booking.holdExpiresAt, deadline);
 }
+
+// The admin payment report is read-only and separates unverified claims from history.
+const { paymentSummary, recordedPaymentAmount } = require("../lib/platform/rules.ts");
+assert.deepEqual(paymentSummary([]), { reportedCount: 0, reportedAmount: 0, historicalVerifiedAmount: 0, historicalRefundedAmount: 0 });
+const reportRows = Object.freeze([
+  { id: "reported", status: "REPORTED", amount: 20, reference: "reported-reference" },
+  { id: "verified", status: "VERIFIED", amount: 30, reference: "verified-reference" },
+  { id: "refunded", status: "REFUNDED", amount: 40, reference: "refund-reference" },
+  { id: "rejected", status: "REJECTED", amount: 50, reference: "rejected-reference" },
+].map(row => Object.freeze({
+  ...row, method: "TRANSFER", payerName: "", createdAt: new Date("2026-01-01T12:00:00Z"), reviewNote: "Historical note", submissionId: "booking-a",
+  submission: { id: "booking-a", status: "ACCEPTED", acceptedRevision: 1, acceptedDepositPolicySnapshot: { nonRefundable: true, nonRefundableAmount: 20 }, customer: { firstName: "Report", lastName: "Test" } },
+})));
+assert.deepEqual(paymentSummary(reportRows), { reportedCount: 1, reportedAmount: 20, historicalVerifiedAmount: 30, historicalRefundedAmount: 40 });
+assert.equal(recordedPaymentAmount({ payments: reportRows }), 50, "Refunded and rejected entries do not count as reported deposits");
+assert.equal(paymentSummary([{ status: "REPORTED", amount: 0.1 }, { status: "REPORTED", amount: 0.2 }]).reportedAmount, 0.3);
+require.extensions[".tsx"] = (module, filename) => module._compile(ts.transpileModule(readFileSync(filename, "utf8"), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
+}).outputText, filename);
+const React = require("react");
+const { renderToStaticMarkup } = require("react-dom/server");
+let adminAllowed = true, reportReads = 0;
+stubs.set(resolve(root, "lib/platform/auth.ts"), { requirePlatformAdmin: async () => {
+  if (!adminAllowed) throw new Error("Unauthorized");
+  return { email: "admin@example.test" };
+} });
+stubs.set(resolve(root, "lib/db.ts"), { prisma: { payment: { findMany: async () => { reportReads++; return reportRows; } } } });
+stubs.set(resolve(root, "app/admin/admin-ui.tsx"), {
+  AdminShell: ({ title, subtitle, children }) => React.createElement("section", null, title, subtitle, children),
+  Stat: ({ label, value }) => React.createElement("p", null, label, " ", value),
+  money: amount => `$${Number(amount).toFixed(2)}`,
+});
+const PaymentsPage = require("../app/admin/payments/page.tsx").default;
+const reportHtml = renderToStaticMarkup(await PaymentsPage());
+assert.match(reportHtml, /All payments and refunds are handled offline/);
+assert.match(reportHtml, /Reported amount · unverified[^<]*\$20.00/);
+assert.match(reportHtml, /Historical verified amount[^<]*\$30.00/);
+assert.match(reportHtml, /Historical refunded amount[^<]*\$40.00/);
+assert.match(reportHtml, /Historical note/);
+assert.match(reportHtml, /refund-reference/);
+assert.doesNotMatch(reportHtml, /Record refund|Verify [Dd]eposit|<form|<input|<button/, "The payment report exposes no financial mutation controls");
+adminAllowed = false;
+await assert.rejects(PaymentsPage(), /Unauthorized/);
+assert.equal(reportReads, 1, "An unauthorized viewer cannot read payment records");
+console.log("PASS read-only admin report: distinct notification/history totals, cent rounding, retained notes/references, no payment/refund controls and admin authorization.");

@@ -95,7 +95,7 @@ export default async function AdminPage() {
           href="/admin/payments"
           title="Payments"
           meta="Payment notifications"
-          description="View customer transfer notifications and record completed refunds."
+          description="View payment notifications and historical payment reports. All transfers and refunds are handled offline."
         />
         <ModuleCard
           href="/admin/marketing"

@@ -122,7 +122,7 @@ export default async function BookingDetail({
                 <dd>${depositDue(stay.quotedTotal).toFixed(2)}</dd>
               </div>
               <div>
-                <dt>Verified payments</dt>
+                <dt>Historical verified payments</dt>
                 <dd>${verifiedAmount(booking).toFixed(2)}</dd>
               </div>
               <div>

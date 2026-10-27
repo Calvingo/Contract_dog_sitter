@@ -108,25 +108,3 @@ export async function saveDailyCapacity(
     };
   }
 }
-
-export async function reviewPayment(_state: ActionState, form: FormData): Promise<ActionState> {
-  const admin = await requirePlatformAdmin();
-  if (text(form, "status") !== "REFUNDED" || form.get("checked") !== "on") return {error: "Confirm the actual refund in your payment app."};
-  const note = text(form, "note").slice(0,1000);
-  const amount = Number(text(form, "amount"));
-  if (!note || !Number.isFinite(amount) || amount <= 0 || Math.abs(Math.round(amount*100) - amount*100) > 0.000001) return {error: "Enter a refund amount and reference."};
-  try {
-    await prisma.$transaction(async tx => {
-      await lockCapacity(tx);
-      const payment = await tx.payment.findUniqueOrThrow({where:{id:text(form,"id")}, include:{submission:true}});
-      if (!["VERIFIED", "REPORTED"].includes(payment.status)) throw new Error("Refund already recorded.");
-      const policy = (payment.submission.acceptedRevision !== null ? payment.submission.acceptedDepositPolicySnapshot : payment.submission.depositPolicySnapshot) as {nonRefundableAmount?: number} | null;
-      const refunded = await tx.payment.aggregate({where:{submissionId:payment.submissionId}, _sum:{refundedAmount:true}});
-      const recorded = await tx.payment.aggregate({where:{submissionId:payment.submissionId, status:{in:["VERIFIED","REPORTED","REFUNDED"]}},_sum:{amount:true}});
-      const maximum = Math.max(0, Number(recorded._sum.amount ?? 0) - Number(refunded._sum.refundedAmount ?? 0) - (policy?.nonRefundableAmount ?? 0));
-      if (amount > maximum || amount > Number(payment.amount)) throw new Error("Refund exceeds the refundable recorded amount; the holiday deposit must be retained.");
-      await tx.payment.update({where:{id:payment.id},data:{status:"REFUNDED",refundedAmount:amount,reviewNote:note,reviewedBy:admin.email,reviewedAt:new Date()}});
-    });
-    refresh(); return {message:"Actual refund recorded. No money was transferred by this website."};
-  } catch(error) {return {error:error instanceof Error ? error.message : "Unable to record refund."};}
-}
