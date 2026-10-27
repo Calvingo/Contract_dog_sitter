@@ -51,7 +51,7 @@ assert.equal(
 );
 const booking = {
   id: "sample",
-  status: "PENDING",
+  status: "ACCEPTED",
   dropoffAt: new Date("2027-01-01T10:00:00Z"),
   pickupAt: new Date("2027-01-03T10:00:00Z"),
   holdExpiresAt: new Date("2099-01-01"),
@@ -89,47 +89,18 @@ assert.equal(
 );
 assert.equal(
   rules.reservesCapacity({ ...booking, holdExpiresAt: new Date(0) }),
-  false,
-);
-assert.equal(rules.reservesCapacity({ ...booking, holdExpiresAt: null }), true);
-assert.equal(
-  rules.reservesCapacity({
-    ...booking,
-    holdExpiresAt: new Date(0),
-    payments: [{ status: "REPORTED", amount: 20 }],
-  }),
-  false,
-);
-assert.equal(
-  rules.reservesCapacity({
-    ...booking,
-    holdExpiresAt: new Date(0),
-    payments: [{ status: "VERIFIED", amount: 20 }],
-  }),
   true,
 );
-assert.equal(
-  rules.reservesCapacity({
-    ...booking,
-    holdExpiresAt: new Date(0),
-    payments: [{ status: "REFUNDED", amount: 20 }],
-  }),
-  false,
-);
-assert.equal(
-  rules.reservesCapacity({
-    ...booking,
-    holdExpiresAt: new Date(0),
-    payments: [{ status: "VERIFIED", amount: 19.99 }],
-  }),
-  false,
-);
-assert.equal(
-  rules.bookingLabel({ ...booking, status: "ACCEPTED", holdExpiresAt: null }),
-  "Confirmed — existing booking",
-);
+assert.equal(rules.reservesCapacity({ ...booking, holdExpiresAt: null }), true);
+for (const status of ["REPORTED", "VERIFIED", "REJECTED", "REFUNDED"]) {
+  assert.equal(rules.reservesCapacity({...booking, holdExpiresAt:new Date(0),payments:[{status,amount:20}]}),true);
+}
+for (const status of ["PENDING","NEEDS_REVIEW","MEET_GREET_REQUESTED","REJECTED","CANCELLED"]) {
+  assert.equal(rules.reservesCapacity({...booking,status}),false);
+}
+assert.equal(rules.bookingLabel(booking), "Confirmed");
 console.log(
-  "Passed: date validation, UTC wall-clock parsing, multi-dog counts, checkout rules, legacy holds, expiry, partial payments and refunds.",
+  "Passed: date validation, UTC wall-clock parsing, multi-dog accepted occupancy, checkout rules, pending exclusion, expiry and payment independence.",
 );
 
 if (!process.env.TEST_DATABASE_URL) process.exit(0);
@@ -205,32 +176,22 @@ try {
     dropoffTime: "10:00",
     pickupDate: "2027-04-07",
     pickupTime: "10:00",
-    signature: "test-only",
+    signature: "data:image/png;base64,dGVzdA==",
     agreed: true,
     ...Object.fromEntries(prescreenQuestions.map((q) => [q.name, "no"])),
     ...Object.fromEntries(secondPrescreenQuestions.map((q) => [q.name, "no"])),
     ...more,
   });
-  const raced = await Promise.allSettled([
-    createSubmissionRecord(values(a), a.id),
-    createSubmissionRecord(values(b), b.id),
-  ]);
-  assert.equal(
-    raced.filter((r) => r.status === "fulfilled").length,
-    1,
-    "Only one simultaneous request can claim the last spot",
-  );
-  assert.match(
-    raced.find((r) => r.status === "rejected").reason.message,
-    /not enough space/,
-  );
-  const winner = raced.find((r) => r.status === "fulfilled").value;
-  assert.equal(
-    (await availability("2027-04-05", "2027-04-07")).days.every(
-      (d) => d.remaining === 0,
-    ),
-    true,
-  );
+  const requests = await Promise.all([createSubmissionRecord(values(a),a.id),createSubmissionRecord(values(b),b.id)]);
+  assert.equal((await availability("2027-04-05","2027-04-07")).days[0].occupied,0);
+  const accept = record => prisma.$transaction(async tx => {
+    const snapshot = await prepareStatusChange(tx,record.submission.id,"ACCEPTED",record.submission.revision,"PENDING");
+    await tx.submission.update({where:{id:record.submission.id},data:{status:"ACCEPTED",...snapshot}});
+  });
+  const raced = await Promise.allSettled(requests.map(accept));
+  assert.equal(raced.filter(r => r.status === "fulfilled").length,1,"Only one concurrent acceptance claims the last spot");
+  const winner = requests[raced.findIndex(r => r.status === "fulfilled")];
+  assert.ok((await availability("2027-04-05","2027-04-07")).days.every(d=>d.occupied===1));
   const owner = winner.customer.id === a.id ? a : b;
   await updateSubmissionRecord({
     submissionId: winner.submission.id,
@@ -266,32 +227,16 @@ try {
   });
   assert.equal(
     (await availability("2027-04-05", "2027-04-05")).days[0].remaining,
-    1,
+    0,
   );
   const other = owner.id === a.id ? b : a;
-  const replacement = await createSubmissionRecord(values(other), other.id);
-  await assert.rejects(
-    prisma.$transaction(async (tx) => {
-      const hold = await prepareStatusChange(
-        tx,
-        winner.submission.id,
-        "ACCEPTED",
-      );
-      await tx.submission.update({
-        where: { id: winner.submission.id },
-        data: { status: "ACCEPTED", ...hold },
-      });
-    }),
-    /not enough space/,
-  );
-  await prisma.submission.update({
-    where: { id: replacement.submission.id },
-    data: { status: "CANCELLED" },
+  await assert.rejects(createSubmissionRecord(values(other),other.id),/not enough space/);
+  await prisma.$transaction(async tx => {
+    const snapshot = await prepareStatusChange(tx,winner.submission.id,"ACCEPTED");
+    await tx.submission.update({where:{id:winner.submission.id},data:{status:"ACCEPTED",...snapshot}});
   });
-  assert.equal(
-    (await availability("2027-04-05", "2027-04-05")).days[0].remaining,
-    1,
-  );
+  await prisma.submission.update({where:{id:winner.submission.id},data:{status:"CANCELLED"}});
+  assert.equal((await availability("2027-04-05","2027-04-05")).days[0].remaining,1);
   await prisma.platformSettings.update({
     where: { id: "default" },
     data: { defaultCapacity: 2 },
@@ -308,6 +253,7 @@ try {
     }),
     a.id,
   );
+  await accept(pair);
   assert.equal(
     (await availability("2027-04-10", "2027-04-10")).days[0].occupied,
     2,
@@ -352,7 +298,7 @@ try {
     );
   });
   console.log(
-    "Passed: real Postgres concurrent booking, all-days capacity, self-edit exclusion, owner isolation, expiry/rebooking, late approval rejection, closure, multi-dog capacity, oversubscription warnings and audience exclusions.",
+    "Passed: real Postgres concurrent acceptance, all-days capacity, accepted edit retention, owner isolation, expiry persistence, cancellation, closure, multi-dog capacity, oversubscription warnings and audience exclusions.",
   );
 
   if (process.env.TEST_BASE_URL) {

@@ -1,6 +1,7 @@
 import { marketingAudienceWhere } from "@/lib/marketing/audience";
 import { prisma } from "@/lib/db";
 import { dateRange, reservesCapacity } from "./rules";
+import { acceptedOccupancyWhere } from "./capacity";
 export type CustomerFilters = {
   q?: string;
   channel?: string;
@@ -48,10 +49,7 @@ export async function customerAudience(filters: CustomerFilters) {
       submissions: {
         ...(filters.start && filters.end
           ? {
-              where: {
-                dropoffAt: { lte: new Date(`${filters.end}T23:59:59.999Z`) },
-                pickupAt: { gte: new Date(`${filters.start}T00:00:00Z`) },
-              },
+              where: acceptedOccupancyWhere(filters.start, filters.end),
             }
           : {}),
         include: { submissionPets: true, payments: true },

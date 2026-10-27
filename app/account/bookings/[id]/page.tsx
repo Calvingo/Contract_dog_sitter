@@ -1,3 +1,5 @@
+import { HOLIDAY_BOOKING_POLICY, type DepositPolicy } from "@/lib/federal-holidays";
+import { acceptedBookingDetails } from "@/lib/platform/accepted-booking";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { CustomerShell } from "@/components/PlatformShell";
@@ -11,6 +13,7 @@ import {
   depositDue,
   reservesCapacity,
   verifiedAmount,
+  recordedPaymentAmount,
 } from "@/lib/platform/rules";
 import { editBooking, reportPayment, requestCancellation } from "../../actions";
 export default async function BookingDetail({
@@ -27,16 +30,21 @@ export default async function BookingDetail({
     where: { id, customerId: customer.id },
     include: {
       pet: true,
+      revisions: true,
       submissionPets: { orderBy: { position: "asc" } },
       payments: { orderBy: { createdAt: "desc" } },
     },
   });
   if (!booking) notFound();
   const settings = await getSettings();
-  const active = !["CANCELLED", "REJECTED"].includes(booking.status);
+  const stay = acceptedBookingDetails(booking);
+  const hasPendingChanges = booking.acceptedRevision !== null && booking.acceptedRevision !== booking.revision;
+  const policy = (booking.acceptedRevision !== null
+    ? booking.acceptedDepositPolicySnapshot : booking.depositPolicySnapshot) as DepositPolicy | null;
+  const active = booking.status !== "CANCELLED" && (booking.status !== "REJECTED" || reservesCapacity(booking));
   const remaining = Math.max(
     0,
-    depositDue(Number(booking.quotedTotal)) - verifiedAmount(booking),
+    depositDue(stay.quotedTotal) - recordedPaymentAmount(booking),
   );
   const legacyPayment =
     booking.holdExpiresAt === null && booking.payments.length === 0;
@@ -48,13 +56,6 @@ export default async function BookingDetail({
     !booking.payments.some((p) => p.status === "REPORTED");
   const zelle = Boolean(settings.zelleName && settings.zelleRecipient),
     venmo = getVenmoDetails(settings);
-  const dogNames =
-    booking.submissionPets
-      .map((p) => {
-        const snapshot = p.petSnapshot as { name?: string };
-        return snapshot.name || "Dog";
-      })
-      .join(" & ") || booking.pet.name;
   const format = (date: Date) =>
     date.toLocaleString("en-US", {
       timeZone: "UTC",
@@ -64,7 +65,7 @@ export default async function BookingDetail({
   return (
     <CustomerShell
       name={customer.firstName}
-      title={`${dogNames}’s stay`}
+      title={`${stay.dogNames}’s stay`}
       subtitle={`Booking reference: ${booking.id}`}
     >
       <Link href="/account" className="text-link">
@@ -89,13 +90,17 @@ export default async function BookingDetail({
         </div>
         <div className="panel">
           <span>Drop-off · Pacific local time</span>
-          <h3>{format(booking.dropoffAt)}</h3>
+          <h3>{format(stay.dropoffAt)}</h3>
         </div>
         <div className="panel">
           <span>Pick-up · Pacific local time</span>
-          <h3>{format(booking.pickupAt)}</h3>
+          <h3>{format(stay.pickupAt)}</h3>
         </div>
       </section>
+      {hasPendingChanges && <p className="notice">
+        The dates and deposit shown are for your confirmed stay. Proposed dates: {format(booking.dropoffAt)} → {format(booking.pickupAt)}.
+        {booking.status === "REJECTED" ? " Your proposed changes were declined; the original stay remains confirmed." : " Your changes are awaiting review."}
+      </p>}
       <div className="detail-grid">
         <section className="panel">
           <p className="eyebrow">PAYMENT</p>
@@ -110,33 +115,23 @@ export default async function BookingDetail({
             <dl className="summary-list">
               <div>
                 <dt>Estimated stay total</dt>
-                <dd>${Number(booking.quotedTotal).toFixed(2)}</dd>
+                <dd>${stay.quotedTotal.toFixed(2)}</dd>
               </div>
               <div>
                 <dt>20% deposit</dt>
-                <dd>${depositDue(Number(booking.quotedTotal)).toFixed(2)}</dd>
+                <dd>${depositDue(stay.quotedTotal).toFixed(2)}</dd>
               </div>
               <div>
-                <dt>Verified payments</dt>
+                <dt>Historical verified payments</dt>
                 <dd>${verifiedAmount(booking).toFixed(2)}</dd>
               </div>
               <div>
-                <dt>Deposit remaining</dt>
+                <dt>Deposit not yet recorded</dt>
                 <dd>${remaining.toFixed(2)}</dd>
               </div>
             </dl>
           )}
-          {booking.holdExpiresAt && active && remaining > 0 && (
-            <p className="notice">
-              Space is held until{" "}
-              {booking.holdExpiresAt.toLocaleString("en-US", {
-                timeZone: "America/Los_Angeles",
-                dateStyle: "medium",
-                timeStyle: "short",
-              })}{" "}
-              Pacific time. Contact us if you need more time.
-            </p>
-          )}
+          {policy && <p className="notice">{HOLIDAY_BOOKING_POLICY} Non-refundable deposit: ${policy.nonRefundableAmount.toFixed(2)}. {policy.holidays.map(h => `${h.name} (${h.date})`).join(", ")}</p>}
           {canPay ? (
             <>
               {zelle || venmo ? (
@@ -185,7 +180,7 @@ export default async function BookingDetail({
                     <input type="hidden" name="id" value={booking.id} />
                     <p className="small">
                       After transferring, use the button below to let us know.
-                      We check the actual transfer before confirming your deposit.
+                      This records a payment notification, not proof of funds received.
                     </p>
                   </ActionForm>
                 </>
@@ -205,10 +200,10 @@ export default async function BookingDetail({
                   : booking.status !== "ACCEPTED"
                     ? "We’ll review your request before asking you to pay."
                     : remaining === 0
-                      ? "Your deposit has been verified."
+                      ? "Your deposit amount has been recorded. Payment notifications do not prove receipt."
                       : booking.payments.some((p) => p.status === "REPORTED")
-                        ? "We have your payment report and are checking the transfer."
-                        : "The hold has expired. Please contact us before sending money."}
+                        ? "Your payment notification is recorded. It does not prove receipt."
+                        : "Contact us with any payment questions."}
             </p>
           )}
           {booking.payments.length > 0 && (

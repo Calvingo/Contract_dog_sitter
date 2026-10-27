@@ -157,7 +157,7 @@ const bookingValues = {
   dropoffTime: "10:00",
   pickupTime: "10:00",
   agreed: true,
-  signature: "test-only-original-signature",
+  signature: "data:image/png;base64,b3JpZ2luYWw=",
 };
 
 function jsonRequest(path, method, body) {
@@ -455,7 +455,7 @@ try {
     secondPrescreenNotes: "Latest verified second dog notes",
     dropoffDate: "2093-04-04",
     pickupDate: "2093-04-05",
-    signature: "test-only-new-booking-signature",
+    signature: "data:image/png;base64,bmV3",
   };
   const repeated = await createSubmissionRecord(repeatValues, customerId);
   assert.equal(repeated.pet.id, originalFirst.id);

@@ -3,7 +3,7 @@ import { DEPOSIT_PERCENT } from "../pricing";
 // Existing submission timestamps use UTC wall-clock values in production.
 export const DEFAULT_SETTINGS = {
   defaultCapacity: 17,
-  holdHours: 24,
+  holdHours: 72,
   includePickupDay: true,
   zelleRecipient: "",
   zelleName: "",
@@ -49,17 +49,39 @@ export function depositDue(total: number): number {
   return Math.round(total * DEPOSIT_PERCENT) / 100;
 }
 export type OccupancyBooking = {
+  acceptedDropoffAt?: Date | null;
+  acceptedPickupAt?: Date | null;
+  acceptedDogs?: number | null;
   id: string;
   status: string;
   dropoffAt: Date;
   pickupAt: Date;
-  holdExpiresAt: Date | null;
-  quotedTotal: { toString(): string } | number;
   submissionPets: unknown[];
-  payments: { status: string; amount: { toString(): string } | number }[];
 };
+type PaymentRecord = { status: string; amount: { toString(): string } | number };
+
+// These are reported/historical records, not a reconciliation of offline funds.
+export function paymentSummary(payments: PaymentRecord[]) {
+  const totalFor = (status: string) => Math.round(payments
+    .filter(payment => payment.status === status)
+    .reduce((sum, payment) => sum + Number(payment.amount), 0) * 100) / 100;
+  return {
+    reportedCount: payments.filter(payment => payment.status === "REPORTED").length,
+    reportedAmount: totalFor("REPORTED"),
+    historicalVerifiedAmount: totalFor("VERIFIED"),
+    historicalRefundedAmount: totalFor("REFUNDED"),
+  };
+}
+
+// A notification is a customer's claim, never proof of receipt.
+export function recordedPaymentAmount(booking: { payments: PaymentRecord[] }): number {
+  return Math.round(booking.payments
+    .filter(payment => ["REPORTED", "VERIFIED"].includes(payment.status))
+    .reduce((sum, payment) => sum + Number(payment.amount), 0) * 100) / 100;
+}
+
 export function verifiedAmount(
-  booking: Pick<OccupancyBooking, "payments">,
+  booking: {payments: PaymentRecord[]},
 ): number {
   return (
     Math.round(
@@ -73,31 +95,37 @@ export function reservesCapacity(
   booking: OccupancyBooking,
   now = new Date(),
 ): boolean {
-  if (["CANCELLED", "REJECTED"].includes(booking.status)) return false;
-  // A null deadline preserves legacy reservations until an admin reviews them.
-  return (
-    !booking.holdExpiresAt ||
-    booking.holdExpiresAt > now ||
-    (verifiedAmount(booking) > 0 &&
-      verifiedAmount(booking) >= depositDue(Number(booking.quotedTotal)))
-  );
+  void now;
+  if (booking.status === "CANCELLED") return false;
+  return Boolean(booking.acceptedDropoffAt && booking.acceptedPickupAt) || booking.status === "ACCEPTED";
 }
+export function acceptedStay(booking: OccupancyBooking) {
+  return {
+    dropoffAt: booking.acceptedDropoffAt ?? booking.dropoffAt,
+    pickupAt: booking.acceptedPickupAt ?? booking.pickupAt,
+    dogs: booking.acceptedDogs ?? Math.max(1, booking.submissionPets.length),
+  };
+}
+
 export function occupancyByDay(
   bookings: OccupancyBooking[],
   includePickupDay: boolean,
   now = new Date(),
 ): Map<string, number> {
   const result = new Map<string, number>();
+  const seen = new Set<string>();
   for (const booking of bookings) {
+    if (seen.has(booking.id)) continue;
+    seen.add(booking.id);
     if (!reservesCapacity(booking, now)) continue;
     for (const date of stayDates(
-      booking.dropoffAt,
-      booking.pickupAt,
+      acceptedStay(booking).dropoffAt,
+      acceptedStay(booking).pickupAt,
       includePickupDay,
     )) {
       result.set(
         date,
-        (result.get(date) ?? 0) + Math.max(1, booking.submissionPets.length),
+        (result.get(date) ?? 0) + acceptedStay(booking).dogs,
       );
     }
   }
@@ -105,17 +133,10 @@ export function occupancyByDay(
 }
 export function bookingLabel(booking: OccupancyBooking): string {
   if (booking.status === "CANCELLED") return "Cancelled";
+  if (booking.status === "ACCEPTED") return "Confirmed";
+  if (booking.status === "REJECTED" && reservesCapacity(booking)) return "Confirmed stay — proposed changes declined";
+  if (reservesCapacity(booking)) return "Confirmed stay — changes awaiting review";
   if (booking.status === "REJECTED") return "Not approved";
-  if (!reservesCapacity(booking)) return "Hold expired — contact us";
-  if (booking.status === "ACCEPTED") {
-    if (!booking.holdExpiresAt && booking.payments.length === 0)
-      return "Confirmed — existing booking";
-    if (verifiedAmount(booking) >= depositDue(Number(booking.quotedTotal)))
-      return "Confirmed";
-    if (booking.payments.some((p) => p.status === "REPORTED"))
-      return "Payment under review";
-    return "Approved — deposit due";
-  }
   return booking.status === "MEET_GREET_REQUESTED"
     ? "Meet & greet requested"
     : "Awaiting review";

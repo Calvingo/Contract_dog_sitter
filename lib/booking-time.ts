@@ -7,8 +7,10 @@ export type BookingTimeOption = {
   label: string;
 };
 
-export function isPickupDropoffTimeAllowed(time: string): boolean {
+export function isPickupDropoffTimeAllowed(time: string, date?: string): boolean {
   return (
+    /^([01]\d|2[0-3]):[0-5]\d$/.test(time) &&
+    !(date && new Date(`${date}T12:00:00Z`).getUTCDay() === 0 && time >= "15:00" && time < "18:00") &&
     time >= EARLIEST_PICKUP_DROPOFF_TIME &&
     time <= LATEST_PICKUP_DROPOFF_TIME
   );
@@ -32,7 +34,7 @@ function formatTimeLabel(value: string): string {
   return `${hours12}:${String(minutes).padStart(2, "0")} ${period}`;
 }
 
-export function getPickupDropoffTimeOptions(): BookingTimeOption[] {
+export function getPickupDropoffTimeOptions(date?: string): BookingTimeOption[] {
   const start = parseTimeToMinutes(EARLIEST_PICKUP_DROPOFF_TIME);
   const end = parseTimeToMinutes(LATEST_PICKUP_DROPOFF_TIME);
   const options: BookingTimeOption[] = [];
@@ -43,7 +45,7 @@ export function getPickupDropoffTimeOptions(): BookingTimeOption[] {
     cursor += PICKUP_DROPOFF_TIME_STEP_MINUTES
   ) {
     const value = formatMinutesAsTimeValue(cursor);
-    options.push({ value, label: formatTimeLabel(value) });
+    if (isPickupDropoffTimeAllowed(value, date)) options.push({ value, label: formatTimeLabel(value) });
   }
 
   return options;

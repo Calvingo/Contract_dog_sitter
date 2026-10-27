@@ -1,3 +1,6 @@
+import { prisma } from "./db";
+import { HOLIDAY_BOOKING_POLICY } from "./federal-holidays";
+import { reservesCapacity } from "./platform/rules";
 import { createCustomerEmailUrl } from "./auth/customer-email-link";
 import { getSettings } from "./platform/capacity";
 import { DEPOSIT_PERCENT } from "./pricing";
@@ -11,6 +14,9 @@ export type DecisionEmailOptions = {
   meetGreetAt?: string;
   editUrl?: string;
   accountUrl?: string;
+  holidayPolicy?: string;
+  policySummary?: string;
+  acceptedStayRetained?: boolean;
   zelleName?: string;
   zelleRecipient?: string;
 };
@@ -68,15 +74,17 @@ export function buildDecisionEmail(
           <p>Great news! Your boarding request for <strong>${pet}</strong> has been <strong>accepted</strong> by ${BRAND_NAME}.</p>
           <div style="border:2px solid #b91c1c;background:#fff1f2;padding:20px;margin:24px 0;">
             <p style="font-size:26px;font-weight:800;color:#b91c1c;margin:0 0 12px;">Payment required — please pay your ${DEPOSIT_PERCENT}% deposit</p>
-            <p style="font-size:18px;color:#b91c1c;font-weight:700;">Your booking is not yet confirmed. It is confirmed only after we verify the required deposit.</p>
+            <p style="font-size:18px;color:#b91c1c;font-weight:700;">Your booking is confirmed by our acceptance. Please send the required deposit; payment notifications do not prove receipt.</p>
             ${
               options.zelleName && options.zelleRecipient
                 ? `<p><strong>Pay with Zelle</strong><br/>Recipient name: ${escapeHtml(options.zelleName)}<br/>Email / phone: <strong>${escapeHtml(options.zelleRecipient)}</strong></p><p>Please include only your dog’s name in the transfer note: <strong>${pet}</strong>.</p>`
                 : `<p>Please contact Qi (Christine) Zhang using the details below for Zelle payment information.</p>`
             }
           </div>
-          <p><a href="${escapeHtml(options.accountUrl!)}">View your booking and payment instructions</a> to see your hold deadline. Your booking is confirmed once the required deposit is verified. If you have already paid, check your payment status in your account.</p>
+          <p><a href="${escapeHtml(options.accountUrl!)}">View your booking and payment instructions</a> for your confirmed stay. Your booking remains confirmed independently of payment status. If you have already paid, check your payment status in your account.</p>
           <p style="color:#dc2626;font-weight:700;"><strong>Deposit Cancellation Policy: The deposit is refundable only if the booking is canceled more than 7 days before the scheduled start date. Cancellations within 7 days of the booking are non-refundable.</strong></p>
+          <p>${options.holidayPolicy ?? HOLIDAY_BOOKING_POLICY}</p>
+          <p>${escapeHtml(options.policySummary || "")}</p>
           ${editBlock}
           ${meetGreetInfoHtml()}
           ${contactsHtml()}
@@ -93,7 +101,9 @@ export function buildDecisionEmail(
         <div style="font-family:Arial,sans-serif;line-height:1.6;color:#333;">
           <h2>Booking Update</h2>
           <p>Dear ${name},</p>
-          <p>Thank you for your interest in ${BRAND_NAME}. After reviewing your submission for <strong>${pet}</strong>, we are unable to accept this booking at this time.</p>
+          <p>${options.acceptedStayRetained
+            ? `We are unable to accept the proposed changes for <strong>${pet}</strong>. Your previously accepted stay remains confirmed with its original dates and dog count. Please open your booking for the confirmed details.`
+            : `Thank you for your interest in ${BRAND_NAME}. After reviewing your submission for <strong>${pet}</strong>, we are unable to accept this booking at this time.`}</p>
           <p>If you have questions or would like to discuss alternatives, please contact us:</p>
           ${contactsHtml()}
           <p>Thank you for your understanding,<br/>${BRAND_NAME}</p>
@@ -136,8 +146,13 @@ export async function sendDecisionEmail(
 ) {
   const fromUser = getEnv("GMAIL_USER");
   const settings = action === "accept" ? await getSettings() : null;
+  const booking = payload.submissionId ? await prisma.submission.findUnique({where:{id:payload.submissionId}, include:{submissionPets:true}}) : null;
+  const policy = (booking?.acceptedRevision != null ? booking.acceptedDepositPolicySnapshot : booking?.depositPolicySnapshot) as {deposit?:number;nonRefundableAmount?:number;holidays?:{name:string;date:string}[]} | null;
   const links = {
     ...options,
+    acceptedStayRetained: booking ? reservesCapacity(booking) : false,
+    holidayPolicy: booking && booking.agreementVersion !== "2026-10-federal-v1" ? "" : HOLIDAY_BOOKING_POLICY,
+    policySummary: policy ? `Deposit: $${Number(policy.deposit ?? 0).toFixed(2)}. Non-refundable deposit: $${Number(policy.nonRefundableAmount ?? 0).toFixed(2)}. ${(policy.holidays || []).map(h=>`${h.name} (${h.date})`).join(", ")}` : "",
     zelleName: settings?.zelleName,
     zelleRecipient: settings?.zelleRecipient,
     accountUrl:
@@ -153,7 +168,10 @@ export async function sendDecisionEmail(
       ? await createCustomerEmailUrl(payload.email, options.editUrl)
       : undefined,
   };
-  const { subject, html } = buildDecisionEmail(payload, action, links);
+  const built = buildDecisionEmail(payload, action, links);
+  const subject = built.subject;
+  const cancelUrl = payload.submissionId ? await createCustomerEmailUrl(payload.email, `/account/bookings/${payload.submissionId}`) : null;
+  const html = built.html + (cancelUrl ? `<p><a href="${escapeHtml(cancelUrl)}">Cancel Booking</a> — open your booking and confirm a cancellation request. Your booking remains active until reviewed.</p>` : "");
 
   await sendMail({
     from: `"${BRAND_NAME}" <${fromUser}>`,

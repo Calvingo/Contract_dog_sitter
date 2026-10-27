@@ -2,7 +2,7 @@ import Link from "next/link";
 import { CustomerShell } from "@/components/PlatformShell";
 import { requireCustomer } from "@/lib/platform/auth";
 import { prisma } from "@/lib/db";
-import { bookingLabel, dateKey, reservesCapacity } from "@/lib/platform/rules";
+import { acceptedStay, bookingLabel, dateKey, reservesCapacity, todayKey } from "@/lib/platform/rules";
 import { submissionDogNames } from "@/lib/submission-pets";
 export default async function AccountPage() {
   const customer = await requireCustomer();
@@ -22,7 +22,7 @@ export default async function AccountPage() {
     prisma.pet.count({ where: { customerId: customer.id } }),
   ]);
   const upcoming = bookings.filter(
-    (b) => b.pickupAt > new Date() && reservesCapacity(b),
+    (b) => dateKey(acceptedStay(b).pickupAt) >= todayKey() && reservesCapacity(b),
   );
   return (
     <CustomerShell
@@ -65,7 +65,7 @@ export default async function AccountPage() {
                 {submissionDogNames(booking.submissionPets, booking.pet.name)}
               </h3>
               <p>
-                {dateKey(booking.dropoffAt)} → {dateKey(booking.pickupAt)}
+                {dateKey(acceptedStay(booking).dropoffAt)} → {dateKey(acceptedStay(booking).pickupAt)}
               </p>
               <div className="card-bottom">
                 <span>

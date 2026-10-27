@@ -1,3 +1,4 @@
+import { depositPolicy, HOLIDAY_BOOKING_POLICY } from "./federal-holidays";
 import { EmailStatus, EmailType } from "@prisma/client";
 import { createCustomerEmailUrl } from "./auth/customer-email-link";
 import type { FormValues } from "./form-config";
@@ -350,7 +351,8 @@ function buildCustomerEmailHtml(
   data: FormValues,
   quote: SubmissionQuote,
   editUrl?: string,
-  isUpdate = false
+  isUpdate = false,
+  agreementVersion = "2026-10-federal-v1"
 ): string {
   const ownerName = `${data.firstName} ${data.lastName}`.trim();
   const editBlock = editUrl
@@ -368,6 +370,8 @@ function buildCustomerEmailHtml(
       <p><strong>Please find your signed submission attached as a PDF.</strong> It includes all information you provided, the price estimate ($${quote.totalPrice.toFixed(2)}), the required deposit ($${quote.depositAmount.toFixed(2)}, which is ${DEPOSIT_PERCENT}% of the total), and your signature. Please save it for your records.</p>
       <p><strong>Remaining balance (${100 - DEPOSIT_PERCENT}% of total, due at drop-off): $${(quote.totalPrice - quote.depositAmount).toFixed(2)}</strong></p>
       ${formatPaymentPolicy()}
+      <p>${agreementVersion === "2026-10-federal-v1" ? HOLIDAY_BOOKING_POLICY : ""}</p>
+      <p>${agreementVersion === "2026-10-federal-v1" && depositPolicy(data.dropoffDate,data.pickupDate,quote.totalPrice).nonRefundable ? `Non-refundable deposit: $${quote.depositAmount.toFixed(2)}. ${depositPolicy(data.dropoffDate,data.pickupDate,quote.totalPrice).holidays.map(h => `${h.name} (${h.date})`).join(", ")}` : ""}</p>
       <p>${isUpdate ? "We will review the updated request and follow up soon." : "We will review your request and follow up soon."}</p>
       ${editBlock}
       ${formatContactsSection()}
@@ -423,11 +427,12 @@ export async function sendSubmissionEmails(
     previousStatus?: string;
     quote?: SubmissionQuote;
     sendAdminNotification?: boolean;
+    agreementVersion?: string;
   } = {}
 ) {
   const quote = resolveQuote(data, options.quote);
 
-  const pdfBuffer = await generateSubmissionPdf(data, quote, signatureBuffer);
+  const pdfBuffer = await generateSubmissionPdf(data, quote, signatureBuffer, options.agreementVersion);
   const dogNames = [data.petName, data.hasSecondDog ? data.secondPetName : ""].filter(Boolean).join(" & ");
   const pdfName = pdfFilename(dogNames);
 
@@ -440,6 +445,7 @@ export async function sendSubmissionEmails(
         buildSubmissionEditUrl(await createSubmissionEditToken(submissionId)),
       )
     : undefined;
+  const cancelUrl = submissionId ? await createCustomerEmailUrl(data.email, `/account/bookings/${submissionId}`) : undefined;
   const bookingDates = `${data.dropoffDate} to ${data.pickupDate}`;
   const bookingSummary = `${dogNames} — $${quote.totalPrice.toFixed(2)} — ${bookingDates}`;
 
@@ -455,7 +461,7 @@ export async function sendSubmissionEmails(
       from: fromHeader,
       to: data.email,
       subject: customerSubject,
-      html: buildCustomerEmailHtml(data, quote, editUrl, options.isUpdate),
+      html: buildCustomerEmailHtml(data, quote, editUrl, options.isUpdate, options.agreementVersion) + (cancelUrl ? `<p><a href="${escapeHtml(cancelUrl)}">Cancel Booking</a> — confirm your cancellation request on the booking page.</p>` : ""),
       attachments: [
         {
           filename: pdfName,

@@ -86,10 +86,10 @@ export function validateSubmission(data: FormValues): string | null {
     return "Invalid drop-off or pick-up date/time";
   }
   if (
-    !isPickupDropoffTimeAllowed(data.dropoffTime) ||
-    !isPickupDropoffTimeAllowed(data.pickupTime)
+    !isPickupDropoffTimeAllowed(data.dropoffTime, data.dropoffDate) ||
+    !isPickupDropoffTimeAllowed(data.pickupTime, data.pickupDate)
   ) {
-    return "Drop-offs and pick-ups are available from 8:30 AM to 9:00 PM";
+    return "Drop-offs and pick-ups are available from 8:30 AM to 9:00 PM, except Sundays from 3:00 PM until 6:00 PM";
   }
   if (pickup <= dropoff) {
     return "Pick-up must be after drop-off";
@@ -101,7 +101,7 @@ export function validateSubmission(data: FormValues): string | null {
     return "Unable to calculate price";
   }
 
-  if (!emailPattern.test(data.email)) {
+  if (!emailPattern.test(data.email.trim())) {
     return "Invalid email address";
   }
 

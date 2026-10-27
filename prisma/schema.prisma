@@ -109,6 +109,12 @@ model Submission {
   customerSnapshot        Json
   petSnapshot             Json
   lastEditedAt            DateTime?
+  acceptedDropoffAt       DateTime?
+  acceptedPickupAt        DateTime?
+  acceptedDogs            Int?
+  acceptedRevision        Int?
+  acceptedDepositPolicySnapshot Json?
+  depositPolicySnapshot   Json?
   previouslyAcceptedAt    DateTime?
   createdAt               DateTime              @default(now())
   updatedAt               DateTime              @updatedAt
@@ -133,7 +139,7 @@ model Submission {
 model PlatformSettings {
   id               String   @id @default("default")
   defaultCapacity  Int      @default(17)
-  holdHours        Int      @default(24)
+  holdHours        Int      @default(72)
   includePickupDay Boolean  @default(true)
   zelleRecipient   String   @default("")
   zelleName        String   @default("")
@@ -211,6 +217,8 @@ model SubmissionRevision {
   signatureData    String           @db.Text
   customerSnapshot Json
   petSnapshot      Json
+  agreementVersion String?
+  depositPolicySnapshot Json?
   petsSnapshot     Json?
   dropoffAt        DateTime
   pickupAt         DateTime
@@ -414,4 +422,22 @@ model MarketingImage {
   data Bytes
   mimeType String
   createdAt DateTime @default(now())
+}
+
+model BookingBlocklist {
+  email String @id
+  blocked Boolean @default(true)
+  reason String? @db.Text
+  updatedBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+model BookingBlocklistEvent {
+  id String @id @default(cuid())
+  email String
+  blocked Boolean
+  reason String? @db.Text
+  actorEmail String
+  createdAt DateTime @default(now())
+  @@index([email, createdAt])
 }

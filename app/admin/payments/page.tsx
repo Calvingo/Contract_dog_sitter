@@ -1,112 +1,65 @@
 import Link from "next/link";
 import { requirePlatformAdmin } from "@/lib/platform/auth";
 import { prisma } from "@/lib/db";
-import { ActionForm } from "@/components/ActionForm";
-import { AdminShell, money } from "../admin-ui";
-import { reviewPayment } from "../platform-actions";
+import { paymentSummary } from "@/lib/platform/rules";
+import type { DepositPolicy } from "@/lib/federal-holidays";
+import { AdminShell, Stat, money } from "../admin-ui";
+
 export default async function PaymentsPage() {
   const admin = await requirePlatformAdmin();
   const payments = await prisma.payment.findMany({
     orderBy: { createdAt: "desc" },
     include: { submission: { include: { customer: true } } },
   });
+  const summary = paymentSummary(payments);
   return (
     <AdminShell
       email={admin.email}
-      title="Payments"
-      subtitle="Verify actual Zelle or Venmo transfers, then record the result here."
+      title="Payment reports"
+      subtitle="Payment notifications and historical records. All payments and refunds are handled offline."
     >
       <div className="notice">
-        Refunds must be sent in your payment app first. Recording a refund here
-        does not transfer money. If an expired booking has no capacity, resolve
-        its dates or cancel it before verifying payment.
+        Customer notifications do not confirm receipt. These figures summarize
+        website records and are not a reconciled balance of your payment accounts.
       </div>
+      <section className="metric-grid">
+        <Stat label="Payment notifications" value={String(summary.reportedCount)} />
+        <Stat label="Reported amount · unverified" value={money(summary.reportedAmount)} />
+        <Stat label="Historical verified amount" value={money(summary.historicalVerifiedAmount)} />
+        <Stat label="Historical refunded amount" value={money(summary.historicalRefundedAmount)} />
+      </section>
       <div className="booking-grid">
-        {payments.length ? (
-          payments.map((payment) => (
+        {payments.length ? payments.map((payment) => {
+          const booking = payment.submission;
+          const policy = (booking.acceptedRevision !== null
+            ? booking.acceptedDepositPolicySnapshot : booking.depositPolicySnapshot) as DepositPolicy | null;
+          return (
             <section className="panel" key={payment.id}>
               <span className="pill">{payment.status}</span>
-              <h2>
-                {payment.submission.customer.firstName}{" "}
-                {payment.submission.customer.lastName}
-              </h2>
+              <h2>{booking.customer.firstName} {booking.customer.lastName}</h2>
               <p>
                 {payment.method === "TRANSFER" ? "Transfer" : payment.method} · {money(payment.amount)}
                 {payment.payerName && <> · Payer: {payment.payerName}</>}
               </p>
-              {payment.reference && (
-                <p className="small">Reference: {payment.reference}</p>
-              )}
               <p className="small">
-                Booking status: {payment.submission.status}
+                Recorded: {payment.createdAt.toLocaleString("en-US", { timeZone: "America/Los_Angeles" })}
               </p>
-              <Link
-                className="text-link"
-                href={`/admin/submissions/${payment.submissionId}`}
-              >
+              {payment.reference && <p className="small">Reference: {payment.reference}</p>}
+              {policy?.nonRefundable && <p className="notice">
+                Non-refundable deposit under the signed holiday policy: {money(policy.nonRefundableAmount)}.
+                Any refund of other funds is handled offline.
+              </p>}
+              <p className="small">Booking status: {booking.status}</p>
+              <Link className="text-link" href={`/admin/submissions/${payment.submissionId}`}>
                 Review booking →
               </Link>
-              {["REPORTED", "VERIFIED"].includes(payment.status) ? (
-                <ActionForm action={reviewPayment} label="Save payment review">
-                  <input type="hidden" name="id" value={payment.id} />
-                  <label>
-                    Result
-                    <select name="status" defaultValue="" required>
-                      <option value="" disabled>
-                        Select result
-                      </option>
-                      {payment.status === "REPORTED" ? (
-                        <>
-                          <option value="VERIFIED">
-                            Verified — funds received
-                          </option>
-                          <option value="REJECTED">
-                            Not received / invalid report
-                          </option>
-                        </>
-                      ) : (
-                        <option value="REFUNDED">Refund sent in full</option>
-                      )}
-                    </select>
-                  </label>
-                  {payment.status === "REPORTED" && (
-                    <label>
-                      Actual amount received ($)
-                      <input
-                        type="number"
-                        name="amount"
-                        defaultValue={Number(payment.amount)}
-                        min="0.01"
-                        max="100000"
-                        step="0.01"
-                        required
-                      />
-                    </label>
-                  )}
-                  <label>
-                    Customer-visible note / refund reference
-                    <textarea name="note" maxLength={1000} rows={2} />
-                  </label>
-                  <label className="check-label">
-                    <input type="checkbox" name="checked" required />
-                    <span>
-                      I checked the actual transfer or completed the full refund
-                      in the payment app.
-                    </span>
-                  </label>
-                </ActionForm>
-              ) : (
-                <p className="small">{payment.reviewNote}</p>
-              )}
+              {payment.reviewNote && <p className="small">{payment.reviewNote}</p>}
             </section>
-          ))
-        ) : (
+          );
+        }) : (
           <section className="panel empty-state">
-            <h2>No payments to review yet.</h2>
-            <p>
-              Customer payment reports will appear here after an approved
-              booking.
-            </p>
+            <h2>No payment records yet.</h2>
+            <p>Customer payment notifications will appear here after an approved booking.</p>
           </section>
         )}
       </div>

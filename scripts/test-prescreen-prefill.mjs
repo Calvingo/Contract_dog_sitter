@@ -274,7 +274,7 @@ const values = {
   pickupDate: "2092-04-02",
   dropoffTime: "10:00",
   pickupTime: "10:00",
-  signature: "test-only",
+  signature: "data:image/png;base64,dGVzdA==",
   agreed: true,
 };
 function assertStoredPrefill(data, expected) {

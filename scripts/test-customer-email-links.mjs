@@ -55,6 +55,7 @@ const db = {
     },
   },
   submission: {
+    findUnique: async () => ({ id: "booking-alice", agreementVersion:"2026-10-federal-v1", depositPolicySnapshot:{deposit:20,nonRefundableAmount:20,holidays:[{name:"Christmas Day",date:"2026-12-25"}]} }),
     findUniqueOrThrow: async () => ({ id: "booking-alice", customer: customers.get("alice@example.test") }),
   },
 };
@@ -121,6 +122,7 @@ for (const next of ["https://evil.example/account", "//evil.example/book", "/adm
   await assert.rejects(createCustomerEmailUrl("alice@example.test", next));
 }
 const record = [...tokens.values()][0];
+assert.ok(record.expiresAt.getTime() - Date.now() > 13 * 86400000, "Customer email links retain their 14-day lifetime");
 record.usedAt = new Date();
 assert.equal(await findCustomerEmailLink(raw, destination), null, "Revoked links fail");
 record.usedAt = null;
@@ -138,7 +140,7 @@ const payload = { email: "alice@example.test", firstName: "Alice", lastName: "Te
 await sendDecisionEmail(payload, "accept", { editUrl });
 await sendDecisionEmail(payload, "meet_greet", { editUrl });
 await sendPaymentConfirmation("booking-alice");
-const expectedDestinations = [[destination, "/book?editToken=valid-edit-token"], ["/book?editToken=valid-edit-token"], [destination]];
+const expectedDestinations = [[destination, "/book?editToken=valid-edit-token", destination], ["/book?editToken=valid-edit-token", destination], [destination]];
 for (const [index, message] of messages.entries()) {
   assert.equal(message.to, "alice@example.test");
   const links = [...message.html.matchAll(/href="([^"]+)"/g)].map((match) => match[1].replaceAll("&amp;", "&")).filter((link) => link.startsWith("https://boarding.example.test/"));
@@ -162,10 +164,12 @@ for (const action of ["accept", "meet_greet"]) {
     assert.match(content.subject, /Payments Requirements$/);
     assert.match(content.html, /font-size:26px[^;]*;.*color:#b91c1c/);
     assert.match(content.html, /pay your 20% deposit/);
-    assert.match(content.html, /not yet confirmed/);
+    assert.match(content.html, /confirmed by our acceptance/);
     assert.match(content.html, /Qi &lt;Zhang&gt;/);
   }
 }
+const declinedEdit = buildDecisionEmail(decisionPayload, "reject", { acceptedStayRetained: true });
+assert.match(declinedEdit.html, /previously accepted stay remains confirmed/);
 const { sendSubmissionEmails } = require("../lib/email.ts");
 const { initialFormValues } = require("../lib/form-config.ts");
 await sendSubmissionEmails({
@@ -183,6 +187,7 @@ assert.equal((await getCustomerSession()).customerId, "alice");
 // Old edit links bypass the new entry route, but must still support account navigation.
 const { GET: editGET } = require("../app/api/submission/edit/route.ts");
 const editRecord = [...editTokens.values()][0];
+assert.ok(editRecord.expiresAt.getTime() - Date.now() > 13 * 86400000, "Edit links are not shortened to 72h");
 editRecord.submission = {
   customerId: "alice", status: "ACCEPTED", revision: 1,
   customer: customers.get("alice@example.test"),

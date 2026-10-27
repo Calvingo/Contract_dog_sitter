@@ -51,9 +51,7 @@ export default async function SettingsPage() {
             </span>
           </label>
           <p className="small">
-            New requests hold space for this duration. Approval starts a fresh
-            payment window. Verified deposits keep the reservation. Existing
-            bookings without a hold deadline remain reserved for compatibility.
+            Operational request window (default 72 hours). Requests do not reserve space. Only administrator acceptance reserves capacity, without expiry.
           </p>
           <h2>Payment instructions</h2>
           <p className="small">

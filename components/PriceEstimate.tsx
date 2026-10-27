@@ -1,3 +1,4 @@
+import { depositPolicy, HOLIDAY_BOOKING_POLICY } from "@/lib/federal-holidays";
 import type { FormValues } from "@/lib/form-config";
 import { PAYMENT_EARLY_PICKUP_POLICY } from "@/lib/form-config";
 import { calculatePrice, DEPOSIT_PERCENT, type PriceBreakdown } from "@/lib/pricing";
@@ -51,10 +52,13 @@ export function PriceEstimate({ values, title, incompleteHint, holidayNote }: Pr
 
   const quotes = second ? [first, second] : [first];
   const total = quotes.reduce((sum, quote) => sum + quote.totalPrice, 0);
-  const deposit = quotes.reduce((sum, quote) => sum + quote.depositAmount, 0);
+  const policy = depositPolicy(values.dropoffDate, values.pickupDate, total);
+  const deposit = policy.deposit;
 
   return (
     <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4">
+      <p className="notice">{HOLIDAY_BOOKING_POLICY}</p>
+      {policy.nonRefundable && <p className="notice">Non-refundable deposit: ${deposit.toFixed(2)}. {policy.holidays.map(h => `${h.name} (${h.date})`).join(", ")}</p>}
       <h3 className="text-base font-semibold text-stone-900">{title}</h3>
       <div className="mt-3 space-y-3">
         <DogQuote name={values.petName || "Dog 1"} quote={first} />

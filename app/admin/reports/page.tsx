@@ -51,10 +51,10 @@ export default async function AdminReportsPage() {
     <AdminShell
       email={session.email}
       title="Reports"
-      subtitle="Revenue and booking status summary."
+      subtitle="Quoted booking values and status summary. Payments and refunds are handled offline."
     >
       <section className="grid gap-3 md:grid-cols-4">
-        <Stat label="Accepted revenue this month" value={money(acceptedRevenue)} />
+        <Stat label="Accepted booking value this month" value={money(acceptedRevenue)} />
         <Stat label="Pending quoted value" value={money(pendingQuoted)} />
         <Stat label="Accepted bookings" value={String(accepted.length)} />
         <Stat label="Average accepted value" value={money(averageAccepted)} />
@@ -82,7 +82,7 @@ export default async function AdminReportsPage() {
 
         <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-orange-100">
           <h2 className="text-xl font-bold text-stone-950">
-            Recent Accepted Revenue
+            Recent Accepted Booking Values
           </h2>
           <div className="mt-4 space-y-3">
             {accepted.slice(0, 12).map((submission) => (

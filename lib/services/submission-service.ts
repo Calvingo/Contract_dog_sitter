@@ -1,10 +1,13 @@
+import { bookingEmailAllowed, BOOKING_UNAVAILABLE_MESSAGE } from "@/lib/platform/booking-blocklist";
 import {
   BookingConflict,
   assertCapacity,
   getSettings,
   lockCapacity,
 } from "@/lib/platform/capacity";
-import { verifiedAmount, depositDue } from "@/lib/platform/rules";
+import { depositPolicy } from "@/lib/federal-holidays";
+import { validateSubmission } from "@/lib/validate";
+import { archiveSubmissionRevision } from "./submission-revision";
 import { SubmissionStatus, type Prisma } from "@prisma/client";
 import type { FormValues } from "@/lib/form-config";
 import { prisma } from "@/lib/db";
@@ -59,6 +62,8 @@ export async function createSubmissionRecord(
   data: FormValues,
   customerId?: string,
 ) {
+  const validation = validateSubmission(data);
+  if (validation) throw new BookingConflict(validation);
   const customerSnapshot = buildCustomerSnapshot(data);
   const petSnapshots = buildPetSnapshots(data);
   const prescreenAnswersByPet = buildPetPrescreenAnswers(data);
@@ -70,6 +75,7 @@ export async function createSubmissionRecord(
 
   return prisma.$transaction(async (tx) => {
     await lockCapacity(tx);
+    if (!await bookingEmailAllowed(customerSnapshot.email, tx)) throw new BookingConflict(BOOKING_UNAVAILABLE_MESSAGE);
     const existingCustomer = await tx.customer.findUnique({ where: { email: customerSnapshot.email } });
     if (existingCustomer) {
       await lockCustomerProfile(tx, existingCustomer.id);
@@ -137,6 +143,8 @@ export async function createSubmissionRecord(
         customerId: customer.id,
         petId: pet.id,
         holdExpiresAt: new Date(now.getTime() + settings.holdHours * 3600000),
+        agreementVersion: "2026-10-federal-v1",
+        depositPolicySnapshot: depositPolicy(data.dropoffDate, data.pickupDate, quote.totalPrice),
         firstTimeBooking: data.firstTimeBooking,
         dropoffAt,
         pickupAt,
@@ -177,8 +185,11 @@ export async function createSubmissionRecord(
 
 export async function updateSubmissionRecord(options: {
   submissionId: string;
+  expectedRevision?: number;
   data: FormValues;
 }) {
+  const validation = validateSubmission(options.data);
+  if (validation) throw new BookingConflict(validation);
   const customerSnapshot = buildCustomerSnapshot(options.data);
   const petSnapshots = buildPetSnapshots(options.data);
   const prescreenAnswersByPet = buildPetPrescreenAnswers(options.data);
@@ -204,12 +215,13 @@ export async function updateSubmissionRecord(options: {
       throw new Error("Submission not found");
     }
 
+    if (options.expectedRevision !== undefined && options.expectedRevision !== current.revision) throw new BookingConflict("This booking changed. Refresh before submitting edits.");
     await lockCustomerProfile(tx, current.customerId);
     const activeCustomer = await tx.customer.findUniqueOrThrow({ where: { id: current.customerId } });
     if (activeCustomer.deactivatedAt) throw new BookingConflict("This account is deactivated. Contact us to restore access.");
 
     if (
-      current.status === SubmissionStatus.REJECTED ||
+      (current.status === SubmissionStatus.REJECTED && !current.acceptedDropoffAt) ||
       current.status === SubmissionStatus.CANCELLED
     ) {
       throw new Error("This submission can no longer be edited");
@@ -227,43 +239,9 @@ export async function updateSubmissionRecord(options: {
       current.id,
     );
     const settings = await getSettings(tx);
-    const holdExpiresAt =
-      current.holdExpiresAt === null ||
-      verifiedAmount(current) >= depositDue(quote.totalPrice)
-        ? current.holdExpiresAt
-        : new Date(now.getTime() + settings.holdHours * 3600000);
+    const holdExpiresAt = new Date(now.getTime() + settings.holdHours * 3600000);
 
-    await tx.submissionRevision.upsert({
-      where: {
-        submissionId_revision: {
-          submissionId: current.id,
-          revision: current.revision,
-        },
-      },
-      create: {
-        submissionId: current.id,
-        revision: current.revision,
-        status: current.status,
-        quotedBreakdown: current.quotedBreakdown as Prisma.InputJsonValue,
-        quotedTotal: current.quotedTotal,
-        prescreenAnswers: current.prescreenAnswers as Prisma.InputJsonValue,
-        prescreenNotes: current.prescreenNotes,
-        signatureData: current.signatureData,
-        customerSnapshot: current.customerSnapshot as Prisma.InputJsonValue,
-        petSnapshot: current.petSnapshot as Prisma.InputJsonValue,
-        petsSnapshot: current.submissionPets.map((item) => ({
-          position: item.position,
-          petSnapshot: item.petSnapshot,
-          prescreenAnswers: item.prescreenAnswers,
-          prescreenNotes: item.prescreenNotes,
-          quotedBreakdown: item.quotedBreakdown,
-          quotedTotal: item.quotedTotal.toString(),
-        })) as unknown as Prisma.InputJsonValue,
-        dropoffAt: current.dropoffAt,
-        pickupAt: current.pickupAt,
-      },
-      update: {},
-    });
+    await archiveSubmissionRevision(tx, current);
 
     const customer = await tx.customer.upsert({
       where: { email: customerSnapshot.email },
@@ -301,8 +279,16 @@ export async function updateSubmissionRecord(options: {
         customerId: customer.id,
         petId: pet.id,
         status: nextStatus,
+        ...(current.status === SubmissionStatus.ACCEPTED && !current.acceptedDropoffAt ? {
+          acceptedDropoffAt:current.dropoffAt,acceptedPickupAt:current.pickupAt,
+          acceptedDogs:Math.max(1,current.submissionPets.length),acceptedRevision:current.revision,
+          acceptedDepositPolicySnapshot:current.depositPolicySnapshot ?? undefined,
+        } : {}),
         holdExpiresAt,
         revision: current.revision + 1,
+        // New signature: archive the original agreement and policy in the revision above.
+        agreementVersion: "2026-10-federal-v1",
+        depositPolicySnapshot: depositPolicy(options.data.dropoffDate, options.data.pickupDate, quote.totalPrice),
         firstTimeBooking: options.data.firstTimeBooking,
         dropoffAt,
         pickupAt,

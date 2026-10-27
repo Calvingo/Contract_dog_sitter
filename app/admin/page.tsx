@@ -2,7 +2,8 @@ import { SubmissionStatus } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { getAdminSession } from "@/lib/auth/admin-session";
 import { prisma } from "@/lib/db";
-import { submissionDogCount } from "@/lib/submission-pets";
+import { availability } from "@/lib/platform/capacity";
+import { todayKey } from "@/lib/platform/rules";
 import { AdminShell, ModuleCard, Stat, money } from "./admin-ui";
 
 export default async function AdminPage() {
@@ -37,17 +38,7 @@ export default async function AdminPage() {
       submission.status === SubmissionStatus.PENDING ||
       submission.status === SubmissionStatus.NEEDS_REVIEW,
   );
-  const activeDogsToday = submissions
-    .filter(
-      (submission) =>
-        submission.status === SubmissionStatus.ACCEPTED &&
-        submission.dropoffAt <= now &&
-        submission.pickupAt >= now,
-    )
-    .reduce(
-      (sum, submission) => sum + submissionDogCount(submission.submissionPets),
-      0,
-    );
+  const activeDogsToday = (await availability(todayKey(), todayKey())).days[0].occupied;
   const acceptedThisMonth = submissions.filter(
     (submission) =>
       submission.status === SubmissionStatus.ACCEPTED &&
@@ -103,8 +94,8 @@ export default async function AdminPage() {
         <ModuleCard
           href="/admin/payments"
           title="Payments"
-          meta="Manual verification"
-          description="Review customer transfer reports and record verified deposits or completed refunds."
+          meta="Payment notifications"
+          description="View payment notifications and historical payment reports. All transfers and refunds are handled offline."
         />
         <ModuleCard
           href="/admin/marketing"
