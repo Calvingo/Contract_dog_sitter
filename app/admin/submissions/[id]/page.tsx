@@ -6,6 +6,7 @@ import { notFound, redirect } from "next/navigation";
 import { getAdminSession } from "@/lib/auth/admin-session";
 import { prisma } from "@/lib/db";
 import { submissionDogNames } from "@/lib/submission-pets";
+import { formValuesFromSubmission } from "@/lib/submission-data";
 import { updateCustomerPetAction } from "../../actions";
 import { AdminShell } from "../../admin-ui";
 import { EditOrderForm } from "../_edit-order-form";
@@ -47,6 +48,7 @@ export default async function AdminSubmissionDetailPage(props: {
 
   if (!submission) notFound();
 
+  const values = formValuesFromSubmission(submission);
   const bookingBlock = await prisma.bookingBlocklist.findUnique({where:{email:submission.customer.email.toLowerCase()}});
   return (
     <AdminShell
@@ -99,6 +101,19 @@ export default async function AdminSubmissionDetailPage(props: {
             defaultPickupAt={localDateTimeInputValue(submission.pickupAt)}
             defaultQuotedTotal={moneyValue(submission.quotedTotal)}
             defaultPrescreenNotes={submission.prescreenNotes || ""}
+            pricingValues={{
+              petWeightLb: values.petWeightLb,
+              petAgeYears: values.petAgeYears,
+              prescreenSpayedNeutered: values.prescreenSpayedNeutered,
+              prescreenHighEnergy: values.prescreenHighEnergy,
+              prescreenMedicalHistory: values.prescreenMedicalHistory,
+              hasSecondDog: values.hasSecondDog,
+              secondPetWeightLb: values.secondPetWeightLb,
+              secondPetAgeYears: values.secondPetAgeYears,
+              secondPrescreenSpayedNeutered: values.secondPrescreenSpayedNeutered,
+              secondPrescreenHighEnergy: values.secondPrescreenHighEnergy,
+              secondPrescreenMedicalHistory: values.secondPrescreenMedicalHistory,
+            }}
           />
 
           <form

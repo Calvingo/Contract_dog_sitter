@@ -1,7 +1,9 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { SubmissionStatus } from "@prisma/client";
+import { initialFormValues, type FormValues } from "@/lib/form-config";
+import { getSubmissionQuote } from "@/lib/submission-data";
 import { updateSubmissionActionWithState } from "../actions";
 
 type EditOrderFormProps = {
@@ -12,6 +14,20 @@ type EditOrderFormProps = {
   defaultPickupAt: string;
   defaultQuotedTotal: string;
   defaultPrescreenNotes: string;
+  pricingValues: Pick<
+    FormValues,
+    | "petWeightLb"
+    | "petAgeYears"
+    | "prescreenSpayedNeutered"
+    | "prescreenHighEnergy"
+    | "prescreenMedicalHistory"
+    | "hasSecondDog"
+    | "secondPetWeightLb"
+    | "secondPetAgeYears"
+    | "secondPrescreenSpayedNeutered"
+    | "secondPrescreenHighEnergy"
+    | "secondPrescreenMedicalHistory"
+  >;
 };
 
 export function EditOrderForm({
@@ -22,11 +38,36 @@ export function EditOrderForm({
   defaultPickupAt,
   defaultQuotedTotal,
   defaultPrescreenNotes,
+  pricingValues,
 }: EditOrderFormProps) {
   const [state, formAction, isPending] = useActionState(
     updateSubmissionActionWithState,
     null
   );
+  const [dropoffAt, setDropoffAt] = useState(defaultDropoffAt);
+  const [pickupAt, setPickupAt] = useState(defaultPickupAt);
+  const [quotedTotal, setQuotedTotal] = useState(defaultQuotedTotal);
+  const [priceError, setPriceError] = useState<string | null>(null);
+
+  function updateSchedule(nextDropoffAt: string, nextPickupAt: string) {
+    setDropoffAt(nextDropoffAt);
+    setPickupAt(nextPickupAt);
+    try {
+      const quote = getSubmissionQuote({
+        ...initialFormValues,
+        ...pricingValues,
+        dropoffDate: nextDropoffAt.slice(0, 10),
+        dropoffTime: nextDropoffAt.slice(11),
+        pickupDate: nextPickupAt.slice(0, 10),
+        pickupTime: nextPickupAt.slice(11),
+      });
+      setQuotedTotal(quote.totalPrice.toFixed(2));
+      setPriceError(null);
+    } catch {
+      setQuotedTotal("");
+      setPriceError("Enter valid dropoff and pickup times, with pickup after dropoff, to calculate the price.");
+    }
+  }
 
   return (
     <form action={formAction} className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-orange-100">
@@ -53,7 +94,8 @@ export function EditOrderForm({
           <input
             type="datetime-local"
             name="dropoffAt"
-            defaultValue={defaultDropoffAt}
+            value={dropoffAt}
+            onChange={(event) => updateSchedule(event.target.value, pickupAt)}
             className="mt-2 w-full rounded-xl border border-stone-200 px-3 py-3"
             required
           />
@@ -63,7 +105,8 @@ export function EditOrderForm({
           <input
             type="datetime-local"
             name="pickupAt"
-            defaultValue={defaultPickupAt}
+            value={pickupAt}
+            onChange={(event) => updateSchedule(dropoffAt, event.target.value)}
             className="mt-2 w-full rounded-xl border border-stone-200 px-3 py-3"
             required
           />
@@ -75,10 +118,20 @@ export function EditOrderForm({
             name="quotedTotal"
             min="0"
             step="0.01"
-            defaultValue={defaultQuotedTotal}
+            value={quotedTotal}
+            onChange={(event) => setQuotedTotal(event.target.value)}
+            aria-describedby="order-price-help"
+            aria-invalid={Boolean(priceError)}
             className="mt-2 w-full rounded-xl border border-stone-200 px-3 py-3"
             required
           />
+          <span
+            id="order-price-help"
+            role={priceError ? "alert" : undefined}
+            className={`mt-2 block text-xs ${priceError ? "text-red-700" : "text-stone-500"}`}
+          >
+            {priceError || "Price recalculates when dropoff or pickup changes. You can also adjust it manually."}
+          </span>
         </label>
         <label className="block">
           <span className="text-sm font-medium text-stone-700">Prescreen notes</span>
@@ -103,7 +156,7 @@ export function EditOrderForm({
       ) : null}
 
       <button
-        disabled={isPending}
+        disabled={isPending || Boolean(priceError)}
         className="mt-5 rounded-xl bg-stone-950 px-5 py-3 text-sm font-semibold text-white hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {isPending ? "Saving..." : "Save order changes"}
