@@ -3,8 +3,17 @@
 import { useActionState, useState } from "react";
 import { SubmissionStatus } from "@prisma/client";
 import { initialFormValues, type FormValues } from "@/lib/form-config";
+import {
+  getPickupDropoffTimeOptions,
+  isPickupDropoffTimeAllowed,
+} from "@/lib/booking-time";
 import { getSubmissionQuote } from "@/lib/submission-data";
 import { updateSubmissionActionWithState } from "../actions";
+
+type Schedule = Pick<
+  FormValues,
+  "dropoffDate" | "dropoffTime" | "pickupDate" | "pickupTime"
+>;
 
 type EditOrderFormProps = {
   submissionId: string;
@@ -44,22 +53,35 @@ export function EditOrderForm({
     updateSubmissionActionWithState,
     null
   );
-  const [dropoffAt, setDropoffAt] = useState(defaultDropoffAt);
-  const [pickupAt, setPickupAt] = useState(defaultPickupAt);
+  const [schedule, setSchedule] = useState<Schedule>({
+    dropoffDate: defaultDropoffAt.slice(0, 10),
+    dropoffTime: defaultDropoffAt.slice(11, 16),
+    pickupDate: defaultPickupAt.slice(0, 10),
+    pickupTime: defaultPickupAt.slice(11, 16),
+  });
   const [quotedTotal, setQuotedTotal] = useState(defaultQuotedTotal);
   const [priceError, setPriceError] = useState<string | null>(null);
 
-  function updateSchedule(nextDropoffAt: string, nextPickupAt: string) {
-    setDropoffAt(nextDropoffAt);
-    setPickupAt(nextPickupAt);
+  function updateSchedule(name: keyof Schedule, value: string) {
+    const next = { ...schedule, [name]: value };
+    if (name === "dropoffDate" && !isPickupDropoffTimeAllowed(next.dropoffTime, next.dropoffDate)) {
+      next.dropoffTime = "";
+    }
+    if (name === "pickupDate" && !isPickupDropoffTimeAllowed(next.pickupTime, next.pickupDate)) {
+      next.pickupTime = "";
+    }
+    setSchedule(next);
     try {
+      if (
+        !isPickupDropoffTimeAllowed(next.dropoffTime, next.dropoffDate) ||
+        !isPickupDropoffTimeAllowed(next.pickupTime, next.pickupDate)
+      ) {
+        throw new Error("Invalid dropoff or pickup time.");
+      }
       const quote = getSubmissionQuote({
         ...initialFormValues,
         ...pricingValues,
-        dropoffDate: nextDropoffAt.slice(0, 10),
-        dropoffTime: nextDropoffAt.slice(11),
-        pickupDate: nextPickupAt.slice(0, 10),
-        pickupTime: nextPickupAt.slice(11),
+        ...next,
       });
       setQuotedTotal(quote.totalPrice.toFixed(2));
       setPriceError(null);
@@ -73,6 +95,8 @@ export function EditOrderForm({
     <form action={formAction} className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-orange-100">
       <input type="hidden" name="submissionId" value={submissionId} />
       <input type="hidden" name="revision" value={revision} />
+      <input type="hidden" name="dropoffAt" value={`${schedule.dropoffDate}T${schedule.dropoffTime}`} />
+      <input type="hidden" name="pickupAt" value={`${schedule.pickupDate}T${schedule.pickupTime}`} />
       <h2 className="text-xl font-bold text-stone-950">Edit Order</h2>
       <div className="mt-4 grid gap-4">
         <label className="block">
@@ -89,28 +113,51 @@ export function EditOrderForm({
             ))}
           </select>
         </label>
-        <label className="block">
-          <span className="text-sm font-medium text-stone-700">Dropoff</span>
-          <input
-            type="datetime-local"
-            name="dropoffAt"
-            value={dropoffAt}
-            onChange={(event) => updateSchedule(event.target.value, pickupAt)}
-            className="mt-2 w-full rounded-xl border border-stone-200 px-3 py-3"
-            required
-          />
-        </label>
-        <label className="block">
-          <span className="text-sm font-medium text-stone-700">Pickup</span>
-          <input
-            type="datetime-local"
-            name="pickupAt"
-            value={pickupAt}
-            onChange={(event) => updateSchedule(dropoffAt, event.target.value)}
-            className="mt-2 w-full rounded-xl border border-stone-200 px-3 py-3"
-            required
-          />
-        </label>
+        {(["dropoff", "pickup"] as const).map((kind) => {
+          const label = kind === "dropoff" ? "Dropoff" : "Pickup";
+          const dateName = `${kind}Date` as const;
+          const timeName = `${kind}Time` as const;
+          const time = schedule[timeName];
+          const timeOptions = getPickupDropoffTimeOptions(schedule[dateName]);
+          return (
+            <div key={kind} className="grid gap-3 sm:grid-cols-2">
+              <label className="block min-w-0">
+                <span className="text-sm font-medium text-stone-700">{label} date</span>
+                <input
+                  type="date"
+                  name={dateName}
+                  value={schedule[dateName]}
+                  onChange={(event) => updateSchedule(dateName, event.target.value)}
+                  className="mt-2 w-full min-w-0 rounded-xl border border-stone-200 px-3 py-3"
+                  required
+                />
+              </label>
+              <label className="block min-w-0">
+                <span className="text-sm font-medium text-stone-700">{label} time</span>
+                <select
+                  name={timeName}
+                  value={time}
+                  onChange={(event) => updateSchedule(timeName, event.target.value)}
+                  className="mt-2 w-full rounded-xl border border-stone-200 bg-white px-3 py-3"
+                  required
+                >
+                  <option value="">Choose a time</option>
+                  {time && !timeOptions.some((option) => option.value === time) ? (
+                    <option value={time}>{time} (current)</option>
+                  ) : null}
+                  {timeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          );
+        })}
+        <p className="text-xs text-stone-500">
+          Times are in California local time. Available 8:30 AM–9:00 PM; Sundays 3:00–6:00 PM unavailable.
+        </p>
         <label className="block">
           <span className="text-sm font-medium text-stone-700">Quoted total</span>
           <input
