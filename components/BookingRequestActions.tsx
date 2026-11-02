@@ -94,7 +94,7 @@ export function BookingRequestActions({
       ) : (
         allowed.length === 0 && (
           <p className="small">
-            Decision recorded. Use Edit Order below to make changes.
+            {status === "CANCELLED" ? "This order is cancelled." : "Decision recorded. Use Edit Order below to make changes."}
           </p>
         )
       )}

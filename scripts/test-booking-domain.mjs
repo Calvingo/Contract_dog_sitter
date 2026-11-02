@@ -197,7 +197,8 @@ try {
   for (const [key, value] of Object.entries({ submissionId: current.id, revision: String(current.revision), status: "ACCEPTED", dropoffAt: "2090-12-25T10:00", pickupAt: "2090-12-27T10:00", quotedTotal: "500" })) adminEdit.set(key, value);
   assert.ok((await updateSubmissionActionWithState(null, adminEdit)).ok);
   const adminEdited = await prisma.submission.findUnique({ where: { id: current.id }, include: { revisions: true } });
-  assert.equal(adminEdited.acceptedDepositPolicySnapshot.nonRefundableAmount, 100);
+  assert.equal(adminEdited.acceptedDepositPolicySnapshot.nonRefundableAmount, Math.round(Number(adminEdited.quotedTotal) * 20) / 100);
+  assert.equal(Number(adminEdited.quotedTotal), adminEdited.quotedBreakdown.totalPrice, "Admin edits recalculate prices on the server, ignoring submitted totals");
   assert.ok(adminEdited.revisions.some(r => r.revision === current.revision && r.signatureData === current.signatureData && r.agreementVersion === current.agreementVersion));
   assert.ok((await updateSubmissionActionWithState(null, adminEdit)).error, "Stale admin edits cannot overwrite a newer version");
   adminEdit.set("revision", String(adminEdited.revision));

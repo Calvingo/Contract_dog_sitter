@@ -194,6 +194,7 @@ export async function requestCancellation(
   revalidatePath(`/account/bookings/${text(form, "id")}`);
   revalidatePath("/account");
   revalidatePath("/admin/requests");
+  revalidatePath(`/admin/submissions/${text(form, "id")}`);
   return {
     message:
       "Cancellation requested. Your booking remains in place until we review it. Refunds are handled separately.",

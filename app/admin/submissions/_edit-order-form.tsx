@@ -21,7 +21,6 @@ type EditOrderFormProps = {
   defaultStatus: SubmissionStatus;
   defaultDropoffAt: string;
   defaultPickupAt: string;
-  defaultQuotedTotal: string;
   defaultPrescreenNotes: string;
   pricingValues: Pick<
     FormValues,
@@ -45,7 +44,6 @@ export function EditOrderForm({
   defaultStatus,
   defaultDropoffAt,
   defaultPickupAt,
-  defaultQuotedTotal,
   defaultPrescreenNotes,
   pricingValues,
 }: EditOrderFormProps) {
@@ -59,8 +57,17 @@ export function EditOrderForm({
     pickupDate: defaultPickupAt.slice(0, 10),
     pickupTime: defaultPickupAt.slice(11, 16),
   });
-  const [quotedTotal, setQuotedTotal] = useState(defaultQuotedTotal);
-  const [priceError, setPriceError] = useState<string | null>(null);
+  let quotedTotal = "";
+  let priceError: string | null = null;
+  try {
+    if (!isPickupDropoffTimeAllowed(schedule.dropoffTime, schedule.dropoffDate) ||
+        !isPickupDropoffTimeAllowed(schedule.pickupTime, schedule.pickupDate)) {
+      throw new Error("Invalid dropoff or pickup time.");
+    }
+    quotedTotal = getSubmissionQuote({ ...initialFormValues, ...pricingValues, ...schedule }).totalPrice.toFixed(2);
+  } catch {
+    priceError = "Enter valid dropoff and pickup times, with pickup after dropoff, to calculate the price.";
+  }
 
   function updateSchedule(name: keyof Schedule, value: string) {
     const next = { ...schedule, [name]: value };
@@ -71,30 +78,13 @@ export function EditOrderForm({
       next.pickupTime = "";
     }
     setSchedule(next);
-    try {
-      if (
-        !isPickupDropoffTimeAllowed(next.dropoffTime, next.dropoffDate) ||
-        !isPickupDropoffTimeAllowed(next.pickupTime, next.pickupDate)
-      ) {
-        throw new Error("Invalid dropoff or pickup time.");
-      }
-      const quote = getSubmissionQuote({
-        ...initialFormValues,
-        ...pricingValues,
-        ...next,
-      });
-      setQuotedTotal(quote.totalPrice.toFixed(2));
-      setPriceError(null);
-    } catch {
-      setQuotedTotal("");
-      setPriceError("Enter valid dropoff and pickup times, with pickup after dropoff, to calculate the price.");
-    }
   }
 
   return (
     <form action={formAction} className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-orange-100">
       <input type="hidden" name="submissionId" value={submissionId} />
       <input type="hidden" name="revision" value={revision} />
+      <input type="hidden" name="expectedStatus" value={defaultStatus} />
       <input type="hidden" name="dropoffAt" value={`${schedule.dropoffDate}T${schedule.dropoffTime}`} />
       <input type="hidden" name="pickupAt" value={`${schedule.pickupDate}T${schedule.pickupTime}`} />
       <h2 className="text-xl font-bold text-stone-950">Edit Order</h2>
@@ -106,7 +96,7 @@ export function EditOrderForm({
             defaultValue={defaultStatus}
             className="mt-2 w-full rounded-xl border border-stone-200 px-3 py-3"
           >
-            {(Object.values(SubmissionStatus) as SubmissionStatus[]).map((status) => (
+            {(Object.values(SubmissionStatus) as SubmissionStatus[]).filter(status => status !== "CANCELLED").map((status) => (
               <option key={status} value={status}>
                 {status.replaceAll("_", " ")}
               </option>
@@ -166,7 +156,7 @@ export function EditOrderForm({
             min="0"
             step="0.01"
             value={quotedTotal}
-            onChange={(event) => setQuotedTotal(event.target.value)}
+            readOnly
             aria-describedby="order-price-help"
             aria-invalid={Boolean(priceError)}
             className="mt-2 w-full rounded-xl border border-stone-200 px-3 py-3"
@@ -177,7 +167,7 @@ export function EditOrderForm({
             role={priceError ? "alert" : undefined}
             className={`mt-2 block text-xs ${priceError ? "text-red-700" : "text-stone-500"}`}
           >
-            {priceError || "Price recalculates when dropoff or pickup changes. You can also adjust it manually."}
+            {priceError || "Price recalculates automatically from the stay and dogs. The server recalculates it again when you save."}
           </span>
         </label>
         <label className="block">

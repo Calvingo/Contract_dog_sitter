@@ -14,6 +14,8 @@ import { processAdminSubmissionDecision } from "@/lib/admin/decision";
 import { prisma } from "@/lib/db";
 import {
   formValuesFromSubmission,
+  buildCustomerSnapshot,
+  buildPetSnapshots,
   getSubmissionQuote,
   type SubmissionQuote,
 } from "@/lib/submission-data";
@@ -23,8 +25,16 @@ import { signatureToBuffer } from "@/lib/validate";
 import { isPickupDropoffTimeAllowed } from "@/lib/booking-time";
 import { DEPOSIT_PERCENT, parseDateTime } from "@/lib/pricing";
 import { dateKey, dateRange } from "@/lib/platform/rules";
-import { depositPolicy, DEPOSIT_POLICY_VERSION } from "@/lib/federal-holidays";
 import { archiveSubmissionRevision } from "@/lib/services/submission-revision";
+import { repriceAdminSubmission } from "@/lib/admin/submission-pricing";
+import { lockCustomerProfile } from "@/lib/services/customer-profile";
+import { cancelAdminBooking, scheduleCancellationConfirmation } from "@/lib/services/cancellation";
+
+function revalidateBooking(submissionId: string) {
+  for (const path of ["/admin", "/admin/requests", "/admin/calendar", "/admin/reports", "/admin/customers", "/admin/payments", "/account", "/account/dogs", "/account/profile", "/book", `/admin/submissions/${submissionId}`, `/account/bookings/${submissionId}`]) {
+    revalidatePath(path);
+  }
+}
 
 async function requireAdmin() {
   const session = await getAdminSession();
@@ -165,26 +175,22 @@ async function updateSubmissionInternal(formData: FormData) {
   const status = String(formData.get("status") || "") as SubmissionStatus;
   const dropoffAt = String(formData.get("dropoffAt") || "");
   const pickupAt = String(formData.get("pickupAt") || "");
-  const quotedTotal = String(formData.get("quotedTotal") || "");
   const prescreenNotes = String(formData.get("prescreenNotes") || "").trim();
 
   if (!submissionId || !Object.values(SubmissionStatus).includes(status)) {
     throw new Error("Invalid submission update.");
   }
+  if (status === "CANCELLED") throw new Error("Use Cancel order to confirm cancellation separately.");
 
   const dropoffDate = parseDateTime(dropoffAt.slice(0, 10), dropoffAt.slice(11));
   const pickupDate = parseDateTime(pickupAt.slice(0, 10), pickupAt.slice(11));
-  const quotedTotalNumber = Number(quotedTotal);
 
   if (
     !dropoffDate ||
     !pickupDate ||
     pickupDate <= dropoffDate ||
     !isPickupDropoffTimeAllowed(dropoffAt.slice(11,16), dropoffAt.slice(0,10)) ||
-    !isPickupDropoffTimeAllowed(pickupAt.slice(11,16), pickupAt.slice(0,10)) ||
-    !Number.isFinite(quotedTotalNumber) ||
-    quotedTotalNumber < 0 ||
-    Math.abs(quotedTotalNumber * 100 - Math.round(quotedTotalNumber * 100)) > 0.000001
+    !isPickupDropoffTimeAllowed(pickupAt.slice(11,16), pickupAt.slice(0,10))
   ) {
     throw new Error("Invalid date or price.");
   }
@@ -197,6 +203,9 @@ async function updateSubmissionInternal(formData: FormData) {
       include: { submissionPets: true },
     });
     if (Number(formData.get("revision")) !== current.revision) throw new Error("This booking changed. Refresh before editing.");
+    if (current.status === "CANCELLED") throw new Error("This booking is cancelled. Create a new request instead.");
+    const expectedStatus = formData.get("expectedStatus");
+    if (expectedStatus && expectedStatus !== current.status) throw new Error("This booking changed. Refresh before editing.");
     if (status === "ACCEPTED")
       await assertCapacity(
         tx,
@@ -207,26 +216,26 @@ async function updateSubmissionInternal(formData: FormData) {
       );
     const settings = await getSettings(tx);
     await archiveSubmissionRevision(tx, current);
-    // Apply only the policy the customer actually signed; legacy terms stay legacy.
-    const policy = current.agreementVersion === DEPOSIT_POLICY_VERSION
-      ? depositPolicy(dateKey(dropoffDate), dateKey(pickupDate), quotedTotalNumber)
-      : null;
+    const pricing = await repriceAdminSubmission(tx, current, {
+      ...formValuesFromSubmission(current),
+      dropoffDate: dropoffAt.slice(0, 10),
+      dropoffTime: dropoffAt.slice(11, 16),
+      pickupDate: pickupAt.slice(0, 10),
+      pickupTime: pickupAt.slice(11, 16),
+      prescreenNotes,
+    }, status);
     await tx.submission.update({
       where: { id: submissionId },
       data: {
         status,
-        ...(status === "ACCEPTED" ? {acceptedDropoffAt:dropoffDate, acceptedPickupAt:pickupDate, acceptedDogs:Math.max(1,current.submissionPets.length), acceptedRevision:current.revision + 1, acceptedDepositPolicySnapshot:policy ?? Prisma.DbNull} : {}),
+        ...pricing,
         holdExpiresAt:
           current.holdExpiresAt === null
             ? null
             : new Date(Date.now() + settings.holdHours * 3600000),
         dropoffAt: dropoffDate,
         pickupAt: pickupDate,
-        quotedTotal: quotedTotalNumber,
-        depositPolicySnapshot: policy ?? Prisma.DbNull,
         prescreenNotes: prescreenNotes || null,
-        lastEditedAt: new Date(),
-        revision: { increment: 1 },
       },
     });
   });
@@ -239,12 +248,7 @@ async function updateSubmissionInternal(formData: FormData) {
     receiptError = true;
   }
 
-  revalidatePath("/admin");
-  revalidatePath("/admin/requests");
-  revalidatePath("/admin/calendar");
-  revalidatePath("/admin/reports");
-  revalidatePath("/admin/customers");
-  revalidatePath(`/admin/submissions/${submissionId}`);
+  revalidateBooking(submissionId);
 
   return { submissionId, receiptSentTo, receiptError };
 }
@@ -334,6 +338,7 @@ export async function updateCustomerPetAction(formData: FormData) {
     !emergencyContactPhone ||
     !petName ||
     !petBreed ||
+    !petAgeYearsRaw ||
     !Number.isFinite(petWeightLb) ||
     petWeightLb <= 0 ||
     (petAgeYears !== null &&
@@ -341,6 +346,7 @@ export async function updateCustomerPetAction(formData: FormData) {
     (secondPetId &&
       (!secondPetName ||
         !secondPetBreed ||
+        !secondPetAgeYearsRaw ||
         !Number.isFinite(secondPetWeightLb) ||
         secondPetWeightLb <= 0 ||
         (secondPetAgeYears !== null &&
@@ -349,11 +355,31 @@ export async function updateCustomerPetAction(formData: FormData) {
     throw new Error("Invalid customer or pet update.");
   }
 
-  const existingCustomer = await prisma.customer.findUniqueOrThrow({
-    where: { id: customerId },
-  });
-  const updates = [
-    prisma.customer.update({
+  await prisma.$transaction(async (tx) => {
+    await lockCapacity(tx);
+    const current = await tx.submission.findUniqueOrThrow({
+      where: { id: submissionId },
+      include: { submissionPets: true },
+    });
+    if (Number(formData.get("revision")) !== current.revision) {
+      throw new Error("This booking changed. Refresh before editing.");
+    }
+    if (current.status === "CANCELLED") throw new Error("This booking is cancelled. Its order details cannot be edited.");
+    if (current.customerId !== customerId || current.petId !== petId ||
+        (current.submissionPets.find(pet => pet.position === 2)?.petId || "") !== secondPetId) {
+      throw new Error("Customer or dogs do not match this booking. Refresh before editing.");
+    }
+    await lockCustomerProfile(tx, customerId);
+    const existingCustomer = await tx.customer.findUniqueOrThrow({ where: { id: customerId } });
+    const values = {
+      ...formValuesFromSubmission(current),
+      firstName, lastName, email, phone, backupContact, emergencyContactName, emergencyContactPhone, wechatId,
+      petName, petBreed, petWeightLb: String(petWeightLb), petAgeYears: petAgeYearsRaw,
+      secondPetName, secondPetBreed, secondPetWeightLb: String(secondPetWeightLb), secondPetAgeYears: secondPetAgeYearsRaw,
+    };
+    await archiveSubmissionRevision(tx, current);
+    const pricing = await repriceAdminSubmission(tx, current, values);
+    await tx.customer.update({
       where: { id: customerId },
       data: {
         ...(existingCustomer.phone !== phone
@@ -371,8 +397,8 @@ export async function updateCustomerPetAction(formData: FormData) {
         emergencyContactPhone,
         wechatId: wechatId || null,
       },
-    }),
-    prisma.pet.update({
+    });
+    await tx.pet.update({
       where: { id: petId },
       data: {
         name: petName,
@@ -380,11 +406,9 @@ export async function updateCustomerPetAction(formData: FormData) {
         weightLb: petWeightLb,
         ageYears: petAgeYears,
       },
-    }),
-  ];
-  if (secondPetId) {
-    updates.push(
-      prisma.pet.update({
+    });
+    if (secondPetId) {
+      await tx.pet.update({
         where: { id: secondPetId },
         data: {
           name: secondPetName,
@@ -392,15 +416,61 @@ export async function updateCustomerPetAction(formData: FormData) {
           weightLb: secondPetWeightLb,
           ageYears: secondPetAgeYears,
         },
-      }),
-    );
-  }
-  await prisma.$transaction(updates);
+      });
+    }
+    await tx.submission.update({
+      where: { id: submissionId },
+      data: {
+        ...pricing,
+        customerSnapshot: buildCustomerSnapshot(values) as unknown as Prisma.InputJsonValue,
+        petSnapshot: buildPetSnapshots(values)[0] as unknown as Prisma.InputJsonValue,
+      },
+    });
+  });
 
-  revalidatePath("/admin");
-  revalidatePath("/admin/requests");
-  revalidatePath("/admin/calendar");
-  revalidatePath("/admin/reports");
-  revalidatePath("/admin/customers");
-  revalidatePath(`/admin/submissions/${submissionId}`);
+  revalidateBooking(submissionId);
+  try {
+    await sendLatestSubmissionReceipt(submissionId);
+  } catch {
+    throw new Error("Customer and dogs were saved and the price recalculated, but the update email could not be sent. Check the email log.");
+  }
+}
+
+export async function updateCustomerPetActionWithState(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireAdmin();
+  try {
+    await updateCustomerPetAction(formData);
+    return { message: "Customer and dogs updated. The order price was recalculated and the latest receipt sent." };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Unable to update customer and dogs." };
+  }
+}
+
+export async function cancelSubmissionActionWithState(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireAdmin();
+  if (formData.get("confirmCancellation") !== "on") {
+    return { error: "Confirm that you want to cancel this order. Refunds must be handled separately." };
+  }
+  const submissionId = String(formData.get("submissionId") || "");
+  const revision = Number(formData.get("revision"));
+  const expectedStatus = String(formData.get("expectedStatus") || "") as SubmissionStatus;
+  if (!submissionId || !Number.isInteger(revision) || revision < 1 || !Object.values(SubmissionStatus).includes(expectedStatus)) {
+    return { error: "Invalid cancellation request. Refresh before continuing." };
+  }
+  try {
+    const booking = await cancelAdminBooking(submissionId, revision, expectedStatus);
+    revalidateBooking(submissionId);
+    const scheduled = await scheduleCancellationConfirmation(booking);
+    return scheduled
+      ? { message: "Order cancelled and availability released. The confirmation email will be sent in the background. Refunds are handled separately." }
+      : { error: "Order cancelled and availability released, but the confirmation email could not be scheduled. Check the email log and contact the customer. Refunds are handled separately." };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Unable to cancel order." };
+  }
 }

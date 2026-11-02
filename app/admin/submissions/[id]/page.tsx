@@ -7,9 +7,12 @@ import { getAdminSession } from "@/lib/auth/admin-session";
 import { prisma } from "@/lib/db";
 import { submissionDogNames } from "@/lib/submission-pets";
 import { formValuesFromSubmission } from "@/lib/submission-data";
-import { updateCustomerPetAction } from "../../actions";
+import { CancelOrderForm } from "@/components/CancelOrderForm";
 import { AdminShell } from "../../admin-ui";
 import { EditOrderForm } from "../_edit-order-form";
+import { EditCustomerPetsForm } from "../_edit-customer-pets-form";
+
+export const maxDuration = 120;
 
 function moneyValue(value: { toNumber: () => number }): string {
   return value.toNumber().toFixed(2);
@@ -63,8 +66,8 @@ export default async function AdminSubmissionDetailPage(props: {
               <strong>Cancellation requested</strong>
               <p>{submission.cancellationReason}</p>
               <p>
-                Review the request and set the booking status to Cancelled
-                below. Handle any refund separately.
+                Review the request and use Cancel order below to confirm it.
+                Handle any refund separately.
               </p>
             </div>
           )}
@@ -72,13 +75,14 @@ export default async function AdminSubmissionDetailPage(props: {
         <Link className="text-link" href="/admin/payments">
           Review payments and refunds →
         </Link>
-        <section className="grid gap-4 md:grid-cols-3">
+        <section className="grid gap-4 md:grid-cols-4">
           <Summary
             label="Status"
             value={submission.status.replaceAll("_", " ")}
           />
           <Summary label="Dropoff" value={dateTime(submission.dropoffAt)} />
           <Summary label="Pickup" value={dateTime(submission.pickupAt)} />
+          <Summary label="Quoted total" value={`$${moneyValue(submission.quotedTotal)}`} />
         </section>
 
         <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-orange-100">
@@ -92,14 +96,13 @@ export default async function AdminSubmissionDetailPage(props: {
         </section>
 
         <section className="grid gap-6 lg:grid-cols-2">
-          <EditOrderForm
+          {submission.status !== "CANCELLED" && <EditOrderForm
             revision={submission.revision}
             key={`${submission.revision}:${submission.status}`}
             submissionId={submission.id}
             defaultStatus={submission.status}
             defaultDropoffAt={localDateTimeInputValue(submission.dropoffAt)}
             defaultPickupAt={localDateTimeInputValue(submission.pickupAt)}
-            defaultQuotedTotal={moneyValue(submission.quotedTotal)}
             defaultPrescreenNotes={submission.prescreenNotes || ""}
             pricingValues={{
               petWeightLb: values.petWeightLb,
@@ -114,139 +117,25 @@ export default async function AdminSubmissionDetailPage(props: {
               secondPrescreenHighEnergy: values.secondPrescreenHighEnergy,
               secondPrescreenMedicalHistory: values.secondPrescreenMedicalHistory,
             }}
-          />
+          />}
 
-          <form
-            action={updateCustomerPetAction}
-            className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-orange-100"
-          >
-            <input type="hidden" name="submissionId" value={submission.id} />
-            <input
-              type="hidden"
-              name="customerId"
-              value={submission.customerId}
-            />
-            <input type="hidden" name="petId" value={submission.petId} />
-            {submission.submissionPets[1] ? (
-              <input
-                type="hidden"
-                name="secondPetId"
-                value={submission.submissionPets[1].petId}
-              />
-            ) : null}
-            <h2 className="text-xl font-bold text-stone-950">
-              Edit Customer and Dog
-            </h2>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <TextInput
-                name="firstName"
-                label="First name"
-                value={submission.customer.firstName}
-              />
-              <TextInput
-                name="lastName"
-                label="Last name"
-                value={submission.customer.lastName}
-              />
-              <TextInput
-                name="email"
-                label="Email"
-                value={submission.customer.email}
-                type="email"
-              />
-              <TextInput
-                name="phone"
-                label="Phone"
-                value={submission.customer.phone}
-              />
-              <TextInput
-                name="backupContact"
-                label="Backup contact"
-                value={submission.customer.backupContact}
-              />
-              <TextInput
-                name="emergencyContactName"
-                label="Emergency contact name"
-                value={submission.customer.emergencyContactName || ""}
-              />
-              <TextInput
-                name="emergencyContactPhone"
-                label="Emergency contact phone"
-                value={submission.customer.emergencyContactPhone || ""}
-              />
-              <TextInput
-                name="wechatId"
-                label="WeChat ID"
-                value={submission.customer.wechatId || ""}
-                required={false}
-              />
-              <TextInput
-                name="petName"
-                label="Dog name"
-                value={submission.pet.name}
-              />
-              <TextInput
-                name="petBreed"
-                label="Breed"
-                value={submission.pet.breed}
-              />
-              <TextInput
-                name="petWeightLb"
-                label="Weight lb"
-                value={String(submission.pet.weightLb)}
-                type="number"
-              />
-              <TextInput
-                name="petAgeYears"
-                label="Age years"
-                value={
-                  submission.pet.ageYears == null
-                    ? ""
-                    : String(submission.pet.ageYears)
-                }
-                type="number"
-                required={false}
-              />
-              {submission.submissionPets[1] ? (
-                <>
-                  <div className="sm:col-span-2 mt-2 border-t border-stone-200 pt-4 text-sm font-bold text-stone-800">
-                    Second dog
-                  </div>
-                  <TextInput
-                    name="secondPetName"
-                    label="Dog name"
-                    value={submission.submissionPets[1].pet.name}
-                  />
-                  <TextInput
-                    name="secondPetBreed"
-                    label="Breed"
-                    value={submission.submissionPets[1].pet.breed}
-                  />
-                  <TextInput
-                    name="secondPetWeightLb"
-                    label="Weight lb"
-                    value={String(submission.submissionPets[1].pet.weightLb)}
-                    type="number"
-                  />
-                  <TextInput
-                    name="secondPetAgeYears"
-                    label="Age years"
-                    value={
-                      submission.submissionPets[1].pet.ageYears == null
-                        ? ""
-                        : String(submission.submissionPets[1].pet.ageYears)
-                    }
-                    type="number"
-                    required={false}
-                  />
-                </>
-              ) : null}
-            </div>
-            <button className="mt-5 rounded-xl bg-stone-950 px-5 py-3 text-sm font-semibold text-white hover:bg-stone-800">
-              Save customer and dog
-            </button>
-          </form>
+          {submission.status !== "CANCELLED" && <EditCustomerPetsForm
+            key={`customer:${submission.revision}:${submission.status}`}
+            submissionId={submission.id}
+            revision={submission.revision}
+            customerId={submission.customerId}
+            petId={submission.petId}
+            secondPetId={submission.submissionPets.find(pet => pet.position === 2)?.petId}
+            initialValues={values}
+          />}
+
         </section>
+
+          <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-red-100">
+            <h2 className="text-xl font-bold text-stone-950">{submission.status === "CANCELLED" ? "Order cancelled" : "Cancel order"}</h2>
+            {submission.status === "CANCELLED" && <p className="my-3 text-sm text-stone-600">Reserved availability has been released. Check the email log for confirmation delivery; handle any refund separately.</p>}
+            <CancelOrderForm id={submission.id} status={submission.status} revision={submission.revision} />
+          </section>
 
         <section className="grid gap-6 lg:grid-cols-2">
           <History title="Decision History">
@@ -310,28 +199,6 @@ function Summary(props: { label: string; value: string }) {
       <div className="text-sm font-medium text-stone-500">{props.label}</div>
       <div className="mt-2 text-lg font-bold text-stone-950">{props.value}</div>
     </div>
-  );
-}
-
-function TextInput(props: {
-  name: string;
-  label: string;
-  value: string;
-  type?: string;
-  required?: boolean;
-}) {
-  return (
-    <label className="block">
-      <span className="text-sm font-medium text-stone-700">{props.label}</span>
-      <input
-        type={props.type || "text"}
-        name={props.name}
-        defaultValue={props.value}
-        required={props.required !== false}
-        step={props.type === "number" ? "0.01" : undefined}
-        className="mt-2 w-full rounded-xl border border-stone-200 px-3 py-3"
-      />
-    </label>
   );
 }
 

@@ -1,10 +1,13 @@
 import { BookingRequestActions } from "@/components/BookingRequestActions";
+import { CancelOrderForm } from "@/components/CancelOrderForm";
 import { SubmissionStatus } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { getAdminSession } from "@/lib/auth/admin-session";
 import { prisma } from "@/lib/db";
 import { submissionDogNames } from "@/lib/submission-pets";
 import { AdminShell, StatusBadge, dateTime, money } from "../admin-ui";
+
+export const maxDuration = 120;
 
 export default async function AdminRequestsPage() {
   const session = await getAdminSession();
@@ -118,6 +121,7 @@ export default async function AdminRequestsPage() {
                       status={submission.status}
                       revision={submission.revision}
                     />
+                    <CancelOrderForm id={submission.id} status={submission.status} revision={submission.revision} />
                   </td>
                 </tr>
               ))}
