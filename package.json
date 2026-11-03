@@ -15,6 +15,7 @@
     "db:studio": "prisma studio",
     "test:decision-urls": "node scripts/test-decision.mjs",
     "test:pricing": "node scripts/test-pricing.mjs",
+    "test:pet-age": "node scripts/test-pet-age.mjs",
     "check:smtp": "node scripts/check-smtp.mjs",
     "test:platform": "node scripts/test-platform.mjs",
     "test:marketing": "node scripts/test-marketing.mjs",

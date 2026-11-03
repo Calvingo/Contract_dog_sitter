@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import type { ActionState } from "@/components/ActionForm";
+import { PetAgeInput } from "@/components/PetAgeInput";
 import { archiveDog, restoreDog, saveDog } from "@/app/account/actions";
 import { prescreenQuestions } from "@/lib/form-config";
 import { prescreenPrefillValues, type PrefillPet } from "@/lib/booking-prefill";
@@ -62,10 +63,12 @@ function DogEditor({ dog, onSaved }: { dog?: PrefillPet; onSaved: (message: stri
             Weight (lb)
             <input name="weightLb" type="number" min="0.1" max="300" step="0.1" value={draft.weightLb} onChange={(event) => change("weightLb", event.target.value)} required />
           </label>
-          <label>
-            Age (years)
-            <input name="ageYears" type="number" min="0" max="40" step="0.1" value={draft.ageYears} onChange={(event) => change("ageYears", event.target.value)} />
-          </label>
+          <PetAgeInput
+            name="ageYears"
+            value={draft.ageYears}
+            onChange={(ageYears) => change("ageYears", ageYears)}
+            maxYears={40}
+          />
         </div>
         <details>
           <summary className="cursor-pointer font-semibold">Care answers &amp; notes</summary>

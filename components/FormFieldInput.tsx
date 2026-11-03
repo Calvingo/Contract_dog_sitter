@@ -1,4 +1,5 @@
 import { DateTimeInput } from "@/components/DateTimeInput";
+import { PetAgeInput } from "@/components/PetAgeInput";
 import {
   EARLIEST_PICKUP_DROPOFF_TIME,
   LATEST_PICKUP_DROPOFF_TIME,
@@ -25,12 +26,19 @@ export function FormFieldInput({
 }: Props) {
   const commonClass =
     "w-full rounded-xl border border-emerald-100 bg-white px-4 py-3 text-stone-800 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100";
-  const numberMin =
-    field.type === "number"
-      ? field.name === "petAgeYears"
-        ? 0
-        : 1
-      : undefined;
+  if (field.name === "petAgeYears" || field.name === "secondPetAgeYears") {
+    return (
+      <PetAgeInput
+        name={field.name}
+        value={value}
+        onChange={(ageYears) => onChange(field.name, ageYears)}
+        required={field.required}
+        readOnly={readOnly}
+        error={error}
+        inputClassName={commonClass}
+      />
+    );
+  }
 
   if (field.type === "date" || field.type === "time") {
     return (
@@ -73,14 +81,8 @@ export function FormFieldInput({
         <input
           readOnly={readOnly}
           type={field.type === "number" ? "number" : field.type}
-          min={numberMin}
-          step={
-            field.type === "number"
-              ? field.name === "petAgeYears"
-                ? "any"
-                : 1
-              : undefined
-          }
+          min={field.type === "number" ? 1 : undefined}
+          step={field.type === "number" ? 1 : undefined}
           required={field.required}
           value={value}
           onChange={(event) => onChange(field.name, event.target.value)}

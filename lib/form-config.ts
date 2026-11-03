@@ -186,7 +186,7 @@ export const secondPetFields: FormField[] = [
   { name: "secondPetName", type: "text", label: "Name", required: true, section: "pet" },
   { name: "secondPetBreed", type: "text", label: "Breed", required: true, section: "pet" },
   { name: "secondPetWeightLb", type: "number", label: "Weight (lbs)", required: true, section: "pet" },
-  { name: "secondPetAgeYears", type: "number", label: "Age (years; e.g. 0.5 for 6 months)", required: true, section: "pet" },
+  { name: "secondPetAgeYears", type: "number", label: "Age (years)", required: true, section: "pet" },
 ];
 
 export const formFields: FormField[] = [
@@ -279,7 +279,7 @@ export const formFields: FormField[] = [
   {
     name: "petAgeYears",
     type: "number",
-    label: "Age (years; e.g. 0.5 for 6 months)",
+    label: "Age (years)",
     required: true,
     section: "pet",
   },

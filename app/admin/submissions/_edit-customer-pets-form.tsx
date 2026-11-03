@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ActionForm } from "@/components/ActionForm";
+import { PetAgeInput } from "@/components/PetAgeInput";
 import type { FormValues } from "@/lib/form-config";
 import { getSubmissionQuote } from "@/lib/submission-data";
 import { updateCustomerPetActionWithState } from "../actions";
@@ -49,6 +50,18 @@ export function EditCustomerPetsForm({ submissionId, revision, customerId, petId
   }
 
   function field({ name, label, type, optional }: Field) {
+    if (name === "petAgeYears" || name === "secondPetAgeYears") {
+      return (
+        <PetAgeInput
+          key={name}
+          name={name}
+          value={String(values[name] ?? "")}
+          onChange={(ageYears) => setValues(current => ({ ...current, [name]: ageYears }))}
+          required={!optional}
+          inputClassName="w-full rounded-xl border border-stone-200 px-3 py-3"
+        />
+      );
+    }
     return (
       <label key={name} className="block">
         <span className="text-sm font-medium text-stone-700">{label}</span>
