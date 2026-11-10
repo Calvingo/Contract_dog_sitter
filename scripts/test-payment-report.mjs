@@ -157,9 +157,11 @@ const reportBooking = (id, days, payments, extra = {}) => ({
   payments, ...extra,
 });
 const rows = [
-  reportBooking("Longer", 6, [{ amount: 100, refundedAmount: 80, status: "VERIFIED" }]),
+  reportBooking("Longer", 3, [{ amount: 100, refundedAmount: 80, status: "VERIFIED" }], {
+    submissionPets: [{ pet: { name: "Coco" } }, { pet: { name: "Milo" } }],
+  }),
   reportBooking("Higher", 2, [{ amount: 200, status: "VERIFIED" }, { amount: 40, status: "REFUNDED" }]),
-  reportBooking("Longer", 2, [{ amount: 999, status: "REPORTED" }]),
+  reportBooking("Longer", 2, [{ amount: 999, status: "REPORTED" }], { pet: { name: "Coco" } }),
   reportBooking("Future", 1, [{ amount: 33, status: "VERIFIED" }], { pickupAt: new Date("2099-01-01T10:00Z") }),
   reportBooking("Cancelled", 70, [{ amount: 999, status: "VERIFIED" }], { status: "CANCELLED" }),
   reportBooking("Pending", 80, [{ amount: 999, status: "VERIFIED" }], { status: "PENDING" }),
@@ -172,6 +174,10 @@ const daysList = rankings[0].split("Customers by completed dog-days")[1];
 const paymentList = rankings[1].split("</ol>")[0];
 assert.ok(daysList.indexOf("Longer Test") < daysList.indexOf("Higher Test"));
 assert.match(daysList, /8 days/);
+assert.match(daysList, /Pets: Coco, Milo</);
+assert.match(daysList, /Pets: Pup</);
+assert.match(paymentList, /Pets: Coco, Milo</);
+assert.match(paymentList, /Pets: Pup</);
 assert.doesNotMatch(daysList, /Future Test|Cancelled Test|Pending Test/);
 assert.ok(paymentList.indexOf("Higher Test") < paymentList.indexOf("Future Test"));
 assert.ok(paymentList.indexOf("Future Test") < paymentList.indexOf("Longer Test"));

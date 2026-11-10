@@ -4,7 +4,7 @@ import { SubmissionStatus } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { getAdminSession } from "@/lib/auth/admin-session";
 import { prisma } from "@/lib/db";
-import { submissionDogNames } from "@/lib/submission-pets";
+import { submissionDogNames, submissionPetNames } from "@/lib/submission-pets";
 import { AdminShell, Stat, money } from "../admin-ui";
 
 export default async function AdminReportsPage() {
@@ -28,14 +28,23 @@ export default async function AdminReportsPage() {
     (submission) => submission.status === SubmissionStatus.ACCEPTED
   );
   const wallTime = pacificWallTime(now);
-  const customers = new Map<string, { id: string; name: string; email: string; days: number; netCents: number; hasReceipt: boolean }>();
+  const customers = new Map<string, {
+    id: string; name: string; email: string; days: number; netCents: number;
+    pets: { days: Set<string>; netCents: Set<string> };
+  }>();
   for (const booking of accepted) {
     const row = customers.get(booking.customerId) ?? {
       id: booking.customerId, name: `${booking.customer.firstName} ${booking.customer.lastName}`,
-      email: booking.customer.email, days: 0, netCents: 0, hasReceipt: false,
+      email: booking.customer.email, days: 0, netCents: 0,
+      pets: { days: new Set<string>(), netCents: new Set<string>() },
     };
-    row.days += completedDogDays(booking, wallTime);
-    row.hasReceipt ||= booking.payments.some(payment => payment.status === "VERIFIED" || payment.status === "REFUNDED");
+    const days = completedDogDays(booking, wallTime);
+    const hasReceipt = booking.payments.some(payment => payment.status === "VERIFIED" || payment.status === "REFUNDED");
+    for (const name of submissionPetNames(booking.submissionPets, booking.pet.name)) {
+      if (days > 0) row.pets.days.add(name);
+      if (hasReceipt) row.pets.netCents.add(name);
+    }
+    row.days += days;
     row.netCents += netReceiptCents(booking.payments);
     customers.set(row.id, row);
   }
@@ -75,14 +84,17 @@ export default async function AdminReportsPage() {
     >
       <section className="grid gap-6 lg:grid-cols-2">
         {(["days", "netCents"] as const).map(metric => {
-          const rows = [...customers.values()].filter(row => metric === "days" ? row.days > 0 : row.hasReceipt)
+          const rows = [...customers.values()].filter(row => row.pets[metric].size > 0)
             .sort((a, b) => b[metric] - a[metric] || a.email.localeCompare(b.email));
           return <section className="panel" key={metric}>
             <h2>{metric === "days" ? "Customers by completed dog-days" : "Customers by net payments"}</h2>
             <p className="small">{metric === "days" ? "All accepted stays after pickup, counted per dog." : "Confirmed offline receipts less refunds on accepted bookings, including deposits."}</p>
             {rows.length ? <ol className="mt-3 space-y-2">{rows.map((row, index) => (
               <li className="flex justify-between gap-3 border-b py-2" key={row.id}>
-                <span>{index + 1}. {row.name}<small className="block text-stone-500">{row.email}</small></span>
+                <span>{index + 1}. {row.name}
+                  <small className="block">Pets: {[...row.pets[metric]].join(", ")}</small>
+                  <small className="block text-stone-500">{row.email}</small>
+                </span>
                 <strong>{metric === "days" ? `${row.days} days` : money(row.netCents / 100)}</strong>
               </li>
             ))}</ol> : <p className="small">No qualifying activity yet.</p>}
