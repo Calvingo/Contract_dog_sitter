@@ -16,17 +16,18 @@ import {
   formValuesFromSubmission,
   buildCustomerSnapshot,
   buildPetSnapshots,
-  getSubmissionQuote,
+  storedDogTerms,
   type SubmissionQuote,
 } from "@/lib/submission-data";
 import { sendSubmissionEmails } from "@/lib/email";
 import type { DecisionAction } from "@/lib/decision-emails";
 import { signatureToBuffer } from "@/lib/validate";
 import { isPickupDropoffTimeAllowed } from "@/lib/booking-time";
-import { DEPOSIT_PERCENT, parseDateTime } from "@/lib/pricing";
+import { parseDateTime } from "@/lib/pricing";
 import { dateKey, dateRange } from "@/lib/platform/rules";
 import { archiveSubmissionRevision } from "@/lib/services/submission-revision";
 import { repriceAdminSubmission } from "@/lib/admin/submission-pricing";
+import { reconcileRewardHolds, rewardOnAcceptance } from "@/lib/services/booking-rewards";
 import { lockCustomerProfile } from "@/lib/services/customer-profile";
 import { cancelAdminBooking, scheduleCancellationConfirmation } from "@/lib/services/cancellation";
 
@@ -115,19 +116,6 @@ export type AdminFormState = {
   error?: string;
 };
 
-function buildAdminReceiptQuote(
-  values: Parameters<typeof getSubmissionQuote>[0],
-  quotedTotal: number,
-): SubmissionQuote {
-  const latestQuote = getSubmissionQuote(values);
-  return {
-    ...latestQuote,
-    totalPrice: quotedTotal,
-    depositAmount:
-      Math.round(quotedTotal * (DEPOSIT_PERCENT / 100) * 100) / 100,
-  };
-}
-
 async function sendLatestSubmissionReceipt(submissionId: string) {
   const submission = await prisma.submission.findUnique({
     where: { id: submissionId },
@@ -159,7 +147,7 @@ async function sendLatestSubmissionReceipt(submissionId: string) {
     {
       revision: submission.revision,
       isUpdate: true,
-      quote: buildAdminReceiptQuote(values, submission.quotedTotal.toNumber()),
+      quote: submission.quotedBreakdown as unknown as SubmissionQuote,
       sendAdminNotification: true,
       agreementVersion: submission.agreementVersion,
     },
@@ -206,7 +194,10 @@ async function updateSubmissionInternal(formData: FormData) {
     if (current.status === "CANCELLED") throw new Error("This booking is cancelled. Create a new request instead.");
     const expectedStatus = formData.get("expectedStatus");
     if (expectedStatus && expectedStatus !== current.status) throw new Error("This booking changed. Refresh before editing.");
-    if (status === "ACCEPTED")
+    const withinConfirmedStay = current.status === "ACCEPTED" &&
+      dropoffDate >= (current.acceptedDropoffAt ?? current.dropoffAt) &&
+      pickupDate <= (current.acceptedPickupAt ?? current.pickupAt);
+    if (status === "ACCEPTED" && !withinConfirmedStay)
       await assertCapacity(
         tx,
         dropoffDate,
@@ -216,6 +207,19 @@ async function updateSubmissionInternal(formData: FormData) {
       );
     const settings = await getSettings(tx);
     await archiveSubmissionRevision(tx, current);
+    const terms = storedDogTerms(current);
+    for (const [index, term] of terms.entries()) {
+      for (const kind of ["lateDropoff", "earlyPickup"] as const) {
+        const key = `${kind}${index + 1}`;
+        if (!formData.has(key) || !current.submissionPets.length) continue;
+        const value = String(formData.get(key) || "");
+        const parsed = parseDateTime(value.slice(0, 10), value.slice(11));
+        if (value && (!parsed || parsed < dropoffDate || parsed > pickupDate))
+          throw new Error("Each dog's actual arrival and pickup must fall within the stay.");
+        term[`${kind}At`] = value || undefined;
+      }
+    }
+    const rewardState = status === "ACCEPTED" ? await rewardOnAcceptance(tx, current) : current.rewardState;
     const pricing = await repriceAdminSubmission(tx, current, {
       ...formValuesFromSubmission(current),
       dropoffDate: dropoffAt.slice(0, 10),
@@ -223,12 +227,13 @@ async function updateSubmissionInternal(formData: FormData) {
       pickupDate: pickupAt.slice(0, 10),
       pickupTime: pickupAt.slice(11, 16),
       prescreenNotes,
-    }, status);
+    }, status, terms);
     await tx.submission.update({
       where: { id: submissionId },
       data: {
         status,
         ...pricing,
+        rewardState,
         holdExpiresAt:
           current.holdExpiresAt === null
             ? null
@@ -238,6 +243,7 @@ async function updateSubmissionInternal(formData: FormData) {
         prescreenNotes: prescreenNotes || null,
       },
     });
+    await reconcileRewardHolds(tx, current.customerId);
   });
 
   let receiptSentTo: string | undefined;

@@ -145,3 +145,37 @@ adminAllowed = false;
 await assert.rejects(PaymentsPage(), /Unauthorized/);
 assert.equal(reportReads, 1, "An unauthorized viewer cannot read payment records");
 console.log("PASS read-only admin report: distinct notification/history totals, cent rounding, retained notes/references, no payment/refund controls and admin authorization.");
+
+// Exercise both admin rankings through their rendered report, including opposite sort orders.
+const { Prisma } = require("@prisma/client");
+const moneyDecimal = amount => new Prisma.Decimal(amount);
+const reportBooking = (id, days, payments, extra = {}) => ({
+  id, customerId: id, status: "ACCEPTED", dropoffAt: new Date("2001-01-01T10:00Z"),
+  pickupAt: new Date(Date.parse("2001-01-01T10:00Z") + days * 86400000),
+  quotedTotal: moneyDecimal(5000), pet: { name: "Pup" }, submissionPets: [],
+  customer: { firstName: id, lastName: "Test", email: id + "@example.test" },
+  payments, ...extra,
+});
+const rows = [
+  reportBooking("Longer", 6, [{ amount: 100, refundedAmount: 80, status: "VERIFIED" }]),
+  reportBooking("Higher", 2, [{ amount: 200, status: "VERIFIED" }, { amount: 40, status: "REFUNDED" }]),
+  reportBooking("Longer", 2, [{ amount: 999, status: "REPORTED" }]),
+  reportBooking("Future", 1, [{ amount: 33, status: "VERIFIED" }], { pickupAt: new Date("2099-01-01T10:00Z") }),
+  reportBooking("Cancelled", 70, [{ amount: 999, status: "VERIFIED" }], { status: "CANCELLED" }),
+  reportBooking("Pending", 80, [{ amount: 999, status: "VERIFIED" }], { status: "PENDING" }),
+];
+stubs.set(resolve(root, "lib/db.ts"), { prisma: { submission: { findMany: async () => rows } } });
+stubs.set(resolve(root, "lib/auth/admin-session.ts"), { getAdminSession: async () => ({ email: "admin@example.test" }) });
+const ReportsPage = require("../app/admin/reports/page.tsx").default;
+const rankings = renderToStaticMarkup(await ReportsPage()).split("Customers by net payments");
+const daysList = rankings[0].split("Customers by completed dog-days")[1];
+const paymentList = rankings[1].split("</ol>")[0];
+assert.ok(daysList.indexOf("Longer Test") < daysList.indexOf("Higher Test"));
+assert.match(daysList, /8 days/);
+assert.doesNotMatch(daysList, /Future Test|Cancelled Test|Pending Test/);
+assert.ok(paymentList.indexOf("Higher Test") < paymentList.indexOf("Future Test"));
+assert.ok(paymentList.indexOf("Future Test") < paymentList.indexOf("Longer Test"));
+assert.match(paymentList, /\$200.00/);
+assert.match(paymentList, /\$20.00/);
+assert.doesNotMatch(paymentList, /Cancelled Test|Pending Test|999|5000/);
+console.log("PASS rendered all-time rankings: completed dog-days, net receipts, historical refunds, pending/cancelled exclusions and future deposits.");

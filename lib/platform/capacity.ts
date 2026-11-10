@@ -1,3 +1,4 @@
+import { rewardOnAcceptance } from "../services/booking-rewards";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import {
@@ -125,6 +126,7 @@ export async function prepareStatusChange(
       acceptedPickupAt: current.pickupAt,
       acceptedDogs: Math.max(1, current.submissionPets.length),
       acceptedRevision: current.revision,
+      rewardState: await rewardOnAcceptance(tx, current),
       acceptedDepositPolicySnapshot: current.depositPolicySnapshot ?? Prisma.JsonNull,
     } : {}),
     holdExpiresAt:

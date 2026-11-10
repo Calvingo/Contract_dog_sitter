@@ -73,6 +73,7 @@ export default async function AccountPage() {
                 </span>
                 <span>View booking →</span>
               </div>
+              {booking.rewardState === "RECONFIRM" && booking.status !== "REJECTED" && <p className="notice">Review and confirm the revised price.</p>}
               {booking.cancellationRequestedAt &&
                 booking.status !== "CANCELLED" && (
                   <p className="small">Cancellation requested</p>

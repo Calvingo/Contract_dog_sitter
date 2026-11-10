@@ -1,10 +1,12 @@
 import { depositPolicy, HOLIDAY_BOOKING_POLICY } from "@/lib/federal-holidays";
 import type { FormValues } from "@/lib/form-config";
 import { PAYMENT_EARLY_PICKUP_POLICY } from "@/lib/form-config";
-import { calculatePrice, DEPOSIT_PERCENT, type PriceBreakdown } from "@/lib/pricing";
+import { getSubmissionQuote, type DogPricingTerms } from "@/lib/submission-data";
+import { DEPOSIT_PERCENT, type PriceBreakdown } from "@/lib/pricing";
 
 type Props = {
   values: FormValues;
+  terms?: DogPricingTerms[];
   title: string;
   incompleteHint: string;
   holidayNote: string;
@@ -18,6 +20,7 @@ function DogQuote({ name, quote }: { name: string; quote: PriceBreakdown }) {
         <div className="flex justify-between gap-4"><dt>Weight tier</dt><dd className="text-right font-medium">{quote.weightTier}</dd></div>
         <div className="flex justify-between gap-4"><dt>Billable days</dt><dd className="font-medium">{quote.billableDays}</dd></div>
         <div className="flex justify-between gap-4"><dt>Boarding subtotal</dt><dd className="font-medium">${quote.boardingSubtotal.toFixed(2)}</dd></div>
+        {quote.loyaltyDiscount !== undefined && <div className="flex justify-between"><dt>Loyalty reward · 10% off boarding</dt><dd>−${quote.loyaltyDiscount.toFixed(2)}</dd></div>}
         {quote.puppyFee > 0 ? <div className="flex justify-between gap-4"><dt>Puppy fee</dt><dd className="font-medium">${quote.puppyFee.toFixed(2)}</dd></div> : null}
         {quote.seniorDogFee > 0 ? <div className="flex justify-between gap-4"><dt>Senior dog fee</dt><dd className="font-medium">${quote.seniorDogFee.toFixed(2)}</dd></div> : null}
         {quote.intactDogFee > 0 ? <div className="flex justify-between gap-4"><dt>Unspayed/unneutered dog fee</dt><dd className="font-medium">${quote.intactDogFee.toFixed(2)}</dd></div> : null}
@@ -30,28 +33,16 @@ function DogQuote({ name, quote }: { name: string; quote: PriceBreakdown }) {
   );
 }
 
-export function PriceEstimate({ values, title, incompleteHint, holidayNote }: Props) {
-  const first = calculatePrice(
-    Number(values.petWeightLb), Number(values.petAgeYears), values.prescreenSpayedNeutered, values.prescreenHighEnergy,
-    values.prescreenMedicalHistory,
-    values.dropoffDate, values.dropoffTime, values.pickupDate, values.pickupTime
-  );
-  const second = values.hasSecondDog
-    ? calculatePrice(
-        Number(values.secondPetWeightLb), Number(values.secondPetAgeYears), values.secondPrescreenSpayedNeutered, values.secondPrescreenHighEnergy,
-        values.secondPrescreenMedicalHistory,
-        values.dropoffDate, values.dropoffTime, values.pickupDate, values.pickupTime
-      )
-    : null;
-  const hasPartial = Boolean(values.petWeightLb || values.petAgeYears || values.dropoffDate || values.dropoffTime || values.pickupDate || values.pickupTime);
-
-  if (!first || (values.hasSecondDog && !second)) {
-    if (!hasPartial) return null;
+export function PriceEstimate({ values, terms, title, incompleteHint, holidayNote }: Props) {
+  let quote;
+  try {
+    quote = getSubmissionQuote(values, terms);
+  } catch {
+    if (!values.petWeightLb && !values.petAgeYears && !values.dropoffDate && !values.pickupDate) return null;
     return <div className="rounded-xl border border-dashed border-emerald-200 bg-emerald-50/50 px-4 py-3 text-sm text-stone-600">{incompleteHint}</div>;
   }
-
-  const quotes = second ? [first, second] : [first];
-  const total = quotes.reduce((sum, quote) => sum + quote.totalPrice, 0);
+  const [first, second] = quote.dogs;
+  const total = quote.totalPrice;
   const policy = depositPolicy(values.dropoffDate, values.pickupDate, total);
   const deposit = policy.deposit;
 

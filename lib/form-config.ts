@@ -1,5 +1,7 @@
 import { HOLIDAY_BOOKING_POLICY } from "./federal-holidays";
 export type FormValues = {
+  useReward?: boolean;
+  rewardRequestId?: string;
   firstTimeBooking: string;
   prescreenAggression: string;
   prescreenBitten: string;

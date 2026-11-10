@@ -32,6 +32,7 @@ Module._load = function (request, parent, ...args) {
     background.push(callback);
   } };
   const path = Module._resolveFilename(request, parent);
+  if (path === resolve(root, "lib/auth/customer-session.ts")) return { getCustomerSession: async () => ({ customerId }) };
   if (path === resolve(root, "lib/auth/admin-session.ts")) return { getAdminSession: async () => admin ? { email: "admin@example.test" } : null };
   if (path === resolve(root, "lib/email.ts")) return { sendSubmissionEmails: async (...args) => { receipts.push(args); } };
   if (path === resolve(root, "lib/mailer.ts")) return {
@@ -217,6 +218,77 @@ try {
   assert.equal((await prisma.emailLog.findFirst({ where: { submissionId: other.submission.id } })).status, "FAILED");
   for (const path of ["/admin", "/admin/requests", "/admin/calendar", "/admin/reports", "/account", `/account/bookings/${current.id}`]) assert.ok(revalidated.includes(path));
   console.log("PASS one accepted dog releases exactly one space despite proposed changes; SMTP/scheduling failures preserve cancellation and are logged; all affected pages revalidate. No real emails sent.");
+
+  failSchedule = false;
+  const { loadRewards } = require("../lib/platform/loyalty.ts");
+  const { netReceiptCents } = require("../lib/platform/rules.ts");
+  const { recordOfflinePayment } = require("../app/admin/receipt-actions.ts");
+  const { confirmRevisedPrice } = require("../app/account/actions.ts");
+  const balance = async () => (await loadRewards(prisma, customerId)).balance;
+  const history = await createSubmissionRecord({ ...values, dropoffDate: "2001-01-01", pickupDate: "2001-02-20" });
+  assert.equal((await balance()).days, 0);
+  await accept(history.submission.id);
+  assert.deepEqual(await balance(), { days: 100, available: 1, daysToNext: 100 });
+  const redeem = { ...values, useReward: true };
+  const request = { ...redeem, rewardRequestId: crypto.randomUUID() };
+  await assert.rejects(createSubmissionRecord(redeem), /unavailable/);
+  const race = await Promise.allSettled([createSubmissionRecord(request, customerId), createSubmissionRecord({ ...request, rewardRequestId: crypto.randomUUID() }, customerId)]);
+  const held = race.filter(result => result.status === "fulfilled");
+  assert.equal(held.length, 1);
+  assert.match(race.find(result => result.status === "rejected").reason.message, /unavailable/);
+  const rewardId = held[0].value.submission.id;
+  const retry = await createSubmissionRecord({ ...redeem, rewardRequestId: held[0].value.submission.rewardRequestId }, customerId);
+  assert.ok(retry.replayed);
+  assert.equal(retry.submission.id, rewardId);
+  const fullPrice = getSubmissionQuote(values).totalPrice;
+  const discounted = await load(rewardId);
+  assert.ok(Number(discounted.quotedTotal) < fullPrice);
+  assert.equal(Number(discounted.quotedTotal), fullPrice - 26);
+  const correctPickup = async earlyPickup1 => {
+    const h = await load(history.submission.id);
+    const result = await updateSubmissionActionWithState(null, orderForm(h, { earlyPickup1 }));
+    assert.ok(result.ok, result.error);
+  };
+  await correctPickup("2001-02-15T10:00");
+  assert.deepEqual(await balance(), { days: 95, available: 0, daysToNext: 5 });
+  const revised = await load(rewardId);
+  assert.equal(revised.rewardState, "RECONFIRM");
+  assert.equal(Number(revised.quotedTotal), fullPrice);
+  assert.equal(revised.submissionPets.reduce((sum, dog) => sum + Number(dog.quotedTotal), 0), fullPrice);
+  await assert.rejects(accept(rewardId), /confirm/);
+  assert.match((await updateSubmissionActionWithState(null, orderForm(revised, { status: "ACCEPTED" }))).error, /confirm/);
+  const confirmation = { id: rewardId, revision: revised.revision, amount: revised.quotedTotal };
+  assert.ok((await confirmRevisedPrice({}, form({ ...confirmation, amount: "0.01" }))).error);
+  assert.ok((await confirmRevisedPrice({}, form(confirmation))).message);
+  await accept(rewardId);
+  assert.equal((await load(rewardId)).rewardState, "NONE");
+  await correctPickup("");
+  const used = await createSubmissionRecord(redeem, customerId);
+  await accept(used.submission.id);
+  await correctPickup("2001-02-15T10:00");
+  assert.deepEqual(await balance(), { days: 95, available: 0, daysToNext: 105 });
+  assert.equal(Number((await load(used.submission.id)).quotedTotal), used.quote.totalPrice);
+  await correctPickup("");
+  assert.equal((await balance()).available, 0);
+  assert.ok((await cancelSubmissionActionWithState({}, cancelForm(await load(used.submission.id)))).message);
+  assert.equal((await balance()).available, 1);
+  const receiptForm = form({ id: history.submission.id, operation: "receipt", reference: "test-transfer", amount: "95.25" });
+  assert.ok((await recordOfflinePayment({}, receiptForm)).message);
+  assert.ok((await recordOfflinePayment({}, receiptForm)).message);
+  let recorded = await load(history.submission.id);
+  assert.equal(recorded.payments.length, 1);
+  const refund = form({ id: recorded.id, paymentId: recorded.payments[0].id, operation: "refund", reference: "test-refund",
+    amount: "15.50", previousRefund: 0 });
+  assert.ok((await recordOfflinePayment({}, refund)).message);
+  assert.ok((await recordOfflinePayment({}, refund)).message);
+  refund.set("reference", "another-transfer");
+  assert.match((await recordOfflinePayment({}, refund)).error, /changed/);
+  recorded = await load(recorded.id);
+  assert.equal(netReceiptCents(recorded.payments), 7975);
+  assert.equal((await balance()).days, 100);
+  assert.ok((await cancelSubmissionActionWithState({}, cancelForm(recorded))).message);
+  assert.deepEqual(await balance(), { days: 0, available: 0, daysToNext: 100 });
+  console.log("PASS historical rewards, two-dog checkout correction, concurrent reservations, verified ownership, signed repricing, protected redemptions, cancellation and idempotent partial refunds.");
 } finally {
   if (customerId) {
     const where = { submission: { customerId } };

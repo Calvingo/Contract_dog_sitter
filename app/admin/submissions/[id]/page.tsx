@@ -1,3 +1,4 @@
+import { OfflineReceipts } from "../_offline-receipts";
 import { ActionForm } from "@/components/ActionForm";
 import { setBookingBlock } from "../../booking-blocklist-actions";
 import Link from "next/link";
@@ -6,7 +7,7 @@ import { notFound, redirect } from "next/navigation";
 import { getAdminSession } from "@/lib/auth/admin-session";
 import { prisma } from "@/lib/db";
 import { submissionDogNames } from "@/lib/submission-pets";
-import { formValuesFromSubmission } from "@/lib/submission-data";
+import { formValuesFromSubmission, storedDogTerms } from "@/lib/submission-data";
 import { CancelOrderForm } from "@/components/CancelOrderForm";
 import { AdminShell } from "../../admin-ui";
 import { EditOrderForm } from "../_edit-order-form";
@@ -41,6 +42,7 @@ export default async function AdminSubmissionDetailPage(props: {
     where: { id },
     include: {
       customer: true,
+      payments: { orderBy: { createdAt: "desc" } },
       pet: true,
       submissionPets: { orderBy: { position: "asc" }, include: { pet: true } },
       decisionEvents: { orderBy: { createdAt: "desc" } },
@@ -87,6 +89,7 @@ export default async function AdminSubmissionDetailPage(props: {
 
         <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-orange-100">
           <h2 className="text-xl font-bold text-stone-950">Admin Decision</h2>
+          {submission.rewardState === "RECONFIRM" && <p className="notice">Reward withdrawn. The customer must confirm the revised price in their account before acceptance.</p>}
           <BookingRequestActions
             id={submission.id}
             status={submission.status}
@@ -104,7 +107,11 @@ export default async function AdminSubmissionDetailPage(props: {
             defaultDropoffAt={localDateTimeInputValue(submission.dropoffAt)}
             defaultPickupAt={localDateTimeInputValue(submission.pickupAt)}
             defaultPrescreenNotes={submission.prescreenNotes || ""}
+            dogTerms={storedDogTerms(submission)}
+            dogNames={[values.petName, values.secondPetName]}
             pricingValues={{
+              useReward: values.useReward,
+              savedPetId: values.savedPetId, savedSecondPetId: values.savedSecondPetId,
               petWeightLb: values.petWeightLb,
               petAgeYears: values.petAgeYears,
               prescreenSpayedNeutered: values.prescreenSpayedNeutered,
@@ -127,9 +134,12 @@ export default async function AdminSubmissionDetailPage(props: {
             petId={submission.petId}
             secondPetId={submission.submissionPets.find(pet => pet.position === 2)?.petId}
             initialValues={values}
+            dogTerms={storedDogTerms(submission)}
           />}
 
         </section>
+
+        <OfflineReceipts id={id} accepted={submission.status === "ACCEPTED"} payments={submission.payments} />
 
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-red-100">
             <h2 className="text-xl font-bold text-stone-950">{submission.status === "CANCELLED" ? "Order cancelled" : "Cancel order"}</h2>

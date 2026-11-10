@@ -46,6 +46,25 @@ try {
     }
   }
 
+  const { withBoardingDiscounts } = require(join(output, "submission-data.js"));
+  const holiday = calculatePrice(30, 10, "no", "yes", "yes", "2026-12-24", "10:00", "2026-12-26", "10:00");
+  const discounted = withBoardingDiscounts(holiday, true, 0.2);
+  assert.equal(discounted.boardingSubtotal, 104);
+  assert.equal(discounted.loyaltyDiscount, 10.4);
+  assert.equal(discounted.totalPrice, holiday.totalPrice - 26 - 10.4);
+  assert.equal(discounted.specialCareFee, holiday.specialCareFee);
+  assert.equal(discounted.holidayFee, holiday.holidayFee);
+
+  const { storedDogTerms } = require(join(output, "submission-data.js"));
+  const prior = { ...holiday, boardingSubtotal: 104 };
+  const terms = storedDogTerms({ petId: "p", quotedBreakdown: { dogs: [prior] }, submissionPets: [] });
+  const returning = { ...initialFormValues, savedPetId: "p", petWeightLb: "30", petAgeYears: "10",
+    prescreenSpayedNeutered: "no", prescreenHighEnergy: "yes", prescreenMedicalHistory: "yes",
+    dropoffDate: "2026-12-24", dropoffTime: "10:00", pickupDate: "2026-12-26", pickupTime: "10:00", useReward: true };
+  assert.equal(getSubmissionQuote(returning, terms).totalPrice, discounted.totalPrice);
+  assert.equal(getSubmissionQuote(returning, [{ ...terms[0], earlyPickupAt: "2026-12-24T10:00" }]).totalPrice, 0);
+  assert.equal(getSubmissionQuote(returning, [{ ...terms[0], lateDropoffAt: "2026-12-25T10:00" }]).dogs[0].billableDays, 1);
+
   // Half-day extensions prorate both puppy and special-care charges.
   const partial = calculatePrice(30, 0.5, "no", "no", "yes", ...stay.slice(0, 3), "14:00");
   assert.equal(partial.billableDays, 1.5);

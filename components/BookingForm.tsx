@@ -26,6 +26,7 @@ import { PriceEstimate } from "@/components/PriceEstimate";
 import { SignaturePad } from "@/components/SignaturePad";
 import { isPickupDropoffTimeAllowed } from "@/lib/booking-time";
 import { todayKey } from "@/lib/platform/rules";
+import type { DogPricingTerms } from "@/lib/submission-data";
 import { parseDateTime } from "@/lib/pricing";
 import { applySavedProfileIds, profileReadyToSave, profileSavePayload } from "@/lib/profile-autosave";
 import {
@@ -50,6 +51,8 @@ function HomePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editToken = searchParams.get("editToken");
+  const rewardRequestId = useRef("");
+  const [editTerms, setEditTerms] = useState<DogPricingTerms[]>([]);
   const [editRevision, setEditRevision] = useState<number | undefined>(undefined);
   const [formValues, setFormValues] = useState<FormValues>(initialFormValues);
   const [errors, setErrors] = useState<
@@ -200,8 +203,14 @@ function HomePageContent() {
       if (
         currentPrefill.current?.authenticated &&
         loadedEmail.current === email
-      )
+      ) {
+        setPrefill(data);
+        if (!data.rewards?.available && latestValues.current.useReward) {
+          setFormValues(current => ({ ...current, useReward: false, agreed: false, signature: "" }));
+          setSubmitError("Your reward balance changed. Please review the updated price.");
+        }
         return;
+      }
       applyPrefill(data);
     } catch {
       // Prefill is optional; leave the blank form usable.
@@ -221,6 +230,15 @@ function HomePageContent() {
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [editToken, loadPrefill]);
+
+  const nextRewardCheck = prefill?.rewards?.nextCheckAt;
+  useEffect(() => {
+    if (editToken || !nextRewardCheck) return;
+    const timer = window.setTimeout(() => {
+      if (document.visibilityState === "visible") void loadPrefill();
+    }, Math.max(1000, nextRewardCheck - Date.now()));
+    return () => window.clearTimeout(timer);
+  }, [editToken, nextRewardCheck, loadPrefill]);
 
   const lookupEmail = formValues.email.trim().toLowerCase();
   useEffect(() => {
@@ -282,6 +300,7 @@ function HomePageContent() {
         );
         const data = (await response.json()) as {
           values?: FormValues;
+          dogTerms?: DogPricingTerms[];
           revision?: number;
           notice?: string;
           error?: string;
@@ -294,6 +313,7 @@ function HomePageContent() {
           return;
         }
 
+        setEditTerms(data.dogTerms || []);
         setEditRevision(data.revision);
         setFormValues({
           ...data.values,
@@ -572,20 +592,25 @@ function HomePageContent() {
         const eligibility = await fetch("/api/booking-eligibility", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:submissionValues.email})});
         if (!eligibility.ok) throw new Error((await eligibility.json()).error || ui.submitError);
       }
+      if (!editToken && submissionValues.useReward && !rewardRequestId.current)
+        rewardRequestId.current = crypto.randomUUID();
       const response = await fetch(
         editToken ? "/api/submission/edit" : "/api/submit",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(
-            editToken ? { token: editToken, revision: editRevision, values: submissionValues } : submissionValues,
+            editToken ? { token: editToken, revision: editRevision, values: submissionValues } : { ...submissionValues, rewardRequestId: submissionValues.useReward ? rewardRequestId.current : undefined },
           ),
         },
       );
 
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Submit failed");
-      const notificationQuery = result.emailWarning ? "?emailWarning=1" : "?emailPending=1";
+      if (!response.ok) {
+        if (!editToken && response.status === 409) await loadPrefill();
+        throw new Error(result.error || "Submit failed");
+      }
+      const notificationQuery = result.replayed ? "" : result.emailWarning ? "?emailWarning=1" : "?emailPending=1";
       router.push(
         editToken || !result.accountAccess
           ? `/success${notificationQuery}`
@@ -839,7 +864,19 @@ function HomePageContent() {
                 onChange={handleFieldChange}
               />
             ))}
+            {!editToken && prefill?.authenticated && prefill.rewards && (
+              <section className="rounded-xl border border-emerald-200 p-4" aria-label="Boarding rewards">
+                <h3 className="font-semibold">Boarding rewards</h3>
+                <p className="mt-1 text-sm">{prefill.rewards.days} dog-days earned · {prefill.rewards.daysToNext} to your next reward · {prefill.rewards.available} available</p>
+                {prefill.rewards.available > 0 && <label className="mt-3 flex items-start gap-2">
+                  <input type="checkbox" checked={Boolean(formValues.useReward)}
+                    onChange={event => setFormValues(current => ({ ...current, useReward: event.target.checked, agreed: false, signature: "" }))} />
+                  Use one reward for 10% off base boarding for all dogs in this stay.
+                </label>}
+              </section>
+            )}
             <PriceEstimate
+              terms={editTerms}
               values={formValues}
               title={ui.priceEstimateTitle}
               incompleteHint={ui.priceEstimateIncomplete}

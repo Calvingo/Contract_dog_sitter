@@ -1,6 +1,6 @@
 import type { FormValues } from "./form-config";
 import { prescreenQuestions, secondPrescreenQuestions } from "./form-config";
-import { calculatePrice, parseDateTime, type PriceBreakdown } from "./pricing";
+import { calculatePrice, DEPOSIT_PERCENT, parseDateTime, type PriceBreakdown } from "./pricing";
 
 export type CustomerSnapshot = {
   firstName: string;
@@ -108,44 +108,93 @@ export function getSubmissionDateTimes(data: FormValues): {
   return { dropoffAt, pickupAt };
 }
 
-export function getSubmissionQuote(data: FormValues): SubmissionQuote {
-  const firstQuote = calculatePrice(
-    Number(data.petWeightLb),
-    Number(data.petAgeYears),
-    data.prescreenSpayedNeutered,
-    data.prescreenHighEnergy,
-    data.prescreenMedicalHistory,
-    data.dropoffDate,
-    data.dropoffTime,
-    data.pickupDate,
-    data.pickupTime,
-  );
+export type DogPricingTerms = {
+  petId: string;
+  lateDropoffAt?: string;
+  earlyPickupAt?: string;
+  returningDiscountRate?: number;
+};
 
-  const secondQuote = data.hasSecondDog
-    ? calculatePrice(
-        Number(data.secondPetWeightLb),
-        Number(data.secondPetAgeYears),
-        data.secondPrescreenSpayedNeutered,
-        data.secondPrescreenHighEnergy,
-        data.secondPrescreenMedicalHistory,
-        data.dropoffDate,
-        data.dropoffTime,
-        data.pickupDate,
-        data.pickupTime,
-      )
-    : null;
+// Carry forward an explicitly discounted boarding base. A manual change to an
+// order total has no allocation between boarding and fees and cannot identify a rate.
+function storedBoardingDiscount(snapshot: unknown) {
+  if (!snapshot || typeof snapshot !== "object") return undefined;
+  const dog = snapshot as Partial<PriceBreakdown>;
+  if (typeof dog.returningDiscountRate === "number" && dog.returningDiscountRate >= 0 && dog.returningDiscountRate <= 1)
+    return dog.returningDiscountRate;
+  const gross = Number(dog.dailyRate) * Number(dog.billableDays);
+  const base = dog.boardingSubtotal;
+  return typeof base === "number" && gross > 0 && base >= 0 && base < gross ? 1 - base / gross : undefined;
+}
 
-  if (!firstQuote || (data.hasSecondDog && !secondQuote)) {
-    throw new Error("Unable to calculate price");
+export function storedDogTerms(booking: {
+  petId: string;
+  quotedBreakdown: unknown;
+  submissionPets: { petId: string; position: number; lateDropoffAt?: Date | null; earlyPickupAt?: Date | null; quotedBreakdown: unknown }[];
+}): DogPricingTerms[] {
+  if (!booking.submissionPets.length) {
+    const quote = booking.quotedBreakdown as { dogs?: PriceBreakdown[] } | null;
+    return [{ petId: booking.petId, returningDiscountRate: storedBoardingDiscount(quote?.dogs?.[0] ?? quote) }];
   }
-  const dogs = secondQuote ? [firstQuote, secondQuote] : [firstQuote];
+  return [...booking.submissionPets].sort((a, b) => a.position - b.position).map(pet => ({
+    petId: pet.petId,
+    lateDropoffAt: pet.lateDropoffAt?.toISOString().slice(0, 16),
+    earlyPickupAt: pet.earlyPickupAt?.toISOString().slice(0, 16),
+    returningDiscountRate: storedBoardingDiscount(pet.quotedBreakdown),
+  }));
+}
+
+export function withBoardingDiscounts(quote: PriceBreakdown, reward: boolean, returningRate = 0): PriceBreakdown {
+  if (!reward && !returningRate) return quote;
+  const grossCents = Math.round(quote.boardingSubtotal * 100);
+  const baseCents = Math.round(grossCents * (1 - returningRate));
+  const rewardCents = reward ? Math.round(baseCents / 10) : 0;
+  const totalPrice = (Math.round(quote.totalPrice * 100) - grossCents + baseCents - rewardCents) / 100;
+  return {
+    ...quote,
+    boardingSubtotal: baseCents / 100,
+    ...(returningRate ? { returningDiscountRate: returningRate } : {}),
+    ...(reward ? { loyaltyDiscount: rewardCents / 100 } : {}),
+    totalPrice,
+    depositAmount: Math.round(totalPrice * DEPOSIT_PERCENT) / 100,
+    summary: `Boarding $${(baseCents / 100).toFixed(2)} + fees $${(quote.totalPrice - quote.boardingSubtotal).toFixed(2)} − loyalty $${(rewardCents / 100).toFixed(2)} = $${totalPrice.toFixed(2)}`,
+  };
+}
+
+export function getSubmissionQuote(data: FormValues, terms: DogPricingTerms[] = []): SubmissionQuote {
+  const pets = [{
+    id: data.savedPetId, weight: data.petWeightLb, age: data.petAgeYears,
+    neutered: data.prescreenSpayedNeutered, energy: data.prescreenHighEnergy, medical: data.prescreenMedicalHistory,
+  }];
+  if (data.hasSecondDog) pets.push({
+    id: data.savedSecondPetId, weight: data.secondPetWeightLb, age: data.secondPetAgeYears,
+    neutered: data.secondPrescreenSpayedNeutered, energy: data.secondPrescreenHighEnergy, medical: data.secondPrescreenMedicalHistory,
+  });
+
+  const scheduledArrival = `${data.dropoffDate}T${data.dropoffTime}`;
+  const scheduledPickup = `${data.pickupDate}T${data.pickupTime}`;
+  const dogs = pets.map(pet => {
+    const dog = terms.find(term => term.petId === pet.id);
+    const arrival = dog?.lateDropoffAt || scheduledArrival;
+    const pickup = dog?.earlyPickupAt || scheduledPickup;
+    if (arrival < scheduledArrival || pickup > scheduledPickup)
+      throw new Error("Each dog’s dates must fall within the stay.");
+    const base = calculatePrice(
+      Number(pet.weight), Number(pet.age), pet.neutered, pet.energy, pet.medical,
+      arrival.slice(0, 10), arrival.slice(11), pickup.slice(0, 10), pickup.slice(11),
+      Boolean(dog?.lateDropoffAt || dog?.earlyPickupAt),
+    );
+    if (!base) throw new Error("Unable to calculate price. Check the stay and each dog's pickup time.");
+    return withBoardingDiscounts(base, data.useReward === true, dog?.returningDiscountRate);
+  });
+  return combineDogQuotes(dogs);
+}
+
+export function combineDogQuotes(dogs: PriceBreakdown[]): SubmissionQuote {
   const totalPrice =
     Math.round(dogs.reduce((sum, quote) => sum + quote.totalPrice, 0) * 100) /
     100;
-  const depositAmount =
-    Math.round(
-      dogs.reduce((sum, quote) => sum + quote.depositAmount, 0) * 100,
-    ) / 100;
+  const depositAmount = Math.round(totalPrice * DEPOSIT_PERCENT) / 100;
   return {
     dogs,
     totalPrice,
@@ -170,6 +219,7 @@ function toTimeInputValue(date: Date): string {
 }
 
 type SubmissionLike = {
+  rewardState?: string;
   petId?: string;
   firstTimeBooking: string;
   dropoffAt: Date;
@@ -205,6 +255,7 @@ export function formValuesFromSubmission(
   >;
 
   return {
+    useReward: submission.rewardState === "HELD" || submission.rewardState === "USED",
     firstTimeBooking: submission.firstTimeBooking,
     savedPetId: submission.petId,
     savedSecondPetId: second?.petId,

@@ -21,6 +21,8 @@ export type PriceBreakdown = {
   billableDays: number;
   totalHours: number;
   boardingSubtotal: number;
+  returningDiscountRate?: number;
+  loyaltyDiscount?: number;
   puppyAgeLimitYears: number;
   puppyFeePerDay: number;
   puppyFee: number;
@@ -138,13 +140,14 @@ export function calculatePrice(
   dropoffTime: string,
   pickupDate: string,
   pickupTime: string,
+  allowZeroDuration = false,
 ): PriceBreakdown | null {
   const dropoff = parseDateTime(dropoffDate, dropoffTime);
   const pickup = parseDateTime(pickupDate, pickupTime);
   if (
     !dropoff ||
     !pickup ||
-    pickup <= dropoff ||
+    (allowZeroDuration ? pickup < dropoff : pickup <= dropoff) ||
     weightLb <= 0 ||
     !Number.isFinite(petAgeYears) ||
     petAgeYears < 0

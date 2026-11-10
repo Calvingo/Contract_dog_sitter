@@ -255,6 +255,7 @@ export async function generateSubmissionPdf(
       `$${firstQuote.holidayFee.toFixed(2)} (entire stay: ${firstQuote.holidayDays} day(s) × $${firstQuote.holidayFeePerDay})`
     );
   }
+  if (firstQuote.loyaltyDiscount !== undefined) ctx = drawRow(ctx, "10% boarding reward", `-$${firstQuote.loyaltyDiscount.toFixed(2)}`);
   ctx = drawRow(ctx, "Dog subtotal", `$${firstQuote.totalPrice.toFixed(2)}`);
   if (quote.dogs[1]) {
     const secondQuote = quote.dogs[1];
@@ -270,6 +271,7 @@ export async function generateSubmissionPdf(
     if (secondQuote.highEnergyDogFee > 0) ctx = drawRow(ctx, "High-energy care fee", `$${secondQuote.highEnergyDogFee.toFixed(2)}`);
     if (secondQuote.specialCareFee > 0) ctx = drawRow(ctx, "Special-care fee", `$${secondQuote.specialCareFee.toFixed(2)}`);
     if (secondQuote.holidayFee > 0) ctx = drawRow(ctx, "Holiday fee", `$${secondQuote.holidayFee.toFixed(2)}`);
+    if (secondQuote.loyaltyDiscount !== undefined) ctx = drawRow(ctx, "10% boarding reward", `-$${secondQuote.loyaltyDiscount.toFixed(2)}`);
     ctx = drawRow(ctx, "Dog subtotal", `$${secondQuote.totalPrice.toFixed(2)}`);
   }
   ctx = drawSectionTitle(ctx, "Combined Total");

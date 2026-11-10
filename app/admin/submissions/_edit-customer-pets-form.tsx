@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ActionForm } from "@/components/ActionForm";
 import { PetAgeInput } from "@/components/PetAgeInput";
 import type { FormValues } from "@/lib/form-config";
-import { getSubmissionQuote } from "@/lib/submission-data";
+import { getSubmissionQuote, type DogPricingTerms } from "@/lib/submission-data";
 import { updateCustomerPetActionWithState } from "../actions";
 
 type Field = { name: keyof FormValues; label: string; type?: string; optional?: boolean };
@@ -31,20 +31,21 @@ const secondDogFields: Field[] = [
   { name: "secondPetAgeYears", label: "Age years", type: "number" },
 ];
 
-export function EditCustomerPetsForm({ submissionId, revision, customerId, petId, secondPetId, initialValues }: {
+export function EditCustomerPetsForm({ submissionId, revision, customerId, petId, secondPetId, initialValues, dogTerms }: {
   submissionId: string;
   revision: number;
   customerId: string;
   petId: string;
   secondPetId?: string;
   initialValues: FormValues;
+  dogTerms: DogPricingTerms[];
 }) {
   const [values, setValues] = useState(initialValues);
   let total: string | null = null;
   try {
     const numericFields = ["petWeightLb", "petAgeYears", ...(values.hasSecondDog ? ["secondPetWeightLb", "secondPetAgeYears"] : [])] as const;
     if (numericFields.some(name => !String(values[name as keyof FormValues]).trim())) throw new Error("Missing dog details");
-    total = getSubmissionQuote(values).totalPrice.toFixed(2);
+    total = getSubmissionQuote(values, dogTerms).totalPrice.toFixed(2);
   } catch {
     // A partial number is normal while the administrator is typing.
   }

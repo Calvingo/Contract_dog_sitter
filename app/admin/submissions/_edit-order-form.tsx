@@ -7,7 +7,7 @@ import {
   getPickupDropoffTimeOptions,
   isPickupDropoffTimeAllowed,
 } from "@/lib/booking-time";
-import { getSubmissionQuote } from "@/lib/submission-data";
+import { getSubmissionQuote, type DogPricingTerms } from "@/lib/submission-data";
 import { updateSubmissionActionWithState } from "../actions";
 
 type Schedule = Pick<
@@ -22,8 +22,13 @@ type EditOrderFormProps = {
   defaultDropoffAt: string;
   defaultPickupAt: string;
   defaultPrescreenNotes: string;
+  dogTerms: DogPricingTerms[];
+  dogNames: string[];
   pricingValues: Pick<
     FormValues,
+    | "savedPetId"
+    | "savedSecondPetId"
+    | "useReward"
     | "petWeightLb"
     | "petAgeYears"
     | "prescreenSpayedNeutered"
@@ -45,7 +50,7 @@ export function EditOrderForm({
   defaultDropoffAt,
   defaultPickupAt,
   defaultPrescreenNotes,
-  pricingValues,
+  pricingValues, dogTerms, dogNames,
 }: EditOrderFormProps) {
   const [state, formAction, isPending] = useActionState(
     updateSubmissionActionWithState,
@@ -57,6 +62,7 @@ export function EditOrderForm({
     pickupDate: defaultPickupAt.slice(0, 10),
     pickupTime: defaultPickupAt.slice(11, 16),
   });
+  const [terms, setTerms] = useState(dogTerms);
   let quotedTotal = "";
   let priceError: string | null = null;
   try {
@@ -64,7 +70,7 @@ export function EditOrderForm({
         !isPickupDropoffTimeAllowed(schedule.pickupTime, schedule.pickupDate)) {
       throw new Error("Invalid dropoff or pickup time.");
     }
-    quotedTotal = getSubmissionQuote({ ...initialFormValues, ...pricingValues, ...schedule }).totalPrice.toFixed(2);
+    quotedTotal = getSubmissionQuote({ ...initialFormValues, ...pricingValues, ...schedule }, terms).totalPrice.toFixed(2);
   } catch {
     priceError = "Enter valid dropoff and pickup times, with pickup after dropoff, to calculate the price.";
   }
@@ -145,6 +151,19 @@ export function EditOrderForm({
             </div>
           );
         })}
+        {terms.length > 1 && terms.map((term, index) => (
+          <fieldset key={term.petId} className="grid gap-3 sm:grid-cols-2">
+            <legend>{dogNames[index]} · shorter stay (optional)</legend>
+            {(["lateDropoff", "earlyPickup"] as const).map(kind => (
+              <label key={kind}>{kind === "lateDropoff" ? "Late drop-off" : "Early pickup"}
+                <input className="mt-2 w-full rounded-xl border p-2" type="datetime-local" name={`${kind}${index + 1}`}
+                  value={term[`${kind}At`] || ""} min={`${schedule.dropoffDate}T${schedule.dropoffTime}`}
+                  max={`${schedule.pickupDate}T${schedule.pickupTime}`}
+                  onChange={event => setTerms(terms.map((item, i) => i === index ? { ...item, [`${kind}At`]: event.target.value } : item))} />
+              </label>
+            ))}
+          </fieldset>
+        ))}
         <p className="text-xs text-stone-500">
           Times are in California local time. Available 8:30 AM–9:00 PM; Sundays 3:00–6:00 PM unavailable.
         </p>

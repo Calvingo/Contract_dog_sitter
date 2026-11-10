@@ -1,3 +1,4 @@
+import { reconcileRewardHolds } from "@/lib/services/booking-rewards";
 import { prepareStatusChange } from "@/lib/platform/capacity";
 import { bookingDecisionActions } from "./booking-actions";
 import {
@@ -120,6 +121,7 @@ export async function processAdminSubmissionDecision(options: {
       where: { id: submission.id },
       data: { status: toSubmissionStatus(options.action), ...hold },
     });
+    await reconcileRewardHolds(tx, submission.customerId);
 
     return tx.decisionEvent.create({
       data: {

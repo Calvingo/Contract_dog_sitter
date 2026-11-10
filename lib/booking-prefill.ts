@@ -16,6 +16,7 @@ export type PrefillPet = {
 };
 export type PrefillResponse = {
   authenticated: boolean;
+  rewards?: { days: number; daysToNext: number; available: number; nextCheckAt: number | null };
   customer: {
     hasBookedBefore: boolean;
     firstName: string;

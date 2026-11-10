@@ -251,3 +251,25 @@ export async function reportPayment(
     return failed(error);
   }
 }
+
+
+export async function confirmRevisedPrice(_state: ActionState, form: FormData): Promise<ActionState> {
+  const customer = await requireCustomer();
+  const id = text(form, "id");
+  const revision = Number(form.get("revision"));
+  const amount = text(form, "amount");
+  if (!id || !Number.isInteger(revision) || revision < 1 || !/^\d{1,8}(\.\d{1,2})?$/.test(amount))
+    return { error: "Refresh to review the current price." };
+  const changed = await prisma.$transaction(async tx => {
+    await lockCapacity(tx);
+    return tx.submission.updateMany({
+      where: { id, customerId: customer.id, revision, rewardState: "RECONFIRM",
+        quotedTotal: amount, status: { in: ["PENDING", "NEEDS_REVIEW", "MEET_GREET_REQUESTED"] } },
+      data: { rewardState: "NONE", lastEditedAt: new Date() },
+    });
+  });
+  if (!changed.count) return { error: "This booking changed. Refresh before confirming." };
+  revalidatePath(`/account/bookings/${id}`);
+  revalidatePath(`/admin/submissions/${id}`);
+  return { message: "Revised price confirmed. Your request is ready for review." };
+}

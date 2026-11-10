@@ -59,7 +59,8 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     const signatureBuffer = signatureToBuffer(data.signature);
-    const { submission, quote } = await createSubmissionRecord(data, verifiedOwnerId);
+    const { submission, quote, replayed } = await createSubmissionRecord(data, verifiedOwnerId);
+    if (replayed) return NextResponse.json({ ok: true, submissionId: submission.id, accountAccess: true, replayed: true });
     const emailPending = await scheduleSubmissionNotification(
       data, signatureBuffer, submission.id, {
         revision: submission.revision,

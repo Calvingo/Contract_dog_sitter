@@ -1,3 +1,4 @@
+import { loadRewards } from "@/lib/platform/loyalty";
 import { HOLIDAY_BOOKING_POLICY, type DepositPolicy } from "@/lib/federal-holidays";
 import { acceptedBookingDetails } from "@/lib/platform/accepted-booking";
 import { notFound } from "next/navigation";
@@ -15,7 +16,7 @@ import {
   verifiedAmount,
   recordedPaymentAmount,
 } from "@/lib/platform/rules";
-import { editBooking, reportPayment, requestCancellation } from "../../actions";
+import { confirmRevisedPrice, editBooking, reportPayment, requestCancellation } from "../../actions";
 export default async function BookingDetail({
   params,
   searchParams,
@@ -36,7 +37,7 @@ export default async function BookingDetail({
     },
   });
   if (!booking) notFound();
-  const settings = await getSettings();
+  const [settings, { balance }] = await Promise.all([getSettings(), loadRewards(prisma, customer.id)]);
   const stay = acceptedBookingDetails(booking);
   const hasPendingChanges = booking.acceptedRevision !== null && booking.acceptedRevision !== booking.revision;
   const policy = (booking.acceptedRevision !== null
@@ -83,6 +84,7 @@ export default async function BookingDetail({
           will arrive shortly. You do not need to submit again.
         </p>
       )}
+      <p className="small">Boarding rewards · {balance.days} dog-days earned · {balance.daysToNext} to your next reward · {balance.available} available</p>
       <section className="metric-grid">
         <div className="panel">
           <span>Booking status</span>
@@ -97,6 +99,18 @@ export default async function BookingDetail({
           <h3>{format(stay.pickupAt)}</h3>
         </div>
       </section>
+      {active && booking.rewardState === "RECONFIRM" && <section className="panel">
+        <h2>Confirm your updated price</h2>
+        <p>A change in your completed boarding days removed the reward from this request.</p>
+        <ActionForm action={confirmRevisedPrice} label={`Confirm revised total of $${booking.quotedTotal.toFixed(2)}`}>
+          <input type="hidden" name="id" value={booking.id} />
+          <input type="hidden" name="revision" value={booking.revision} />
+          <input type="hidden" name="amount" value={booking.quotedTotal.toFixed(2)} />
+        </ActionForm>
+      </section>}
+      {(booking.rewardState === "HELD" || booking.rewardState === "USED") && <p className="notice">
+        One 10% boarding reward is {booking.rewardState === "HELD" ? "reserved for this request" : "applied to your stay"}.
+      </p>}
       {hasPendingChanges && <p className="notice">
         The dates and deposit shown are for your confirmed stay. Proposed dates: {format(booking.dropoffAt)} → {format(booking.pickupAt)}.
         {booking.status === "REJECTED" ? " Your proposed changes were declined; the original stay remains confirmed." : " Your changes are awaiting review."}
@@ -122,7 +136,7 @@ export default async function BookingDetail({
                 <dd>${depositDue(stay.quotedTotal).toFixed(2)}</dd>
               </div>
               <div>
-                <dt>Historical verified payments</dt>
+                <dt>Confirmed payments after refunds</dt>
                 <dd>${verifiedAmount(booking).toFixed(2)}</dd>
               </div>
               <div>
@@ -215,6 +229,7 @@ export default async function BookingDetail({
                     {p.method === "TRANSFER" ? "Transfer" : p.method} · ${Number(p.amount).toFixed(2)}
                   </span>
                   <span className="pill">{p.status.replaceAll("_", " ")}</span>
+                  {Number(p.refundedAmount) > 0 && <p className="small">Refunded to date: ${p.refundedAmount.toFixed(2)}</p>}
                   {p.reviewNote && <p className="small">{p.reviewNote}</p>}
                 </div>
               ))}

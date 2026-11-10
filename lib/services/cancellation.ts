@@ -1,3 +1,4 @@
+import { reconcileRewardHolds } from "./booking-rewards";
 import { prisma } from "@/lib/db";
 import { sendMail, parseAdminEmails, BRAND_NAME, getEnv } from "@/lib/mailer";
 import { logEmail } from "@/lib/email-log";
@@ -25,8 +26,9 @@ export async function cancelAdminBooking(id: string, revision: number, expectedS
     await archiveSubmissionRevision(tx, current);
     await tx.submission.update({
       where: { id },
-      data: { status: "CANCELLED", revision: { increment: 1 }, lastEditedAt: new Date(), holdExpiresAt: null },
+      data: { status: "CANCELLED", rewardState: "NONE", revision: { increment: 1 }, lastEditedAt: new Date(), holdExpiresAt: null },
     });
+    await reconcileRewardHolds(tx, current.customerId);
     // Keep accepted terms, quoted amounts, payments and the customer's request as history.
     return current;
   });

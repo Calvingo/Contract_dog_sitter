@@ -24,6 +24,8 @@ export async function archiveSubmissionRevision(
       petSnapshot: current.petSnapshot as Prisma.InputJsonValue,
       petsSnapshot: current.submissionPets.map((item) => ({
         position: item.position,
+        ...(item.lateDropoffAt ? { lateDropoffAt: item.lateDropoffAt.toISOString() } : {}),
+        ...(item.earlyPickupAt ? { earlyPickupAt: item.earlyPickupAt.toISOString() } : {}),
         petSnapshot: item.petSnapshot,
         prescreenAnswers: item.prescreenAnswers,
         prescreenNotes: item.prescreenNotes,

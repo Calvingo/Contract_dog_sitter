@@ -188,6 +188,7 @@ function formatSinglePricingSection(quote: PriceBreakdown, dogName: string): str
     rowHtml("Daily rate", `$${quote.dailyRate}`),
     rowHtml("Boarding subtotal", `$${quote.boardingSubtotal.toFixed(2)}`),
   ];
+  if (quote.loyaltyDiscount !== undefined) rows.push(rowHtml("10% boarding reward", `−$${quote.loyaltyDiscount.toFixed(2)}`));
   if (quote.puppyFee > 0) {
     rows.push(
       rowHtml(

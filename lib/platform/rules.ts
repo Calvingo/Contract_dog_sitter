@@ -58,38 +58,41 @@ export type OccupancyBooking = {
   pickupAt: Date;
   submissionPets: unknown[];
 };
-type PaymentRecord = { status: string; amount: { toString(): string } | number };
+type Amount = { toString(): string } | number;
+type PaymentRecord = { status: string; amount: Amount; refundedAmount?: Amount };
+
+export function netReceiptCents(payments: PaymentRecord[]) {
+  // REFUNDED historically replaced VERIFIED on the same receipt: net zero.
+  return payments.reduce((sum, payment) => payment.status === "VERIFIED"
+    ? sum + Math.round(Number(payment.amount) * 100) - Math.round(Number(payment.refundedAmount ?? 0) * 100)
+    : sum, 0);
+}
 
 // These are reported/historical records, not a reconciliation of offline funds.
 export function paymentSummary(payments: PaymentRecord[]) {
   const totalFor = (status: string) => Math.round(payments
     .filter(payment => payment.status === status)
     .reduce((sum, payment) => sum + Number(payment.amount), 0) * 100) / 100;
+  const partialRefundCents = payments.reduce((sum, payment) => payment.status === "VERIFIED"
+    ? sum + Math.round(Number(payment.refundedAmount ?? 0) * 100) : sum, 0);
   return {
     reportedCount: payments.filter(payment => payment.status === "REPORTED").length,
     reportedAmount: totalFor("REPORTED"),
     historicalVerifiedAmount: totalFor("VERIFIED"),
-    historicalRefundedAmount: totalFor("REFUNDED"),
+    historicalRefundedAmount: (Math.round(totalFor("REFUNDED") * 100) + partialRefundCents) / 100,
   };
 }
 
 // A notification is a customer's claim, never proof of receipt.
 export function recordedPaymentAmount(booking: { payments: PaymentRecord[] }): number {
+  // A later offline refund does not request another deposit from the customer.
   return Math.round(booking.payments
     .filter(payment => ["REPORTED", "VERIFIED"].includes(payment.status))
     .reduce((sum, payment) => sum + Number(payment.amount), 0) * 100) / 100;
 }
 
-export function verifiedAmount(
-  booking: {payments: PaymentRecord[]},
-): number {
-  return (
-    Math.round(
-      booking.payments
-        .filter((p) => p.status === "VERIFIED")
-        .reduce((sum, p) => sum + Number(p.amount), 0) * 100,
-    ) / 100
-  );
+export function verifiedAmount(booking: { payments: PaymentRecord[] }): number {
+  return netReceiptCents(booking.payments) / 100;
 }
 export function reservesCapacity(
   booking: OccupancyBooking,

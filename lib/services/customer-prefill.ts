@@ -1,3 +1,4 @@
+import { loadRewards } from "@/lib/platform/loyalty";
 import { prisma } from "@/lib/db";
 import type { PrefillResponse } from "@/lib/booking-prefill";
 
@@ -38,8 +39,10 @@ export async function loadCustomerPrefill(
     },
   });
   if (!customer) return null;
+  const { balance, nextCheckAt } = await loadRewards(prisma, customerId);
   return {
     authenticated: true,
+    rewards: { ...balance, nextCheckAt },
     customer: {
       hasBookedBefore: customer._count.submissions > 0,
       firstName: customer.firstName,

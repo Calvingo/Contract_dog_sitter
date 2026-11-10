@@ -4,7 +4,7 @@ export type SubmissionPetDisplay = {
 };
 
 export function submissionDogNames(
-  submissionPets: SubmissionPetDisplay[],
+  submissionPets: { pet: { name: string } }[],
   fallbackName: string
 ): string {
   return submissionPets.map((item) => item.pet.name).join(" & ") || fallbackName;

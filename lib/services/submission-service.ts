@@ -1,3 +1,5 @@
+import { loadRewards, discounted } from "@/lib/platform/loyalty";
+import { reconcileRewardHolds } from "./booking-rewards";
 import { bookingEmailAllowed, BOOKING_UNAVAILABLE_MESSAGE } from "@/lib/platform/booking-blocklist";
 import {
   BookingConflict,
@@ -18,7 +20,9 @@ import {
   buildPetPrescreenAnswers,
   getSubmissionDateTimes,
   getSubmissionQuote,
+  storedDogTerms,
   type PetSnapshot,
+  type SubmissionQuote,
 } from "@/lib/submission-data";
 
 // Stable IDs let owners correct a dog's name without creating a second profile.
@@ -87,6 +91,23 @@ export async function createSubmissionRecord(
       : null;
     if (customerId && (!owner || owner.email !== customerSnapshot.email))
       throw new BookingConflict("Please use your signed-in email address.");
+    const rewardRequestId = data.useReward === true ? data.rewardRequestId : undefined;
+    if (rewardRequestId !== undefined) {
+      if (typeof rewardRequestId !== "string" || !/^[0-9a-f-]{36}$/i.test(rewardRequestId) || !owner)
+        throw new BookingConflict("Sign in and reload to use a reward.");
+      const previous = await tx.submission.findUnique({
+        where: { customerId_rewardRequestId: { customerId: owner.id, rewardRequestId } },
+        include: { pet: true, submissionPets: { orderBy: { position: "asc" }, include: { pet: true } } },
+      });
+      if (previous) return {
+        replayed: true, submission: previous, customer: owner, pet: previous.pet,
+        pets: previous.submissionPets.map(row => row.pet),
+        quote: previous.quotedBreakdown as unknown as SubmissionQuote,
+      };
+    }
+    if (data.useReward === true && (!owner || !(await loadRewards(tx, owner.id)).balance.available)) {
+      throw new BookingConflict("This reward is unavailable. Refresh the booking page to review your rewards and price.");
+    }
     await assertCapacity(tx, dropoffAt, pickupAt, petSnapshots.length);
     const settings = await getSettings(tx);
     const customer = await tx.customer.upsert({
@@ -141,6 +162,8 @@ export async function createSubmissionRecord(
     const submission = await tx.submission.create({
       data: {
         customerId: customer.id,
+        rewardRequestId,
+        rewardState: data.useReward === true ? "HELD" : "NONE",
         petId: pet.id,
         holdExpiresAt: new Date(now.getTime() + settings.holdHours * 3600000),
         agreementVersion: "2026-10-federal-v1",
@@ -179,7 +202,7 @@ export async function createSubmissionRecord(
       },
     });
 
-    return { submission, customer, pet, pets, quote };
+    return { replayed: false, submission, customer, pet, pets, quote };
   });
 }
 
@@ -195,7 +218,6 @@ export async function updateSubmissionRecord(options: {
   const prescreenAnswersByPet = buildPetPrescreenAnswers(options.data);
   const petSnapshot = petSnapshots[0];
   const prescreenAnswers = prescreenAnswersByPet[0];
-  const quote = getSubmissionQuote(options.data);
   const { dropoffAt, pickupAt } = getSubmissionDateTimes(options.data);
   const now = new Date();
 
@@ -268,6 +290,14 @@ export async function updateSubmissionRecord(options: {
     const pets = await saveBookingPets(tx, customer.id, options.data, petSnapshots, prescreenAnswersByPet, true);
     const pet = pets[0];
 
+    // Only terms belonging to these saved dogs follow a customer edit.
+    const priorTerms = storedDogTerms(current);
+    const terms = pets.map(saved => priorTerms.find(term => term.petId === saved.id) ?? { petId: saved.id });
+    const useReward = discounted(current.rewardState);
+    if (Boolean(options.data.useReward) !== useReward)
+      throw new BookingConflict("The reward on this booking changed. Reload the edit page to confirm the revised price.");
+    const quote = getSubmissionQuote({ ...options.data, useReward, savedPetId: pets[0].id, savedSecondPetId: pets[1]?.id }, terms);
+
     const nextStatus =
       current.status === SubmissionStatus.PENDING
         ? SubmissionStatus.PENDING
@@ -285,6 +315,7 @@ export async function updateSubmissionRecord(options: {
           acceptedDepositPolicySnapshot:current.depositPolicySnapshot ?? undefined,
         } : {}),
         holdExpiresAt,
+        ...(current.rewardState === "RECONFIRM" ? { rewardState: "NONE" } : {}),
         revision: current.revision + 1,
         // New signature: archive the original agreement and policy in the revision above.
         agreementVersion: "2026-10-federal-v1",
@@ -312,6 +343,8 @@ export async function updateSubmissionRecord(options: {
     await tx.submissionPet.createMany({
       data: pets.map((savedPet, index) => ({
         submissionId: current.id,
+        lateDropoffAt: terms[index]?.lateDropoffAt ? new Date(terms[index].lateDropoffAt + ":00Z") : null,
+        earlyPickupAt: terms[index]?.earlyPickupAt ? new Date(terms[index].earlyPickupAt + ":00Z") : null,
         petId: savedPet.id,
         position: index + 1,
         petSnapshot: petSnapshots[index] as unknown as Prisma.InputJsonValue,
@@ -325,6 +358,7 @@ export async function updateSubmissionRecord(options: {
       })),
     });
 
+    await reconcileRewardHolds(tx, current.customerId);
     return {
       submission,
       customer,

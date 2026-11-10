@@ -1,3 +1,4 @@
+import { reconcileRewardHolds } from "@/lib/services/booking-rewards";
 import { prepareStatusChange } from "@/lib/platform/capacity";
 import {
   DecisionAction as DbDecisionAction,
@@ -186,6 +187,11 @@ export async function processDecision(
       };
     }
 
+    if (decisionAction === "accept" && submission.rewardState === "RECONFIRM") {
+      return { ok: false, status: 409, title: "Price confirmation required",
+        message: "The customer must confirm the revised price in their account before this booking can be accepted." };
+    }
+
     if (decisionAction === "meet_greet") {
       await prisma.$transaction(async (tx) => {
         const hold = await prepareStatusChange(
@@ -248,6 +254,7 @@ export async function processDecision(
         where: { id: submission.id },
         data: { status: toSubmissionStatus(decisionAction), ...hold },
       });
+      await reconcileRewardHolds(tx, submission.customerId);
 
       return tx.decisionEvent.create({
         data: {

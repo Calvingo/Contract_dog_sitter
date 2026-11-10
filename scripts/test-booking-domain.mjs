@@ -67,6 +67,21 @@ const edited={...booking,status:"NEEDS_REVIEW",dropoffAt:new Date("2027-01-01"),
 assert.deepEqual([...rules.occupancyByDay([edited],true).keys()],["2026-11-01","2026-11-02","2026-11-03"]);
 assert.equal(rules.occupancyByDay([{...edited,status:"CANCELLED"}],true).size,0);
 console.log("PASS Sunday boundaries, 11 nationwide federal holidays, observed/year-crossing policy, surcharge separation, 72h, legacy dog count, deduplication and accepted edit snapshot.");
+const { completedDogDays, rewardBalance, pacificWallTime } = require("../lib/platform/loyalty.ts");
+const pickup = new Date("2026-11-03T12:00:00Z");
+const legacy = { ...booking, dropoffAt: new Date("2026-11-02T08:30:00Z"), pickupAt: pickup, submissionPets: [] };
+assert.equal(completedDogDays(legacy, pacificWallTime(new Date("2026-11-03T19:59:59Z"))), 0);
+assert.equal(completedDogDays(legacy, pacificWallTime(new Date("2026-11-03T20:00:00Z"))), 1.5);
+assert.equal(pacificWallTime(new Date("2026-07-01T07:00:00Z")).toISOString(), "2026-07-01T00:00:00.000Z");
+for (const status of ["CANCELLED", "PENDING", "NEEDS_REVIEW", "REJECTED", "MEET_GREET_REQUESTED"])
+  assert.equal(completedDogDays({ ...legacy, status }, pickup), 0);
+assert.deepEqual(rewardBalance(250, 0, 0), { days: 250, available: 2, daysToNext: 50 });
+assert.deepEqual(rewardBalance(95, 1, 0), { days: 95, available: 0, daysToNext: 105 });
+assert.equal(rules.netReceiptCents([
+  { status: "VERIFIED", amount: 155.55, refundedAmount: 55.5 }, { status: "REFUNDED", amount: 50 },
+  { status: "REPORTED", amount: 50 }, { status: "REJECTED", amount: 50 },
+]), 10005);
+console.log("PASS legacy dog-days at Pacific pickup, half days, status exclusions, reward debt and historical net receipts.");
 if (!process.env.TEST_DATABASE_URL) process.exit(0);
 const url=new URL(process.env.TEST_DATABASE_URL);
 assert.ok(["localhost","127.0.0.1"].includes(url.hostname)&&url.port==="55439","Dedicated local test DB only");
@@ -184,7 +199,7 @@ try {
   });
   assert.deepEqual(await prisma.payment.findMany({ where: { submissionId: restored.submission.id }, orderBy: { id: "asc" } }), beforeReport, "Reporting preserves original payment amounts, status and notes");
   const columns = await prisma.$queryRaw`SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'Payment' ORDER BY column_name`;
-  assert.deepEqual(columns.map(column => column.column_name), ["amount", "createdAt", "id", "method", "payerName", "reference", "reviewNote", "reviewedAt", "reviewedBy", "status", "submissionId"], "Payment retains its original database columns");
+  assert.deepEqual(columns.map(column => column.column_name), ["amount", "createdAt", "id", "method", "offlineReference", "payerName", "reference", "refundedAmount", "reviewNote", "reviewedAt", "reviewedBy", "status", "submissionId"], "Offline reconciliation extends the historical payment columns");
   assert.equal((await availability("2090-04-01","2090-04-03")).days[0].occupied,1,"Historical payment and refund records do not change occupancy");
   // Admin edits archive the signed agreement and recompute only its existing policy.
   const adminSession = require("../lib/auth/admin-session.ts");
@@ -254,7 +269,7 @@ try {
   assert.ok(!agreementSectionsForVersion("2026-05").some(section=>section.body.includes("Holiday Booking Policy")));
   assert.ok(agreementSectionsForVersion("2026-10-federal-v1").some(section=>section.body.includes("Holiday Booking Policy")));
   console.log("PASS migration recovers last accepted revision, preserves original signed terms, extends exact 24h deadlines to 72h and retains custom hold settings.");
-  console.log("PASS cancellation ownership/deduplication, all admin recipients, persisted SMTP failure, accepted capacity preservation, admin-only block/unblock audit and marketing isolation; read-only financial summaries preserve historical amounts/status/notes and the original Payment schema.");
+  console.log("PASS cancellation ownership/deduplication, all admin recipients, persisted SMTP failure, accepted capacity preservation, admin-only block/unblock audit and marketing isolation; read-only financial summaries preserve historical amounts/status/notes and support partial refund records.");
   console.log("PASS real PostgreSQL concurrent acceptance, repeat acceptance, three-day/two-dog occupancy, edited and reaccepted dates, expiry persistence, block/unblock, reduced limit, cancellation, normalized blocklist enforcement and unblock/marketing isolation.");
 } finally {
   await prisma.bookingBlocklistEvent.deleteMany({where:{email:"mixed@example.test"}});
