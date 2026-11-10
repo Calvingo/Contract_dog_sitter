@@ -7,7 +7,7 @@ import {
   getPickupDropoffTimeOptions,
   isPickupDropoffTimeAllowed,
 } from "@/lib/booking-time";
-import { getSubmissionQuote, type DogPricingTerms } from "@/lib/submission-data";
+import { getSubmissionQuote, type DogPricingTerms, type ManualOrderPrice } from "@/lib/submission-data";
 import { updateSubmissionActionWithState } from "../actions";
 
 type Schedule = Pick<
@@ -24,6 +24,7 @@ type EditOrderFormProps = {
   defaultPrescreenNotes: string;
   dogTerms: DogPricingTerms[];
   dogNames: string[];
+  manualPrice?: ManualOrderPrice;
   pricingValues: Pick<
     FormValues,
     | "savedPetId"
@@ -50,7 +51,7 @@ export function EditOrderForm({
   defaultDropoffAt,
   defaultPickupAt,
   defaultPrescreenNotes,
-  pricingValues, dogTerms, dogNames,
+  pricingValues, dogTerms, dogNames, manualPrice,
 }: EditOrderFormProps) {
   const [state, formAction, isPending] = useActionState(
     updateSubmissionActionWithState,
@@ -63,14 +64,21 @@ export function EditOrderForm({
     pickupTime: defaultPickupAt.slice(11, 16),
   });
   const [terms, setTerms] = useState(dogTerms);
+  const [priceMode, setPriceMode] = useState("keep");
+  const [manualTotal, setManualTotal] = useState("");
   let quotedTotal = "";
+  let calculatedTotal = "";
+  let hasManualPrice = false;
   let priceError: string | null = null;
   try {
     if (!isPickupDropoffTimeAllowed(schedule.dropoffTime, schedule.dropoffDate) ||
         !isPickupDropoffTimeAllowed(schedule.pickupTime, schedule.pickupDate)) {
       throw new Error("Invalid dropoff or pickup time.");
     }
-    quotedTotal = getSubmissionQuote({ ...initialFormValues, ...pricingValues, ...schedule }, terms).totalPrice.toFixed(2);
+    const quote = getSubmissionQuote({ ...initialFormValues, ...pricingValues, ...schedule }, terms, priceMode === "keep" ? manualPrice : undefined);
+    quotedTotal = quote.totalPrice.toFixed(2);
+    calculatedTotal = quote.dogs.reduce((sum, dog) => sum + dog.totalPrice, 0).toFixed(2);
+    hasManualPrice = Boolean(quote.manualPrice);
   } catch {
     priceError = "Enter valid dropoff and pickup times, with pickup after dropoff, to calculate the price.";
   }
@@ -167,15 +175,28 @@ export function EditOrderForm({
         <p className="text-xs text-stone-500">
           Times are in California local time. Available 8:30 AM–9:00 PM; Sundays 3:00–6:00 PM unavailable.
         </p>
-        <label className="block">
-          <span className="text-sm font-medium text-stone-700">Quoted total</span>
+        <fieldset className="grid gap-2">
+          <legend className="text-sm font-medium text-stone-700">Order price (USD)</legend>
+          <select aria-label="Order pricing" name="priceMode" value={priceMode}
+            className="mt-2 w-full rounded-xl border border-stone-200 px-3 py-3"
+            onChange={event => {
+              if (event.target.value === "manual") setManualTotal(quotedTotal);
+              setPriceMode(event.target.value);
+            }}>
+            <option value="keep">{hasManualPrice || manualPrice ? "Use current order pricing" : "Use calculated price"}</option>
+            <option value="manual">Set final price manually</option>
+            {manualPrice && <option value="automatic">Restore calculated price</option>}
+          </select>
           <input
             type="number"
-            name="quotedTotal"
+            aria-label="Final order price in dollars"
+            name={priceMode === "manual" ? "manualTotal" : undefined}
             min="0"
+            max="99999999.99"
             step="0.01"
-            value={quotedTotal}
-            readOnly
+            value={priceMode === "manual" ? manualTotal : quotedTotal}
+            onChange={event => setManualTotal(event.target.value)}
+            readOnly={priceMode !== "manual"}
             aria-describedby="order-price-help"
             aria-invalid={Boolean(priceError)}
             className="mt-2 w-full rounded-xl border border-stone-200 px-3 py-3"
@@ -186,9 +207,11 @@ export function EditOrderForm({
             role={priceError ? "alert" : undefined}
             className={`mt-2 block text-xs ${priceError ? "text-red-700" : "text-stone-500"}`}
           >
-            {priceError || "Price recalculates automatically from the stay and dogs. The server recalculates it again when you save."}
+            {priceError || (priceMode === "manual" || hasManualPrice
+              ? `Calculated price: $${calculatedTotal}. The manual total applies only to this stay. Changing the stay or its charges recalculates the price. Recorded payments are unchanged.`
+              : "Calculated from this stay and its dogs. Choose “Set final price manually” to enter a different total.")}
           </span>
-        </label>
+        </fieldset>
         <label className="block">
           <span className="text-sm font-medium text-stone-700">Prescreen notes</span>
           <textarea

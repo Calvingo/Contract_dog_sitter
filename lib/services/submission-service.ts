@@ -21,6 +21,7 @@ import {
   getSubmissionDateTimes,
   getSubmissionQuote,
   storedDogTerms,
+  storedManualPrice,
   type PetSnapshot,
   type SubmissionQuote,
 } from "@/lib/submission-data";
@@ -296,7 +297,7 @@ export async function updateSubmissionRecord(options: {
     const useReward = discounted(current.rewardState);
     if (Boolean(options.data.useReward) !== useReward)
       throw new BookingConflict("The reward on this booking changed. Reload the edit page to confirm the revised price.");
-    const quote = getSubmissionQuote({ ...options.data, useReward, savedPetId: pets[0].id, savedSecondPetId: pets[1]?.id }, terms);
+    const quote = getSubmissionQuote({ ...options.data, useReward, savedPetId: pets[0].id, savedSecondPetId: pets[1]?.id }, terms, storedManualPrice(current.quotedBreakdown));
 
     const nextStatus =
       current.status === SubmissionStatus.PENDING

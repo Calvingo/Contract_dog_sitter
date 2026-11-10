@@ -26,7 +26,7 @@ import { PriceEstimate } from "@/components/PriceEstimate";
 import { SignaturePad } from "@/components/SignaturePad";
 import { isPickupDropoffTimeAllowed } from "@/lib/booking-time";
 import { todayKey } from "@/lib/platform/rules";
-import type { DogPricingTerms } from "@/lib/submission-data";
+import type { DogPricingTerms, ManualOrderPrice } from "@/lib/submission-data";
 import { parseDateTime } from "@/lib/pricing";
 import { applySavedProfileIds, profileReadyToSave, profileSavePayload } from "@/lib/profile-autosave";
 import {
@@ -53,6 +53,7 @@ function HomePageContent() {
   const editToken = searchParams.get("editToken");
   const rewardRequestId = useRef("");
   const [editTerms, setEditTerms] = useState<DogPricingTerms[]>([]);
+  const [editPrice, setEditPrice] = useState<ManualOrderPrice>();
   const [editRevision, setEditRevision] = useState<number | undefined>(undefined);
   const [formValues, setFormValues] = useState<FormValues>(initialFormValues);
   const [errors, setErrors] = useState<
@@ -301,6 +302,7 @@ function HomePageContent() {
         const data = (await response.json()) as {
           values?: FormValues;
           dogTerms?: DogPricingTerms[];
+          manualPrice?: ManualOrderPrice;
           revision?: number;
           notice?: string;
           error?: string;
@@ -314,6 +316,7 @@ function HomePageContent() {
         }
 
         setEditTerms(data.dogTerms || []);
+        setEditPrice(data.manualPrice);
         setEditRevision(data.revision);
         setFormValues({
           ...data.values,
@@ -877,6 +880,7 @@ function HomePageContent() {
             )}
             <PriceEstimate
               terms={editTerms}
+              manualPrice={editToken ? editPrice : undefined}
               values={formValues}
               title={ui.priceEstimateTitle}
               incompleteHint={ui.priceEstimateIncomplete}

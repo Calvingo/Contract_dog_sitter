@@ -7,7 +7,7 @@ import { notFound, redirect } from "next/navigation";
 import { getAdminSession } from "@/lib/auth/admin-session";
 import { prisma } from "@/lib/db";
 import { submissionDogNames } from "@/lib/submission-pets";
-import { formValuesFromSubmission, storedDogTerms } from "@/lib/submission-data";
+import { formValuesFromSubmission, storedDogTerms, storedManualPrice } from "@/lib/submission-data";
 import { CancelOrderForm } from "@/components/CancelOrderForm";
 import { AdminShell } from "../../admin-ui";
 import { EditOrderForm } from "../_edit-order-form";
@@ -54,6 +54,7 @@ export default async function AdminSubmissionDetailPage(props: {
   if (!submission) notFound();
 
   const values = formValuesFromSubmission(submission);
+  const manualPrice = storedManualPrice(submission.quotedBreakdown);
   const bookingBlock = await prisma.bookingBlocklist.findUnique({where:{email:submission.customer.email.toLowerCase()}});
   return (
     <AdminShell
@@ -107,6 +108,7 @@ export default async function AdminSubmissionDetailPage(props: {
             defaultDropoffAt={localDateTimeInputValue(submission.dropoffAt)}
             defaultPickupAt={localDateTimeInputValue(submission.pickupAt)}
             defaultPrescreenNotes={submission.prescreenNotes || ""}
+            manualPrice={manualPrice}
             dogTerms={storedDogTerms(submission)}
             dogNames={[values.petName, values.secondPetName]}
             pricingValues={{
@@ -134,6 +136,7 @@ export default async function AdminSubmissionDetailPage(props: {
             petId={submission.petId}
             secondPetId={submission.submissionPets.find(pet => pet.position === 2)?.petId}
             initialValues={values}
+            manualPrice={manualPrice}
             dogTerms={storedDogTerms(submission)}
           />}
 

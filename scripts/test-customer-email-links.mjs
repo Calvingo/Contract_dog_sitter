@@ -172,12 +172,17 @@ const declinedEdit = buildDecisionEmail(decisionPayload, "reject", { acceptedSta
 assert.match(declinedEdit.html, /previously accepted stay remains confirmed/);
 const { sendSubmissionEmails } = require("../lib/email.ts");
 const { initialFormValues } = require("../lib/form-config.ts");
-await sendSubmissionEmails({
-  ...initialFormValues, email: "alice@example.test", firstName: "Alice", petName: "Dog",
+const { getSubmissionQuote } = require("../lib/submission-data.ts");
+const stay = {
+  ...initialFormValues, email: "alice@example.test", firstName: "Alice", petName: "Dog", savedPetId: "dog-alice",
   petWeightLb: "20", petAgeYears: "2", prescreenSpayedNeutered: "yes",
   dropoffDate: "2027-04-01", dropoffTime: "10:00", pickupDate: "2027-04-02", pickupTime: "10:00",
-}, Buffer.from("test"), "booking-alice", { sendAdminNotification: false });
+};
+const quote = getSubmissionQuote(stay, [], 75.25);
+await sendSubmissionEmails(stay, Buffer.from("test"), "booking-alice", { sendAdminNotification: false, quote });
 const receipt = messages.at(-1);
+assert.match(receipt.html, /\$75\.25/);
+assert.match(receipt.html, /\$15\.05/);
 const receiptLink = receipt.html.match(/href="([^"]+)"[^>]*>Edit your submission/)[1].replaceAll("&amp;", "&");
 cookies.clear();
 const receiptResponse = await open(receiptLink);
@@ -193,11 +198,13 @@ editRecord.submission = {
   customer: customers.get("alice@example.test"),
   firstTimeBooking: "yes", dropoffAt: new Date("2027-04-01T10:00:00Z"), pickupAt: new Date("2027-04-02T10:00:00Z"),
   prescreenAnswers: {}, customerSnapshot: { email: "alice@example.test" }, petSnapshot: {},
+  petId: stay.savedPetId, submissionPets: [], quotedBreakdown: quote,
 };
 const oldToken = new URL(receiptResponse.headers.get("location"), process.env.APP_BASE_URL).searchParams.get("editToken");
 cookies.clear();
 const editResponse = await editGET(new Request(`https://boarding.example.test/api/submission/edit?token=${oldToken}`));
 assert.equal(editResponse.status, 200);
+assert.deepEqual((await editResponse.json()).manualPrice, quote.manualPrice);
 assert.equal((await getCustomerSession()).customerId, "alice");
 assert.equal(editResponse.headers.get("cache-control"), "no-store");
 editRecord.expiresAt = new Date(0);

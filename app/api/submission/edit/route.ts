@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import type { FormValues } from "@/lib/form-config";
 import { scheduleSubmissionNotification } from "@/lib/services/submission-notification";
 import { findValidSubmissionEditToken } from "@/lib/submission-edit-token";
-import { formValuesFromSubmission, storedDogTerms } from "@/lib/submission-data";
+import { formValuesFromSubmission, storedDogTerms, storedManualPrice } from "@/lib/submission-data";
 import { updateSubmissionRecord } from "@/lib/services/submission-service";
 import { signatureToBuffer, validateSubmission } from "@/lib/validate";
 import { setCustomerSession } from "@/lib/auth/customer-session";
@@ -54,6 +54,7 @@ export async function GET(request: Request) {
     status: editToken.submission.status,
     revision: editToken.submission.revision,
     dogTerms: storedDogTerms(editToken.submission),
+    manualPrice: storedManualPrice(editToken.submission.quotedBreakdown),
     values: formValuesFromSubmission(editToken.submission),
     notice:
       editToken.submission.status === SubmissionStatus.ACCEPTED

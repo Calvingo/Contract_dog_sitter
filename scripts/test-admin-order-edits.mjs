@@ -146,6 +146,37 @@ try {
   await prisma.payment.create({ data: { submissionId: current.id, method: "zelle", amount: 100, payerName: "Test", reference: "offline", status: "VERIFIED", reviewNote: "Keep this history" } });
   current = await load(current.id);
   const beforeCapacity = await availability("2093-12-24", "2093-12-27");
+  const setTotal = (booking, amount) => updateSubmissionActionWithState(null, orderForm(booking, { priceMode: "manual", manualTotal: amount }));
+  const beforePrice = current;
+  for (const value of ["", "-1", "12.345", "100000000", "not money"]) {
+    assert.match((await setTotal(current, value)).error, /Enter a price/);
+  }
+  admin = false;
+  assert.match((await setTotal(current, "0")).error, /admin\/login/);
+  admin = true;
+  assert.equal((await load(current.id)).revision, current.revision);
+  assert.ok((await setTotal(current, "123.45")).ok);
+  current = await load(current.id);
+  assert.equal(Number(current.quotedTotal), 123.45);
+  assert.deepEqual(current.quotedBreakdown.dogs, beforePrice.quotedBreakdown.dogs);
+  assert.deepEqual(current.payments, beforePrice.payments);
+  assert.equal(current.acceptedDepositPolicySnapshot.deposit, 24.69);
+  assert.equal(receipts.at(-1)[3].quote.totalPrice, 123.45);
+  assert.equal(receipts.at(-1)[3].quote.depositAmount, 24.69);
+  assert.equal(Number(current.revisions.find(row => row.revision === beforePrice.revision).quotedTotal), Number(beforePrice.quotedTotal));
+  assert.match((await setTotal(beforePrice, "12")).error, /changed/);
+  assert.ok((await updateCustomerPetActionWithState({}, petForm(current, { petName: "Coco" }))).message);
+  current = await load(current.id);
+  assert.equal(Number(current.quotedTotal), 123.45, "Non-pricing edits retain this order's final price");
+  assert.ok((await setTotal(current, "0")).ok);
+  current = await load(current.id);
+  assert.equal(Number(current.quotedTotal), 0);
+  assert.equal(current.acceptedDepositPolicySnapshot.deposit, 0);
+  assert.ok((await updateSubmissionActionWithState(null, orderForm(current, { priceMode: "automatic" }))).ok);
+  current = await load(current.id);
+  assertQuote(current);
+  assert.deepEqual(await load(other.submission.id), unchangedOther);
+  console.log("PASS manual final prices, zero, validation, admin authorization, stale saves, automatic reset and unchanged payments.");
   assert.ok(beforeCapacity.days.every(day => day.occupied === 2));
   assert.match((await cancelSubmissionActionWithState({}, cancelForm(current, { confirmCancellation: "" }))).error, /Confirm/);
   assert.match((await cancelSubmissionActionWithState({}, cancelForm(current, { revision: current.revision - 1 }))).error, /changed/);
@@ -197,8 +228,15 @@ try {
 
   const single = await createSubmissionRecord({ ...values, hasSecondDog: false, dropoffDate: "2093-11-01", pickupDate: "2093-11-03" });
   await accept(single.submission.id);
+  assert.ok((await setTotal(await load(single.submission.id), "400")).ok);
+  const signed = await load(single.submission.id);
+  const customerEdit = { ...formValuesFromSubmission(signed), agreed: true, signature: values.signature, manualTotal: "0", priceMode: "manual" };
+  const contactOnly = await updateSubmissionRecord({ submissionId: signed.id, data: { ...customerEdit, firstName: "Updated" } });
+  assert.equal(contactOnly.quote.totalPrice, 400, "Customer edits may not set a price");
   await updateSubmissionRecord({ submissionId: single.submission.id, data: { ...values, dropoffDate: "2093-11-05", pickupDate: "2093-11-07" } });
   const edited = await load(single.submission.id);
+  assert.equal(edited.quotedBreakdown.manualPrice, undefined);
+  assert.equal(Number(edited.quotedTotal), getSubmissionQuote(formValuesFromSubmission(edited)).totalPrice);
   assert.equal(edited.acceptedDogs, 1);
   assert.equal(edited.submissionPets.length, 2);
   const singleBefore = await availability("2093-11-01", "2093-11-03");
@@ -244,6 +282,7 @@ try {
   const discounted = await load(rewardId);
   assert.ok(Number(discounted.quotedTotal) < fullPrice);
   assert.equal(Number(discounted.quotedTotal), fullPrice - 26);
+  assert.ok((await setTotal(discounted, "99")).ok);
   const correctPickup = async earlyPickup1 => {
     const h = await load(history.submission.id);
     const result = await updateSubmissionActionWithState(null, orderForm(h, { earlyPickup1 }));
@@ -253,6 +292,7 @@ try {
   assert.deepEqual(await balance(), { days: 95, available: 0, daysToNext: 5 });
   const revised = await load(rewardId);
   assert.equal(revised.rewardState, "RECONFIRM");
+  assert.equal(revised.quotedBreakdown.manualPrice, undefined);
   assert.equal(Number(revised.quotedTotal), fullPrice);
   assert.equal(revised.submissionPets.reduce((sum, dog) => sum + Number(dog.quotedTotal), 0), fullPrice);
   await assert.rejects(accept(rewardId), /confirm/);

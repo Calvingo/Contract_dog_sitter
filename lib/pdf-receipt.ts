@@ -275,7 +275,7 @@ export async function generateSubmissionPdf(
     ctx = drawRow(ctx, "Dog subtotal", `$${secondQuote.totalPrice.toFixed(2)}`);
   }
   ctx = drawSectionTitle(ctx, "Combined Total");
-  ctx = drawRow(ctx, "Estimated total", `$${quote.totalPrice.toFixed(2)}`);
+  ctx = drawRow(ctx, quote.manualPrice ? "Manually set order total" : "Estimated total", `$${quote.totalPrice.toFixed(2)}`);
   ctx = drawRow(
     ctx,
     `Deposit (${DEPOSIT_PERCENT}% of total)`,

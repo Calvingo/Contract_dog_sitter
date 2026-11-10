@@ -1,38 +1,25 @@
 import { BookingRequestActions } from "@/components/BookingRequestActions";
 import { CancelOrderForm } from "@/components/CancelOrderForm";
-import { SubmissionStatus } from "@prisma/client";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getAdminSession } from "@/lib/auth/admin-session";
-import { prisma } from "@/lib/db";
+import { listBookingRequests, type BookingRequestParams } from "@/lib/admin/booking-requests";
 import { submissionDogNames } from "@/lib/submission-pets";
 import { AdminShell, StatusBadge, dateTime, money } from "../admin-ui";
 
 export const maxDuration = 120;
 
-export default async function AdminRequestsPage() {
+export default async function AdminRequestsPage({ searchParams }: { searchParams: Promise<BookingRequestParams> }) {
   const session = await getAdminSession();
   if (!session) redirect("/admin/login");
 
-  const submissions = await prisma.submission.findMany({
-    orderBy: { createdAt: "desc" },
-    take: 100,
-    include: {
-      customer: true,
-      pet: true,
-      submissionPets: { orderBy: { position: "asc" }, include: { pet: true } },
-      emailLogs: { orderBy: { createdAt: "desc" }, take: 1 },
-    },
-  });
-
-  const pending = submissions.filter(
-    (submission) =>
-      submission.status === SubmissionStatus.PENDING ||
-      submission.status === SubmissionStatus.NEEDS_REVIEW,
-  );
-  const pendingQuoted = pending.reduce(
-    (sum, submission) => sum + submission.quotedTotal.toNumber(),
-    0,
-  );
+  const { query, submissions, total, page, pages, skip, pending } = await listBookingRequests(await searchParams);
+  function pageLink(targetPage: number) {
+    const params = new URLSearchParams();
+    if (query) params.set("q", query);
+    params.set("page", String(targetPage));
+    return `/admin/requests?${params}`;
+  }
 
   return (
     <AdminShell
@@ -47,12 +34,24 @@ export default async function AdminRequestsPage() {
               Booking Requests
             </h2>
             <p className="text-sm text-stone-600">
-              {pending.length} pending · pending quoted {money(pendingQuoted)}
+              {pending._count} pending · pending quoted {money(pending._sum.quotedTotal ?? 0)}
             </p>
           </div>
         </div>
 
-        <div className="mt-5 overflow-x-auto">
+        <form action="/admin/requests" method="get" className="filter-form mt-4" key={query}>
+          <label>
+            Customer or pet name
+            <input type="search" name="q" defaultValue={query} maxLength={100} />
+          </label>
+          <button className="button" type="submit">Search</button>
+          {query && <Link className="button secondary" href="/admin/requests">Clear search</Link>}
+        </form>
+
+        {total > 0 && <p className="mt-4 text-sm text-stone-600">
+          Showing {skip + 1}–{skip + submissions.length} of {total} {query ? "matching " : ""}bookings
+        </p>}
+        <div className="mt-3 overflow-x-auto">
           <table className="min-w-full text-left text-sm">
             <thead className="border-b border-stone-200 text-xs uppercase text-stone-500">
               <tr>
@@ -65,6 +64,9 @@ export default async function AdminRequestsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
+              {total === 0 && <tr><td colSpan={6} className="py-6 text-stone-600">
+                {query ? `No bookings match “${query}”.` : "No bookings yet."}
+              </td></tr>}
               {submissions.map((submission) => (
                 <tr key={submission.id} className="align-top">
                   <td className="py-4 pr-4">
@@ -128,6 +130,13 @@ export default async function AdminRequestsPage() {
             </tbody>
           </table>
         </div>
+        {pages > 1 && (
+          <nav aria-label="Booking pages" className="mt-5 flex flex-wrap items-center justify-center gap-4">
+            {page > 1 && <Link className="button secondary" href={pageLink(page - 1)}>Previous</Link>}
+            <span className="text-sm">Page {page} of {pages}</span>
+            {page < pages && <Link className="button secondary" href={pageLink(page + 1)}>Next</Link>}
+          </nav>
+        )}
       </section>
     </AdminShell>
   );

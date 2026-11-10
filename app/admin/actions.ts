@@ -26,7 +26,7 @@ import { isPickupDropoffTimeAllowed } from "@/lib/booking-time";
 import { parseDateTime } from "@/lib/pricing";
 import { dateKey, dateRange } from "@/lib/platform/rules";
 import { archiveSubmissionRevision } from "@/lib/services/submission-revision";
-import { repriceAdminSubmission } from "@/lib/admin/submission-pricing";
+import { readManualTotal, repriceAdminSubmission } from "@/lib/admin/submission-pricing";
 import { reconcileRewardHolds, rewardOnAcceptance } from "@/lib/services/booking-rewards";
 import { lockCustomerProfile } from "@/lib/services/customer-profile";
 import { cancelAdminBooking, scheduleCancellationConfirmation } from "@/lib/services/cancellation";
@@ -164,6 +164,7 @@ async function updateSubmissionInternal(formData: FormData) {
   const dropoffAt = String(formData.get("dropoffAt") || "");
   const pickupAt = String(formData.get("pickupAt") || "");
   const prescreenNotes = String(formData.get("prescreenNotes") || "").trim();
+  const manualTotal = readManualTotal(formData);
 
   if (!submissionId || !Object.values(SubmissionStatus).includes(status)) {
     throw new Error("Invalid submission update.");
@@ -227,7 +228,7 @@ async function updateSubmissionInternal(formData: FormData) {
       pickupDate: pickupAt.slice(0, 10),
       pickupTime: pickupAt.slice(11, 16),
       prescreenNotes,
-    }, status, terms);
+    }, status, terms, manualTotal);
     await tx.submission.update({
       where: { id: submissionId },
       data: {

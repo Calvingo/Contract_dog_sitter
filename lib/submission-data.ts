@@ -25,7 +25,16 @@ export type SubmissionQuote = {
   totalPrice: number;
   depositAmount: number;
   summary: string;
+  manualPrice?: ManualOrderPrice;
 };
+
+// A final price for this particular stay, never a discount on future quotes.
+export type ManualOrderPrice = { stayKey: string; total: number };
+
+export function storedManualPrice(snapshot: unknown): ManualOrderPrice | undefined {
+  const price = (snapshot as Partial<SubmissionQuote> | null)?.manualPrice;
+  return price && typeof price.stayKey === "string" && Number.isFinite(price.total) ? price : undefined;
+}
 
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -161,7 +170,7 @@ export function withBoardingDiscounts(quote: PriceBreakdown, reward: boolean, re
   };
 }
 
-export function getSubmissionQuote(data: FormValues, terms: DogPricingTerms[] = []): SubmissionQuote {
+export function getSubmissionQuote(data: FormValues, terms: DogPricingTerms[] = [], price?: ManualOrderPrice | number): SubmissionQuote {
   const pets = [{
     id: data.savedPetId, weight: data.petWeightLb, age: data.petAgeYears,
     neutered: data.prescreenSpayedNeutered, energy: data.prescreenHighEnergy, medical: data.prescreenMedicalHistory,
@@ -187,7 +196,17 @@ export function getSubmissionQuote(data: FormValues, terms: DogPricingTerms[] = 
     if (!base) throw new Error("Unable to calculate price. Check the stay and each dog's pickup time.");
     return withBoardingDiscounts(base, data.useReward === true, dog?.returningDiscountRate);
   });
-  return combineDogQuotes(dogs);
+  const quote = combineDogQuotes(dogs);
+  if (price === undefined) return quote;
+  const stayKey = JSON.stringify([scheduledArrival, scheduledPickup, data.useReward === true, ...pets.map((pet, index) => {
+    const term = terms.find(term => term.petId === pet.id);
+    return [pet.id, term?.lateDropoffAt || scheduledArrival, term?.earlyPickupAt || scheduledPickup, dogs[index].totalPrice];
+  })]);
+  if (typeof price !== "number" && price.stayKey !== stayKey) return quote;
+  const total = typeof price === "number" ? price : price.total;
+  return { ...quote, manualPrice: { stayKey, total }, totalPrice: total,
+    depositAmount: Math.round(total * DEPOSIT_PERCENT) / 100,
+    summary: `${quote.summary} | Manually set order total: $${total.toFixed(2)}` };
 }
 
 export function combineDogQuotes(dogs: PriceBreakdown[]): SubmissionQuote {

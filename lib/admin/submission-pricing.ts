@@ -1,7 +1,17 @@
 import { Prisma, type Submission, type SubmissionPet, type SubmissionStatus } from "@prisma/client";
 import type { FormValues } from "@/lib/form-config";
 import { depositPolicy, DEPOSIT_POLICY_VERSION } from "@/lib/federal-holidays";
-import { buildPetSnapshots, getSubmissionDateTimes, getSubmissionQuote, storedDogTerms } from "@/lib/submission-data";
+import { buildPetSnapshots, getSubmissionDateTimes, getSubmissionQuote, storedDogTerms, storedManualPrice } from "@/lib/submission-data";
+
+export function readManualTotal(form: FormData): number | null | undefined {
+  const mode = form.get("priceMode");
+  if (mode === null || mode === "keep") return undefined;
+  if (mode === "automatic") return null;
+  const value = form.get("manualTotal");
+  if (mode !== "manual" || typeof value !== "string" || !/^\d{1,8}(?:\.\d{1,2})?$/.test(value))
+    throw new Error("Enter a price from $0 to $99,999,999.99 with at most two decimal places.");
+  return Number(value);
+}
 
 // Both admin editors must save the same quote, per-dog prices and signed policy.
 // The caller archives the old revision and holds the capacity lock first.
@@ -11,8 +21,10 @@ export async function repriceAdminSubmission(
   values: FormValues,
   status: SubmissionStatus = current.status,
   terms = storedDogTerms(current),
+  manualTotal?: number | null,
 ) {
-  const quote = getSubmissionQuote(values, terms);
+  const price = manualTotal === undefined ? storedManualPrice(current.quotedBreakdown) : manualTotal ?? undefined;
+  const quote = getSubmissionQuote(values, terms, price);
   const { dropoffAt, pickupAt } = getSubmissionDateTimes(values);
   const pets = buildPetSnapshots(values);
   const policy = current.agreementVersion === DEPOSIT_POLICY_VERSION

@@ -237,17 +237,7 @@ function formatSinglePricingSection(quote: PriceBreakdown, dogName: string): str
       )
     );
   }
-  rows.push(rowHtml("Estimated total", `$${quote.totalPrice.toFixed(2)}`));
-  rows.push(
-    rowHtml(
-      `Deposit (${DEPOSIT_PERCENT}% of total)`,
-      `$${quote.depositAmount.toFixed(2)}`
-    )
-  );
-  rows.push(rowHtml(
-    `Remaining balance (${100 - DEPOSIT_PERCENT}% of total, due at drop-off)`,
-    `$${(quote.totalPrice - quote.depositAmount).toFixed(2)}`
-  ));
+  rows.push(rowHtml("Dog subtotal", `$${quote.totalPrice.toFixed(2)}`));
   return `
     <h3 style="margin:24px 0 8px;font-size:16px;">${escapeHtml(dogName)} — Price Estimate</h3>
     ${formatTable(rows)}
@@ -258,7 +248,7 @@ function formatPricingSection(data: FormValues, quote: SubmissionQuote): string 
   const parts = [formatSinglePricingSection(quote.dogs[0], data.petName)];
   if (quote.dogs[1]) parts.push(formatSinglePricingSection(quote.dogs[1], data.secondPetName));
   parts.push(`<h3 style="margin:24px 0 8px;font-size:16px;">Combined Total</h3>${formatTable([
-    rowHtml("Estimated total", `$${quote.totalPrice.toFixed(2)}`),
+    rowHtml(quote.manualPrice ? "Manually set order total" : "Estimated total", `$${quote.totalPrice.toFixed(2)}`),
     rowHtml(`Deposit (${DEPOSIT_PERCENT}% of total)`, `$${quote.depositAmount.toFixed(2)}`),
     rowHtml(`Remaining balance (${100 - DEPOSIT_PERCENT}% of total, due at drop-off)`, `$${(quote.totalPrice - quote.depositAmount).toFixed(2)}`),
   ])}`);

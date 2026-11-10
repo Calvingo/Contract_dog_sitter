@@ -1,12 +1,13 @@
 import { depositPolicy, HOLIDAY_BOOKING_POLICY } from "@/lib/federal-holidays";
 import type { FormValues } from "@/lib/form-config";
 import { PAYMENT_EARLY_PICKUP_POLICY } from "@/lib/form-config";
-import { getSubmissionQuote, type DogPricingTerms } from "@/lib/submission-data";
+import { getSubmissionQuote, type DogPricingTerms, type ManualOrderPrice } from "@/lib/submission-data";
 import { DEPOSIT_PERCENT, type PriceBreakdown } from "@/lib/pricing";
 
 type Props = {
   values: FormValues;
   terms?: DogPricingTerms[];
+  manualPrice?: ManualOrderPrice;
   title: string;
   incompleteHint: string;
   holidayNote: string;
@@ -33,10 +34,10 @@ function DogQuote({ name, quote }: { name: string; quote: PriceBreakdown }) {
   );
 }
 
-export function PriceEstimate({ values, terms, title, incompleteHint, holidayNote }: Props) {
+export function PriceEstimate({ values, terms, manualPrice, title, incompleteHint, holidayNote }: Props) {
   let quote;
   try {
-    quote = getSubmissionQuote(values, terms);
+    quote = getSubmissionQuote(values, terms, manualPrice);
   } catch {
     if (!values.petWeightLb && !values.petAgeYears && !values.dropoffDate && !values.pickupDate) return null;
     return <div className="rounded-xl border border-dashed border-emerald-200 bg-emerald-50/50 px-4 py-3 text-sm text-stone-600">{incompleteHint}</div>;
@@ -56,7 +57,7 @@ export function PriceEstimate({ values, terms, title, incompleteHint, holidayNot
         {second ? <DogQuote name={values.secondPetName || "Dog 2"} quote={second} /> : null}
       </div>
       <dl className="mt-3 space-y-2 text-sm">
-        <div className="flex justify-between border-t border-emerald-200 pt-3 text-base"><dt className="font-semibold">Estimated total</dt><dd className="font-bold text-emerald-700">${total.toFixed(2)}</dd></div>
+        <div className="flex justify-between border-t border-emerald-200 pt-3 text-base"><dt className="font-semibold">{quote.manualPrice ? "Manually set order total" : "Estimated total"}</dt><dd className="font-bold text-emerald-700">${total.toFixed(2)}</dd></div>
         <div className="flex justify-between"><dt className="font-semibold">Deposit ({DEPOSIT_PERCENT}% of total)</dt><dd className="font-bold text-emerald-700">${deposit.toFixed(2)}</dd></div>
         <div className="flex justify-between gap-4"><dt className="font-semibold">Remaining balance ({100 - DEPOSIT_PERCENT}% of total, due at drop-off)</dt><dd className="font-bold text-emerald-700">${(total - deposit).toFixed(2)}</dd></div>
       </dl>
