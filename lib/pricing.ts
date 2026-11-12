@@ -71,7 +71,7 @@ export function parseDateTime(date: string, time: string): Date | null {
     : parsed;
 }
 
-/** Rover-style: 24h = 1 day; remainder ≤2h no extra; 2–8h +0.5 day; 8h+ +1 day */
+/** Minimum 1 day; after full 24h days: ≤2h free, >2h–8h +0.5 day, >8h +1 day. */
 export function calculateBillableDays(totalHours: number): number {
   if (totalHours <= 0) return 0;
 
@@ -80,16 +80,10 @@ export function calculateBillableDays(totalHours: number): number {
 
   let extra = 0;
   if (remainderHours > 2) {
-    extra = remainderHours < 8 ? 0.5 : 1;
+    extra = remainderHours <= 8 ? 0.5 : 1;
   }
 
-  let billableDays = fullDays + extra;
-
-  if (billableDays === 0 && remainderHours > 0) {
-    billableDays = remainderHours <= 2 ? 0.5 : extra || 1;
-  }
-
-  return billableDays;
+  return Math.max(1, fullDays + extra);
 }
 
 function buildSummary(
@@ -157,11 +151,7 @@ export function calculatePrice(
 
   const totalMs = pickup.getTime() - dropoff.getTime();
   const totalHours = totalMs / (1000 * 60 * 60);
-  // Charge at least one day for a positive stay. Keep the duration helper's
-  // existing rounding for historical loyalty credit and zero-duration dog edits.
-  const billableDays = totalHours > 0
-    ? Math.max(1, calculateBillableDays(totalHours))
-    : 0;
+  const billableDays = calculateBillableDays(totalHours);
   const dailyRate = getDailyRate(weightLb);
   const boardingSubtotal = Math.round(billableDays * dailyRate * 100) / 100;
   const isPuppy = petAgeYears < PUPPY_AGE_LIMIT_YEARS;

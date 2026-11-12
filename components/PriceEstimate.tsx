@@ -53,6 +53,7 @@ export function PriceEstimate({ values, terms, manualPrice, title, incompleteHin
       {policy.nonRefundable && <p className="notice">Non-refundable deposit: ${deposit.toFixed(2)}. {policy.holidays.map(h => `${h.name} (${h.date})`).join(", ")}</p>}
       <h3 className="text-base font-semibold text-stone-900">{title}</h3>
       <p className="mt-2 text-sm text-stone-700">Stays shorter than 24 hours are billed as one full day.</p>
+      <p className="mt-1 text-sm text-stone-700">For longer stays, each full 24 hours counts as one day. Extra time up to 2 hours is free; over 2 and up to 8 hours adds half a day; over 8 hours adds one day.</p>
       <div className="mt-3 space-y-3">
         <DogQuote name={values.petName || "Dog 1"} quote={first} />
         {second ? <DogQuote name={values.secondPetName || "Dog 2"} quote={second} /> : null}

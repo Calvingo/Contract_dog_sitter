@@ -72,6 +72,11 @@ const pickup = new Date("2026-11-03T12:00:00Z");
 const legacy = { ...booking, dropoffAt: new Date("2026-11-02T08:30:00Z"), pickupAt: pickup, submissionPets: [] };
 assert.equal(completedDogDays(legacy, pacificWallTime(new Date("2026-11-03T19:59:59Z"))), 0);
 assert.equal(completedDogDays(legacy, pacificWallTime(new Date("2026-11-03T20:00:00Z"))), 1.5);
+// Pricing minimums and the eight-hour fee boundary do not recalculate earned loyalty credit.
+for (const [hours, credit] of [[0, 0], [5, 0.5], [8, 1], [24, 1], [26, 1], [29, 1.5], [32, 2], [33, 2]]) {
+  const shortStay = { ...legacy, dropoffAt: new Date(pickup.getTime() - hours * 3600000) };
+  assert.equal(completedDogDays(shortStay, pickup), credit, `${hours} hours of loyalty credit`);
+}
 assert.equal(pacificWallTime(new Date("2026-07-01T07:00:00Z")).toISOString(), "2026-07-01T00:00:00.000Z");
 for (const status of ["CANCELLED", "PENDING", "NEEDS_REVIEW", "REJECTED", "MEET_GREET_REQUESTED"])
   assert.equal(completedDogDays({ ...legacy, status }, pickup), 0);

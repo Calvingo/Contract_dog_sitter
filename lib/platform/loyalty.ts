@@ -1,5 +1,4 @@
 import type { Prisma, RewardState } from "@prisma/client";
-import { calculateBillableDays } from "../pricing";
 import { acceptedStay, type OccupancyBooking } from "./rules";
 
 // Booking timestamps encode Pacific wall-clock values as UTC (see parseDateTime).
@@ -14,6 +13,18 @@ export function pacificWallTime(now = new Date()) {
 type LoyaltyBooking = OccupancyBooking & {
   submissionPets: { lateDropoffAt?: Date | null; earlyPickupAt?: Date | null }[];
 };
+
+// Loyalty credit keeps its original duration rounding so pricing changes do not
+// retroactively change earned rewards: short stays can earn half a day, and an
+// eight-hour remainder earns a full day.
+function calculateLoyaltyDays(totalHours: number): number {
+  if (totalHours <= 0) return 0;
+  const fullDays = Math.floor(totalHours / 24);
+  const remainderHours = totalHours % 24;
+  const extra = remainderHours <= 2 ? 0 : remainderHours < 8 ? 0.5 : 1;
+  return Math.max(0.5, fullDays + extra);
+}
+
 function stayCredit(booking: LoyaltyBooking) {
   const stay = acceptedStay(booking);
   const pickups = Array.from({ length: stay.dogs }, (_, i) =>
@@ -21,7 +32,7 @@ function stayCredit(booking: LoyaltyBooking) {
   const endsAt = Math.max(...pickups.map(end => end.getTime()));
   const days = pickups.reduce((sum, end, index) => {
     const start = booking.submissionPets[index]?.lateDropoffAt ?? stay.dropoffAt;
-    return sum + calculateBillableDays((end.getTime() - start.getTime()) / 3600000);
+    return sum + calculateLoyaltyDays((end.getTime() - start.getTime()) / 3600000);
   }, 0);
   return { endsAt, days };
 }

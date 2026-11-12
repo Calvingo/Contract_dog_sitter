@@ -18,19 +18,21 @@ try {
     "--skipLibCheck", "--strict",
   ], { cwd: root, stdio: "inherit" });
 
-  const { calculatePrice } = require(join(output, "pricing.js"));
+  const { calculatePrice, calculateBillableDays } = require(join(output, "pricing.js"));
   const { getHolidayFeeForDate, countHolidayDaysInStay } = require(join(output, "holidays.js"));
   const { getSubmissionQuote } = require(join(output, "submission-data.js"));
   const { initialFormValues } = require(join(output, "form-config.js"));
   const stay = ["2026-10-12", "10:00", "2026-10-13", "10:00"];
 
   // Positive stays have a one-day minimum, including overnight stays under 24h.
-  // Exact 24h and longer stays retain the existing extension boundaries.
+  // After full days, the two-hour grace and eight-hour half-day limits are inclusive.
   for (const [minutes, days] of [
-    [1, 1], [120, 1], [121, 1], [240, 1], [479, 1], [480, 1],
-    [1439, 1], [1440, 1], [1560, 1], [1561, 1.5], [1919, 1.5],
-    [1920, 2], [2880, 2],
+    [1, 1], [120, 1], [121, 1], [240, 1], [300, 1], [479, 1], [480, 1],
+    [1439, 1], [1440, 1], [1559, 1], [1560, 1], [1561, 1.5], [1740, 1.5],
+    [1919, 1.5], [1920, 1.5], [1921, 2], [1980, 2], [2880, 2],
+    [3000, 2], [3001, 2.5], [3360, 2.5], [3361, 3],
   ]) {
+    assert.equal(calculateBillableDays(minutes / 60), days, `${minutes} minutes`);
     const pickup = new Date(Date.parse("2026-10-12T10:00:00Z") + minutes * 60000).toISOString();
     for (const [weight, rate] of [[30, 65], [75, 69], [95, 79]]) {
       const quote = calculatePrice(weight, 2, "yes", "no", "no", stay[0], stay[1], pickup.slice(0, 10), pickup.slice(11, 16));
@@ -204,6 +206,14 @@ try {
   assert.deepEqual(shortReward.dogs.map(dog => dog.loyaltyDiscount), [6.5, 6.5]);
   assert.equal(shortReward.totalPrice, 167);
   assert.equal(shortReward.depositAmount, 33.4);
+
+  // The inclusive eight-hour extension prorates both dogs' daily fees and deposit.
+  const extendedTwoDogs = getSubmissionQuote({ ...values, pickupTime: "18:00" });
+  assert.deepEqual(extendedTwoDogs.dogs.map(dog => dog.billableDays), [1.5, 1.5]);
+  assert.deepEqual(extendedTwoDogs.dogs.map(dog => dog.totalHours), [32, 32]);
+  assert.deepEqual(extendedTwoDogs.dogs.map(dog => dog.specialCareFee), [15, 0]);
+  assert.equal(extendedTwoDogs.totalPrice, 270);
+  assert.equal(extendedTwoDogs.depositAmount, 54);
 
   const christmasDogs = getSubmissionQuote({
     ...values,
