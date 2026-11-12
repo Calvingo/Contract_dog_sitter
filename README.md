@@ -39,6 +39,7 @@ Customers can open `/book` and submit without signing in. As explicitly chosen f
 
 ## Booking business rules
 
+- Any positive stay shorter than **24 hours** is billed as **one full day** per dog, including applicable daily care and holiday fees. Longer stays keep the existing extension rounding. The quote, saved order, email and PDF use the same calculation; historical loyalty-day calculations retain their existing rounding.
 - Default capacity is **17 dogs**. Every dog in a booking counts. Legacy submissions without a `SubmissionPet` row count as one dog.
 - Arrival and pick-up dates both consume a slot by default. Admin can select night-based counting; same-day visits still consume one day.
 - Daily overrides replace the default; `0` closes the date to new reservations. Reducing a limit preserves existing bookings and flags over-capacity dates.

@@ -157,7 +157,11 @@ export function calculatePrice(
 
   const totalMs = pickup.getTime() - dropoff.getTime();
   const totalHours = totalMs / (1000 * 60 * 60);
-  const billableDays = calculateBillableDays(totalHours);
+  // Charge at least one day for a positive stay. Keep the duration helper's
+  // existing rounding for historical loyalty credit and zero-duration dog edits.
+  const billableDays = totalHours > 0
+    ? Math.max(1, calculateBillableDays(totalHours))
+    : 0;
   const dailyRate = getDailyRate(weightLb);
   const boardingSubtotal = Math.round(billableDays * dailyRate * 100) / 100;
   const isPuppy = petAgeYears < PUPPY_AGE_LIMIT_YEARS;
