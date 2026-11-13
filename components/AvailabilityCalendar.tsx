@@ -143,7 +143,7 @@ export function AvailabilityCalendar({
           →
         </button>
       </div>
-      <div className="calendar-grid" aria-label="Availability calendar">
+      <div id="booking-calendar" tabIndex={-1} className="calendar-grid" aria-label="Availability calendar">
         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
           <span className="weekday" key={day}>
             {day}
@@ -234,7 +234,7 @@ export function AvailabilityCalendar({
                 <strong>{item.date || "Select a date above"}</strong>
               </p>
               {errors?.[item.dateName] && (
-                <p role="alert" className="text-sm text-red-600">
+                <p id={`booking-error-${item.dateName}`} className="text-sm text-red-600">
                   {errors[item.dateName]}
                 </p>
               )}
@@ -242,14 +242,16 @@ export function AvailabilityCalendar({
                 <label className="block space-y-2">
                   <span>{item.label} time</span>
                   <select
+                    id={`booking-field-${item.name}`}
                     name={item.name}
+                    aria-describedby={errors?.[item.name] ? `booking-error-${item.name}` : undefined}
                     aria-label={`${item.label} time`}
                     value={item.time}
                     onChange={(event) =>
                       onTimeChange(item.name, event.target.value)
                     }
                     aria-invalid={Boolean(errors?.[item.name])}
-                    className="w-full rounded-xl border border-emerald-100 bg-white px-3 py-3 text-stone-800"
+                    className={`w-full rounded-xl border bg-white px-3 py-3 text-stone-800 ${errors?.[item.name] ? "border-red-500" : "border-emerald-100"}`}
                   >
                     <option value="">Choose a time</option>
                     {getPickupDropoffTimeOptions(item.date).map((option) => (
@@ -261,7 +263,7 @@ export function AvailabilityCalendar({
                 </label>
               )}
               {errors?.[item.name] && (
-                <p role="alert" className="text-sm text-red-600">
+                <p id={`booking-error-${item.name}`} className="text-sm text-red-600">
                   {errors[item.name]}
                 </p>
               )}

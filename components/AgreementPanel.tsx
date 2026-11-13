@@ -45,6 +45,10 @@ export function AgreementPanel({
       <p className="text-sm text-stone-600">{intro}</p>
       <div
         ref={scrollRef}
+        tabIndex={0}
+        data-validation-focus
+        role="region"
+        aria-label="Agreement terms — scroll to the bottom to read all terms"
         className="max-h-80 overflow-y-auto rounded-xl border border-emerald-100 bg-emerald-50/40 p-4 text-sm leading-6 text-stone-700"
       >
         {agreementSections.map((section) => (

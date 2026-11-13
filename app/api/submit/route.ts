@@ -1,11 +1,11 @@
 import { getCustomerSession } from "@/lib/auth/customer-session";
 import { BookingConflict } from "@/lib/platform/capacity";
-import { dateRange, todayKey } from "@/lib/platform/rules";
+import { todayKey } from "@/lib/platform/rules";
 import { NextResponse } from "next/server";
 import type { FormValues } from "@/lib/form-config";
 import { scheduleSubmissionNotification } from "@/lib/services/submission-notification";
 import { createSubmissionRecord } from "@/lib/services/submission-service";
-import { signatureToBuffer, validateSubmission } from "@/lib/validate";
+import { signatureToBuffer, validateSubmissionDetails } from "@/lib/validate";
 import { allowRequest, requestIp } from "@/lib/platform/rate-limit";
 import { prisma } from "@/lib/db";
 import { normalizeEmail } from "@/lib/submission-data";
@@ -18,10 +18,10 @@ export async function POST(request: Request) {
   try {
     const session = await getCustomerSession();
     const data = (await request.json()) as FormValues;
-    const validationError = validateSubmission(data);
+    const validationError = validateSubmissionDetails(data, { minimumDate: todayKey() });
 
     if (validationError) {
-      return NextResponse.json({ error: validationError }, { status: 400 });
+      return NextResponse.json(validationError, { status: 400 });
     }
     if (
       !(await allowRequest("booking-ip", requestIp(request), 10, 3600)) ||
@@ -45,19 +45,6 @@ export async function POST(request: Request) {
     const verifiedOwnerId =
       owner?.email === normalizeEmail(data.email) ? owner.id : undefined;
 
-    try {
-      dateRange(data.dropoffDate, data.pickupDate);
-    } catch {
-      return NextResponse.json(
-        { error: "Choose valid dates within one year." },
-        { status: 400 },
-      );
-    }
-    if (data.dropoffDate < todayKey())
-      return NextResponse.json(
-        { error: "Please choose a future arrival date." },
-        { status: 400 },
-      );
     const signatureBuffer = signatureToBuffer(data.signature);
     const { submission, quote, replayed } = await createSubmissionRecord(data, verifiedOwnerId);
     if (replayed) return NextResponse.json({ ok: true, submissionId: submission.id, accountAccess: true, replayed: true });
@@ -80,7 +67,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 409 });
     console.error("Submit error:", error);
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: "We could not submit your request. Please try again." },
       { status: 500 },
     );
   }

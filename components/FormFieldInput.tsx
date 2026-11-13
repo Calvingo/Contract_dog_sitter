@@ -25,11 +25,13 @@ export function FormFieldInput({
   onChange,
 }: Props) {
   const commonClass =
-    "w-full rounded-xl border border-emerald-100 bg-white px-4 py-3 text-stone-800 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100";
+    `w-full rounded-xl border bg-white px-4 py-3 text-stone-800 outline-none transition focus:ring-2 ${error ? "border-red-500 focus:border-red-500 focus:ring-red-100" : "border-emerald-100 focus:border-emerald-300 focus:ring-emerald-100"}`;
+  const errorId = `booking-error-${field.name}`;
   if (field.name === "petAgeYears" || field.name === "secondPetAgeYears") {
     return (
       <PetAgeInput
         name={field.name}
+        validationId={`booking-field-${field.name}`}
         value={value}
         onChange={(ageYears) => onChange(field.name, ageYears)}
         required={field.required}
@@ -58,13 +60,16 @@ export function FormFieldInput({
   }
 
   return (
-    <label className="block space-y-2">
+    <label id={`booking-field-${field.name}`} className="block space-y-2">
       <span className="text-sm font-medium text-stone-700">
         {field.label}
         {field.required ? <span className="text-red-500"> *</span> : null}
       </span>
       {field.type === "select" ? (
         <select
+          name={field.name}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? errorId : undefined}
           required={field.required}
           value={value}
           onChange={(event) => onChange(field.name, event.target.value)}
@@ -79,17 +84,20 @@ export function FormFieldInput({
         </select>
       ) : (
         <input
+          name={field.name}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? errorId : undefined}
           readOnly={readOnly}
           type={field.type === "number" ? "number" : field.type}
-          min={field.type === "number" ? 1 : undefined}
-          step={field.type === "number" ? 1 : undefined}
+          min={field.type === "number" ? 0 : undefined}
+          step={field.type === "number" ? "any" : undefined}
           required={field.required}
           value={value}
           onChange={(event) => onChange(field.name, event.target.value)}
           className={commonClass}
         />
       )}
-      {error ? <span className="text-sm text-red-500">{error}</span> : null}
+      {error ? <span id={errorId} className="text-sm text-red-600">{error}</span> : null}
     </label>
   );
 }

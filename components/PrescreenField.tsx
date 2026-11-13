@@ -11,9 +11,11 @@ type Props = {
 
 export function PrescreenField({ name, label, value, error, onChange }: Props) {
   return (
-    <div className="space-y-2 border-b border-emerald-100 pb-4 last:border-b-0 last:pb-0">
+    <div id={`booking-field-${name}`} role="group" aria-labelledby={`booking-label-${name}`}
+      aria-describedby={error ? `booking-error-${name}` : undefined}
+      className={`space-y-2 border-b border-emerald-100 pb-4 last:border-b-0 last:pb-0 ${error ? "rounded-lg bg-red-50 p-3 ring-1 ring-red-300" : ""}`}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-        <p className="flex-1 whitespace-pre-line text-sm font-medium leading-snug text-stone-700">
+        <p id={`booking-label-${name}`} className="flex-1 whitespace-pre-line text-sm font-medium leading-snug text-stone-700">
           {label}
           <span className="text-red-500"> *</span>
         </p>
@@ -38,7 +40,7 @@ export function PrescreenField({ name, label, value, error, onChange }: Props) {
           })}
         </div>
       </div>
-      {error ? <p className="text-sm text-red-500">{error}</p> : null}
+      {error ? <p id={`booking-error-${name}`} className="text-sm text-red-600">{error}</p> : null}
     </div>
   );
 }

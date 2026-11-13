@@ -12,10 +12,11 @@ type Props = {
   maxYears?: number;
   error?: string;
   inputClassName?: string;
+  validationId?: string;
 };
 
 export function PetAgeInput({
-  name, value, onChange, required, readOnly, maxYears, error,
+  name, value, onChange, required, readOnly, maxYears, error, validationId,
   inputClassName = "w-full rounded-xl border border-emerald-100 bg-white px-4 py-3 text-stone-800 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100",
 }: Props) {
   const id = useId();
@@ -36,7 +37,7 @@ export function PetAgeInput({
   }
 
   return (
-    <div className="min-w-0 space-y-2">
+    <div id={validationId} className="min-w-0 space-y-2">
       <label htmlFor={id} className="text-sm font-medium text-stone-700">
         <span>Age{required ? <span className="text-red-500"> *</span> : null}</span>
       </label>

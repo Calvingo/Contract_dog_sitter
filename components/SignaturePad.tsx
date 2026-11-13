@@ -71,6 +71,8 @@ export function SignaturePad({
           penColor="#1c1917"
           canvasProps={{
             className: "h-44 w-full touch-none",
+            tabIndex: 0,
+            "aria-label": "Draw your signature here",
           }}
         />
         {disabled ? (

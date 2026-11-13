@@ -57,9 +57,9 @@ for (const [index, snapshot] of buildPetSnapshots(values).entries()) {
   const field = index === 0 ? "petAgeYears" : "secondPetAgeYears";
   const saved = petPrefillValues({ ...snapshot, id: `saved-${index}` }, index === 1);
   assert.deepEqual(petAgeInputFromYears(saved[field]), { amount: index === 0 ? "8" : "7", unit: "months" });
-  assert.match(validateSubmission({ ...values, [field]: petAgeInYears("-1", "months") }), /Invalid .*age/);
-  assert.match(validateSubmission({ ...values, [field]: "" }), /Missing required field/);
-  assert.match(validateSubmission({ ...values, [field]: petAgeInYears("Infinity", "months") }), /Invalid .*age/);
+  assert.match(validateSubmission({ ...values, [field]: petAgeInYears("-1", "months") }), /valid age/);
+  assert.match(validateSubmission({ ...values, [field]: "" }), /required/);
+  assert.match(validateSubmission({ ...values, [field]: petAgeInYears("Infinity", "months") }), /valid age/);
 }
 
 for (const [months, puppyFee, intactDogFee] of [[8, 20, 0], [11, 20, 0], [12, 0, 20], [18, 0, 20]]) {

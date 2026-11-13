@@ -6,7 +6,7 @@ import { scheduleSubmissionNotification } from "@/lib/services/submission-notifi
 import { findValidSubmissionEditToken } from "@/lib/submission-edit-token";
 import { formValuesFromSubmission, storedDogTerms, storedManualPrice } from "@/lib/submission-data";
 import { updateSubmissionRecord } from "@/lib/services/submission-service";
-import { signatureToBuffer, validateSubmission } from "@/lib/validate";
+import { signatureToBuffer, validateSubmissionDetails } from "@/lib/validate";
 import { setCustomerSession } from "@/lib/auth/customer-session";
 import { todayKey } from "@/lib/platform/rules";
 
@@ -94,15 +94,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const validationError = validateSubmission(body.values);
+    const validationError = validateSubmissionDetails(body.values, { minimumDate: todayKey() });
     if (validationError) {
-      return NextResponse.json({ error: validationError }, { status: 400 });
-    }
-    if (body.values.dropoffDate < todayKey()) {
-      return NextResponse.json(
-        { error: "Choose today or a future drop-off date in California time." },
-        { status: 400 },
-      );
+      return NextResponse.json(validationError, { status: 400 });
     }
 
     const signatureBuffer = signatureToBuffer(body.values.signature);
@@ -137,7 +131,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 409 });
     console.error("Edit submission error:", error);
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: "We could not save your changes. Please try again." },
       { status: 500 },
     );
   }

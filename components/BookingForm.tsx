@@ -24,10 +24,9 @@ import { PrescreenField } from "@/components/PrescreenField";
 import { PrescreenNotes } from "@/components/PrescreenNotes";
 import { PriceEstimate } from "@/components/PriceEstimate";
 import { SignaturePad } from "@/components/SignaturePad";
-import { isPickupDropoffTimeAllowed } from "@/lib/booking-time";
+import { bookingFieldLabels, getBookingFieldErrors, type BookingFieldErrors } from "@/lib/booking-validation";
 import { todayKey } from "@/lib/platform/rules";
 import type { DogPricingTerms, ManualOrderPrice } from "@/lib/submission-data";
-import { parseDateTime } from "@/lib/pricing";
 import { applySavedProfileIds, profileReadyToSave, profileSavePayload } from "@/lib/profile-autosave";
 import {
   formFields,
@@ -56,9 +55,30 @@ function HomePageContent() {
   const [editPrice, setEditPrice] = useState<ManualOrderPrice>();
   const [editRevision, setEditRevision] = useState<number | undefined>(undefined);
   const [formValues, setFormValues] = useState<FormValues>(initialFormValues);
-  const [errors, setErrors] = useState<
-    Partial<Record<keyof FormValues, string>>
-  >({});
+  const [errors, setErrors] = useState<BookingFieldErrors>({});
+  const feedbackRef = useRef<HTMLDivElement>(null);
+  const [feedbackAttempt, setFeedbackAttempt] = useState(0);
+  useEffect(() => {
+    if (!feedbackAttempt) return;
+    feedbackRef.current?.focus({ preventScroll: true });
+    feedbackRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, [feedbackAttempt]);
+
+  const focusField = (name: string) => {
+    if (name === "dropoffDate" || name === "pickupDate") {
+      const calendar = document.getElementById("booking-calendar");
+      calendar?.focus({ preventScroll: true });
+      calendar?.scrollIntoView({ block: "center", behavior: "smooth" });
+      return;
+    }
+    const target = document.getElementById(`booking-field-${name}`);
+    if (!target) return;
+    const control = target.matches("input, select, textarea, button")
+      ? target
+      : target.querySelector<HTMLElement>("input:not([type=hidden]):not(:disabled), select:not(:disabled), textarea:not(:disabled), [data-validation-focus], canvas, button:not(:disabled)") || target;
+    control.focus({ preventScroll: true });
+    target.scrollIntoView({ block: "center", behavior: "smooth" });
+  };
   const [submitError, setSubmitError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -344,6 +364,7 @@ function HomePageContent() {
       setProfileSaveError("");
     }
     if (name === "email") {
+      const hadLoadedProfile = Boolean(currentPrefill.current);
       profileDirty.current = false;
       lastSavedProfile.current = "";
       setProfileSaveMessage("");
@@ -357,15 +378,18 @@ function HomePageContent() {
       setSelectedPetId("");
       setReturningStatus("");
       setFormValues((current) => ({
-        ...initialFormValues,
+        // Correcting a guest's email should keep the answers they just typed.
+        // Switching away from a loaded profile still clears that profile's data.
+        ...(hadLoadedProfile ? initialFormValues : current),
         email: value,
         dropoffDate: current.dropoffDate,
         pickupDate: current.pickupDate,
         dropoffTime: current.dropoffTime,
         pickupTime: current.pickupTime,
       }));
-      setHasReadAgreement(false);
-      setErrors({});
+      if (hadLoadedProfile) setHasReadAgreement(false);
+      setErrors(current => hadLoadedProfile ? {} : { ...current, email: undefined });
+      setSubmitError("");
       return;
     }
     setFormValues((current) => {
@@ -375,7 +399,9 @@ function HomePageContent() {
       }
       return next;
     });
-    setErrors((current) => ({ ...current, [name]: undefined }));
+    setErrors((current) => ({ ...current, [name]: undefined,
+      ...(name === "backupContact" && value !== "wechat" ? { wechatId: undefined } : {}),
+    }));
     setSubmitError("");
   };
 
@@ -479,111 +505,16 @@ function HomePageContent() {
     setHasReadAgreement(true);
   }, []);
 
-  const validateClient = (): boolean => {
-    const nextErrors: Partial<Record<keyof FormValues, string>> = {};
-
-    for (const field of formFields) {
-      if (field.name === "wechatId") continue;
-      const value = String(formValues[field.name] ?? "").trim();
-      if (field.required && !value) {
-        nextErrors[field.name] = ui.required;
-      }
-    }
-
-    for (const question of prescreenQuestions) {
-      const value = String(formValues[question.name] ?? "").trim();
-      if (!value) {
-        nextErrors[question.name] = ui.required;
-      }
-    }
-
-    if (needsWechatId && !formValues.wechatId.trim()) {
-      nextErrors.wechatId = ui.wechatIdRequired;
-    }
-
-    const weight = Number(formValues.petWeightLb);
-    if (formValues.petWeightLb && (!Number.isFinite(weight) || weight <= 0)) {
-      nextErrors.petWeightLb = ui.invalidWeight;
-    }
-
-    const age = Number(formValues.petAgeYears);
-    if (formValues.petAgeYears && (!Number.isFinite(age) || age < 0)) {
-      nextErrors.petAgeYears = ui.invalidAge;
-    }
-
-    if (formValues.hasSecondDog) {
-      for (const field of secondPetFields) {
-        const value = String(formValues[field.name] ?? "").trim();
-        if (!value) nextErrors[field.name] = ui.required;
-      }
-      for (const question of secondPrescreenQuestions) {
-        if (!String(formValues[question.name] ?? "").trim()) {
-          nextErrors[question.name] = ui.required;
-        }
-      }
-      const secondWeight = Number(formValues.secondPetWeightLb);
-      const secondAge = Number(formValues.secondPetAgeYears);
-      if (
-        formValues.secondPetWeightLb &&
-        (!Number.isFinite(secondWeight) || secondWeight <= 0)
-      )
-        nextErrors.secondPetWeightLb = ui.invalidWeight;
-      if (
-        formValues.secondPetAgeYears &&
-        (!Number.isFinite(secondAge) || secondAge < 0)
-      )
-        nextErrors.secondPetAgeYears = ui.invalidAge;
-      if (
-        formValues.petName.trim().toLowerCase() ===
-        formValues.secondPetName.trim().toLowerCase()
-      )
-        nextErrors.secondPetName =
-          "Please enter a different name for the second dog.";
-    }
-
-    if (formValues.dropoffDate && formValues.dropoffDate < todayKey()) {
-      nextErrors.dropoffDate = "Choose today or a future date in California time.";
-    }
-
-    const dropoff = parseDateTime(
-      formValues.dropoffDate,
-      formValues.dropoffTime,
-    );
-    const pickup = parseDateTime(formValues.pickupDate, formValues.pickupTime);
-    if (
-      formValues.dropoffTime &&
-      !isPickupDropoffTimeAllowed(formValues.dropoffTime, formValues.dropoffDate)
-    ) {
-      nextErrors.dropoffTime = ui.pickupDropoffTimeRestricted;
-    }
-    if (
-      formValues.pickupTime &&
-      !isPickupDropoffTimeAllowed(formValues.pickupTime, formValues.pickupDate)
-    ) {
-      nextErrors.pickupTime = ui.pickupDropoffTimeRestricted;
-    }
-    if (dropoff && pickup && pickup <= dropoff) {
-      nextErrors.pickupDate = ui.pickupBeforeDropoff;
-      nextErrors.pickupTime = ui.pickupBeforeDropoff;
-    }
-
-    if (!hasReadAgreement) {
-      nextErrors.agreed = ui.agreementScrollRequired;
-    } else if (!formValues.agreed) {
-      nextErrors.agreed = ui.agreeRequired;
-    }
-
-    if (!formValues.signature) {
-      nextErrors.signature = ui.signatureRequired;
-    }
-
-    setErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
-  };
-
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!validateClient()) return;
+    if (isSubmitting) return;
+    const nextErrors = getBookingFieldErrors(formValues, { minimumDate: todayKey(), hasReadAgreement });
+    setErrors(nextErrors);
+    setSubmitError("");
+    if (Object.keys(nextErrors).length) {
+      setFeedbackAttempt(attempt => attempt + 1);
+      return;
+    }
 
     setIsSubmitting(true);
     setSubmitError("");
@@ -593,7 +524,10 @@ function HomePageContent() {
       const submissionValues = latestValues.current;
       if (!editToken) {
         const eligibility = await fetch("/api/booking-eligibility", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:submissionValues.email})});
-        if (!eligibility.ok) throw new Error((await eligibility.json()).error || ui.submitError);
+        if (!eligibility.ok) {
+          const result = await eligibility.json().catch(() => null);
+          throw new Error(result?.error || "We could not check your booking eligibility. Please try again. Your answers are still here.");
+        }
       }
       if (!editToken && submissionValues.useReward && !rewardRequestId.current)
         rewardRequestId.current = crypto.randomUUID();
@@ -608,11 +542,13 @@ function HomePageContent() {
         },
       );
 
-      const result = await response.json();
+      const result = await response.json().catch(() => null);
       if (!response.ok) {
+        if (result?.fieldErrors) setErrors(result.fieldErrors);
         if (!editToken && response.status === 409) await loadPrefill();
-        throw new Error(result.error || "Submit failed");
+        throw new Error(result?.error || "We could not submit your request. Please try again. Your answers are still here.");
       }
+      if (!result?.ok) throw new Error(ui.submitError);
       const notificationQuery = result.replayed ? "" : result.emailWarning ? "?emailWarning=1" : "?emailPending=1";
       router.push(
         editToken || !result.accountAccess
@@ -620,7 +556,10 @@ function HomePageContent() {
           : `/account/bookings/${result.submissionId}${notificationQuery}`,
       );
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : ui.submitError);
+      setSubmitError(error instanceof TypeError
+        ? "We could not connect. Please check your internet connection and try again. Your answers are still here."
+        : error instanceof Error ? error.message : ui.submitError);
+      setFeedbackAttempt(attempt => attempt + 1);
       // Keep Submit disabled after success while the destination loads.
       setIsSubmitting(false);
     }
@@ -644,11 +583,10 @@ function HomePageContent() {
     (pet) => pet.id === selectedSecondPetId,
   );
 
-  const canSubmit =
-    !isSubmitting &&
-    hasReadAgreement &&
-    formValues.agreed &&
-    !!formValues.signature;
+  const errorEntries = Object.entries(bookingFieldLabels).flatMap(([name, label]) => {
+    const message = errors[name as keyof FormValues];
+    return message ? [{ name, label, message }] : [];
+  });
 
   return (
     <main className="booking-page min-h-screen px-4 py-8">
@@ -662,6 +600,24 @@ function HomePageContent() {
             review.
           </p>
         </div>
+
+        {errorEntries.length > 0 || submitError ? (
+          <div ref={feedbackRef} tabIndex={-1} role="alert" aria-labelledby="booking-feedback-title"
+            className="scroll-mt-6 rounded-2xl border border-red-300 bg-red-50 p-5 text-red-800 focus:outline-none focus:ring-2 focus:ring-red-400">
+            <h2 id="booking-feedback-title" className="font-semibold">Your request has not been submitted</h2>
+            {submitError && <p className="mt-2 text-sm">{submitError}</p>}
+            {errorEntries.length > 0 && <>
+              <p className="mt-2 text-sm">Please fix the following {errorEntries.length} item{errorEntries.length === 1 ? "" : "s"}, then submit again. Select an item to go to it.</p>
+              <ul className="mt-3 list-disc space-y-2 pl-5 text-sm">
+                {errorEntries.map(({ name, label, message }) => <li key={name}>
+                  <button type="button" onClick={() => focusField(name)} className="text-left underline underline-offset-2 hover:text-red-950">
+                    <span className="font-semibold">{label}:</span> {message}
+                  </button>
+                </li>)}
+              </ul>
+            </>}
+          </div>
+        ) : null}
 
         <AvailabilityCalendar
           dogs={formValues.hasSecondDog ? 2 : 1}
@@ -702,8 +658,11 @@ function HomePageContent() {
           <label className="block space-y-2">
             <span className="text-sm font-medium">Email address *</span>
             <input
+              id="booking-field-email"
               type="email"
               name="bookingEmail"
+              required
+              aria-describedby={errors.email ? "booking-email-error" : undefined}
               value={formValues.email}
               onChange={(event) =>
                 handleFieldChange("email", event.target.value)
@@ -712,12 +671,12 @@ function HomePageContent() {
               disabled={isSavingProfile || isSubmitting}
               autoComplete="email"
               maxLength={254}
-              className="w-full rounded-xl border border-stone-200 px-4 py-3"
+              className={`w-full rounded-xl border px-4 py-3 ${errors.email ? "border-red-500" : "border-stone-200"}`}
               placeholder="you@example.com"
               aria-invalid={Boolean(errors.email)}
             />
             {errors.email && (
-              <span role="alert" className="text-sm text-red-600">
+              <span id="booking-email-error" className="text-sm text-red-600">
                 {errors.email}
               </span>
             )}
@@ -784,7 +743,7 @@ function HomePageContent() {
           </section>
         ) : null}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form noValidate onSubmit={handleSubmit} className="space-y-6">
           <fieldset disabled={isSubmitting} className="min-w-0 space-y-6">
           <input
             type="text"
@@ -977,6 +936,7 @@ function HomePageContent() {
                   await saveProfileDetails();
                   chosenPets.current.second = "";
                   setSelectedSecondPetId("");
+                  setErrors(current => Object.fromEntries(Object.entries(current).filter(([key]) => !key.startsWith("second"))));
                   setFormValues((current) => ({
                     ...current,
                     hasSecondDog: false,
@@ -991,35 +951,39 @@ function HomePageContent() {
           ) : null}
 
           <FormSection title={ui.sections.agreement}>
-            <AgreementPanel
-              intro={ui.agreementIntro}
-              scrollHint={ui.agreementScrollHint}
-              hasReadToBottom={hasReadAgreement}
-              onReachBottom={handleReachBottom}
-            />
-            <label
-              className={`flex items-start gap-3 rounded-xl bg-emerald-50/60 p-4 ${
-                !hasReadAgreement ? "cursor-not-allowed opacity-60" : ""
-              }`}
-            >
-              <input
-                type="checkbox"
-                checked={formValues.agreed}
-                disabled={!hasReadAgreement}
-                onChange={(event) => {
-                  setFormValues((current) => ({
-                    ...current,
-                    agreed: event.target.checked,
-                  }));
-                  setErrors((current) => ({ ...current, agreed: undefined }));
-                }}
-                className="mt-1 h-4 w-4 rounded border-emerald-300 text-emerald-600 accent-emerald-700 focus:ring-emerald-500 disabled:cursor-not-allowed"
+            <div id="booking-field-agreed" tabIndex={-1} role="group" aria-label="Agreement" aria-describedby={errors.agreed ? "booking-agreed-error" : undefined} className="space-y-4">
+              <AgreementPanel
+                intro={ui.agreementIntro}
+                scrollHint={ui.agreementScrollHint}
+                hasReadToBottom={hasReadAgreement}
+                onReachBottom={handleReachBottom}
               />
-              <span className="text-sm text-stone-700">{ui.agreeLabel}</span>
-            </label>
-            {errors.agreed ? (
-              <p className="text-sm text-red-500">{errors.agreed}</p>
-            ) : null}
+              <label
+                className={`flex items-start gap-3 rounded-xl bg-emerald-50/60 p-4 ${
+                  !hasReadAgreement ? "cursor-not-allowed opacity-60" : ""
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  aria-invalid={Boolean(errors.agreed)}
+                  aria-describedby={errors.agreed ? "booking-agreed-error" : undefined}
+                  checked={formValues.agreed}
+                  disabled={!hasReadAgreement}
+                  onChange={(event) => {
+                    setFormValues((current) => ({
+                      ...current,
+                      agreed: event.target.checked,
+                    }));
+                    setErrors((current) => ({ ...current, agreed: undefined }));
+                  }}
+                  className="mt-1 h-4 w-4 rounded border-emerald-300 text-emerald-600 accent-emerald-700 focus:ring-emerald-500 disabled:cursor-not-allowed"
+                />
+                <span className="text-sm text-stone-700">{ui.agreeLabel}</span>
+              </label>
+              {errors.agreed ? (
+                <p id="booking-agreed-error" className="text-sm text-red-600">{errors.agreed}</p>
+              ) : null}
+            </div>
           </FormSection>
 
           <FormSection title={ui.sections.signature}>
@@ -1044,29 +1008,26 @@ function HomePageContent() {
               <div className="font-medium text-stone-700">{ui.date}</div>
               <div className="mt-1 text-stone-900">{today}</div>
             </div>
-            <SignaturePad
-              clearLabel={ui.clearSignature}
-              disabled={!formValues.agreed}
-              disabledMessage={ui.signatureLocked}
-              onChange={(value) => {
-                setFormValues((current) => ({ ...current, signature: value }));
-                setErrors((current) => ({ ...current, signature: undefined }));
-              }}
-            />
-            {errors.signature ? (
-              <p className="text-sm text-red-500">{errors.signature}</p>
-            ) : null}
+            <div id="booking-field-signature" tabIndex={-1} role="group" aria-label="Signature" aria-describedby={errors.signature ? "booking-signature-error" : undefined}
+              className={errors.signature ? "rounded-xl ring-2 ring-red-400 p-2" : ""}>
+              <SignaturePad
+                clearLabel={ui.clearSignature}
+                disabled={!formValues.agreed}
+                disabledMessage={ui.signatureLocked}
+                onChange={(value) => {
+                  setFormValues((current) => ({ ...current, signature: value }));
+                  if (value) setErrors((current) => ({ ...current, signature: undefined }));
+                }}
+              />
+              {errors.signature ? (
+                <p id="booking-signature-error" className="mt-2 text-sm text-red-600">{errors.signature}</p>
+              ) : null}
+            </div>
           </FormSection>
-
-          {submitError ? (
-            <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">
-              {submitError}
-            </p>
-          ) : null}
 
           <button
             type="submit"
-            disabled={!canSubmit}
+            disabled={isSubmitting}
             className="w-full rounded-2xl bg-emerald-600 px-6 py-4 text-base font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {isSubmitting ? ui.submitting : ui.submit}
