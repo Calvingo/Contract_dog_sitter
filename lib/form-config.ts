@@ -322,8 +322,8 @@ export type AgreementSection = {
 };
 
 export const PAYMENT_EARLY_PICKUP_POLICY = {
-  title: "Payment & Early Pickup Policy",
-  body: "A 20% deposit is required to secure the reservation. The remaining balance is due in full at drop-off. If the Owner picks up the dog earlier than the confirmed reservation end date or time, unused boarding days or hours are non-refundable, as the reserved space has been held exclusively for the booking.",
+  title: "Payment, Late Drop-Off & Early Pickup Policy",
+  body: "A 20% deposit is required to secure the reservation. The remaining balance is due in full at drop-off. If the Owner drops off the dog later than the confirmed reservation start date or time, or picks up the dog earlier than the confirmed reservation end date or time, resulting in a shorter stay, fees for the unused reserved boarding days or hours are non-refundable, as the reserved space has been held exclusively for the booking.",
 };
 
 export const agreementSections: AgreementSection[] = [
