@@ -13,6 +13,8 @@ export async function archiveSubmissionRevision(
       submissionId: current.id,
       revision: current.revision,
       status: current.status,
+      waitlistedAt: current.waitlistedAt,
+      waitlistDates: current.waitlistDates,
       agreementVersion: current.agreementVersion,
       depositPolicySnapshot: current.depositPolicySnapshot ?? Prisma.DbNull,
       quotedBreakdown: current.quotedBreakdown as Prisma.InputJsonValue,

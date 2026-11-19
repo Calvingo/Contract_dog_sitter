@@ -1,7 +1,8 @@
 import SuccessContent from "./SuccessContent";
 
 export default async function SuccessPage({ searchParams }: {
-  searchParams: Promise<{ emailWarning?: string }>;
+  searchParams: Promise<{ emailWarning?: string; waitlisted?: string }>;
 }) {
-  return <SuccessContent emailWarning={Boolean((await searchParams).emailWarning)} />;
+  const params = await searchParams;
+  return <SuccessContent emailWarning={Boolean(params.emailWarning)} waitlisted={params.waitlisted === "1"} />;
 }

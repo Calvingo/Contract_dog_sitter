@@ -1,5 +1,8 @@
 import { reconcileRewardHolds } from "@/lib/services/booking-rewards";
-import { prepareStatusChange } from "@/lib/platform/capacity";
+import { acceptanceImpact, acceptanceSummary, prepareStatusChange } from "@/lib/platform/capacity";
+import { isWaitlisted, waitlistDecisionNote } from "@/lib/waitlist";
+import { acceptedStay, dateKey, dateRange } from "@/lib/platform/rules";
+import { snapshotWaitlistCapacity, recordWaitlistOpenings, scheduleWaitlistNotification } from "@/lib/services/waitlist-alerts";
 import {
   DecisionAction as DbDecisionAction,
   EmailStatus,
@@ -41,7 +44,7 @@ export type DecisionResult =
       requiresScheduling: true;
       alreadySent: boolean;
     }
-  | { ok: false; status: number; title: string; message: string };
+  | { ok: false; status: number; title: string; message: string; reviewUrl?: string };
 
 function toSubmissionStatus(action: DecisionAction): SubmissionStatus {
   switch (action) {
@@ -192,6 +195,15 @@ export async function processDecision(
         message: "The customer must confirm the revised price in their account before this booking can be accepted." };
     }
 
+    if (decisionAction === "accept") {
+      const impact = await prisma.$transaction(tx => acceptanceImpact(tx, submission), { isolationLevel: "RepeatableRead" });
+      if (isWaitlisted(submission) || impact.some(day => day.closed || day.after > day.capacity)) {
+        return { ok: false, status: 409, title: "Review this request before accepting",
+          message: "Open the booking to review the waiting list and current capacity. You can manually Accept above the daily limit from the admin page.",
+          reviewUrl: `/admin/submissions/${encodeURIComponent(submission.id)}` };
+      }
+    }
+
     if (decisionAction === "meet_greet") {
       await prisma.$transaction(async (tx) => {
         const hold = await prepareStatusChange(
@@ -242,27 +254,36 @@ export async function processDecision(
       exp: payload.exp,
     };
 
-    const decisionEvent = await prisma.$transaction(async (tx) => {
+    const { decisionEvent, alertId } = await prisma.$transaction(async (tx) => {
       const hold = await prepareStatusChange(
         tx,
         submission.id,
         toSubmissionStatus(decisionAction),
         submission.revision,
         submission.status,
+        false,
       );
+      const previousStay = acceptedStay(submission);
+      const before = decisionAction === "accept"
+        ? await snapshotWaitlistCapacity(tx, dateRange(dateKey(previousStay.dropoffAt), dateKey(previousStay.pickupAt))) : new Map();
+      const impact = decisionAction === "accept" ? await acceptanceImpact(tx, submission) : [];
       await tx.submission.update({
         where: { id: submission.id },
         data: { status: toSubmissionStatus(decisionAction), ...hold },
       });
       await reconcileRewardHolds(tx, submission.customerId);
 
-      return tx.decisionEvent.create({
+      const decisionEvent = await tx.decisionEvent.create({
         data: {
           submissionId: submission.id,
           action: toDbDecisionAction(decisionAction),
+          message: `Email decision: ${decisionAction}.${waitlistDecisionNote(submission)}${impact.length ? ` ${acceptanceSummary(impact, 366)}` : ""}`,
         },
       });
+      const alertId = await recordWaitlistOpenings(tx, before, `accept:${submission.id}:${submission.revision}`, `Accepted changes to booking ${submission.id} released space.`);
+      return { decisionEvent, alertId };
     });
+    await scheduleWaitlistNotification(alertId);
 
     const subjectLabel = decisionActionLabel(decisionAction);
 

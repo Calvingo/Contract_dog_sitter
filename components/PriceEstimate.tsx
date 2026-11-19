@@ -8,6 +8,7 @@ type Props = {
   values: FormValues;
   terms?: DogPricingTerms[];
   manualPrice?: ManualOrderPrice;
+  waitlisted?: boolean;
   title: string;
   incompleteHint: string;
   holidayNote: string;
@@ -34,7 +35,7 @@ function DogQuote({ name, quote }: { name: string; quote: PriceBreakdown }) {
   );
 }
 
-export function PriceEstimate({ values, terms, manualPrice, title, incompleteHint, holidayNote }: Props) {
+export function PriceEstimate({ values, terms, manualPrice, waitlisted = false, title, incompleteHint, holidayNote }: Props) {
   let quote;
   try {
     quote = getSubmissionQuote(values, terms, manualPrice);
@@ -49,8 +50,9 @@ export function PriceEstimate({ values, terms, manualPrice, title, incompleteHin
 
   return (
     <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4">
+      {waitlisted && <p className="notice"><strong>Waiting-list estimate.</strong> Please wait for acceptance before paying a deposit. These prices apply if your request is accepted.</p>}
       <p className="notice">{HOLIDAY_BOOKING_POLICY}</p>
-      {policy.nonRefundable && <p className="notice">Non-refundable deposit: ${deposit.toFixed(2)}. {policy.holidays.map(h => `${h.name} (${h.date})`).join(", ")}</p>}
+      {policy.nonRefundable && <p className="notice">{waitlisted ? "Non-refundable deposit if accepted" : "Non-refundable deposit"}: ${deposit.toFixed(2)}. {policy.holidays.map(h => `${h.name} (${h.date})`).join(", ")}</p>}
       <h3 className="text-base font-semibold text-stone-900">{title}</h3>
       <p className="mt-2 text-sm text-stone-700">Stays shorter than 24 hours are billed as one full day.</p>
       <p className="mt-1 text-sm text-stone-700">For longer stays, each full 24 hours counts as one day. Extra time up to 2 hours is free; over 2 and up to 8 hours adds half a day; over 8 hours adds one day.</p>
@@ -60,13 +62,13 @@ export function PriceEstimate({ values, terms, manualPrice, title, incompleteHin
       </div>
       <dl className="mt-3 space-y-2 text-sm">
         <div className="flex justify-between border-t border-emerald-200 pt-3 text-base"><dt className="font-semibold">{quote.manualPrice ? "Manually set order total" : "Estimated total"}</dt><dd className="font-bold text-emerald-700">${total.toFixed(2)}</dd></div>
-        <div className="flex justify-between"><dt className="font-semibold">Deposit ({DEPOSIT_PERCENT}% of total)</dt><dd className="font-bold text-emerald-700">${deposit.toFixed(2)}</dd></div>
+        <div className="flex justify-between"><dt className="font-semibold">Deposit {waitlisted ? "if accepted " : ""}({DEPOSIT_PERCENT}% of total)</dt><dd className="font-bold text-emerald-700">${deposit.toFixed(2)}</dd></div>
         <div className="flex justify-between gap-4"><dt className="font-semibold">Remaining balance ({100 - DEPOSIT_PERCENT}% of total, due at drop-off)</dt><dd className="font-bold text-emerald-700">${(total - deposit).toFixed(2)}</dd></div>
       </dl>
-      <div className="mt-4 text-sm font-bold text-red-600">
+      {!waitlisted && <div className="mt-4 text-sm font-bold text-red-600">
         <h4>{PAYMENT_EARLY_PICKUP_POLICY.title}</h4>
         <p className="mt-2">{PAYMENT_EARLY_PICKUP_POLICY.body}</p>
-      </div>
+      </div>}
       <p className="mt-2 text-xs text-stone-500">Each dog is priced independently. {holidayNote}</p>
     </div>
   );

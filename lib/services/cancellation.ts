@@ -8,12 +8,14 @@ import { acceptedBookingDetails } from "@/lib/platform/accepted-booking";
 import type { SubmissionStatus } from "@prisma/client";
 import { archiveSubmissionRevision } from "@/lib/services/submission-revision";
 import { after } from "next/server";
+import { acceptedStay, dateKey, dateRange } from "@/lib/platform/rules";
+import { snapshotWaitlistCapacity, recordWaitlistOpenings, scheduleWaitlistNotification } from "./waitlist-alerts";
 
 const escape = (value: unknown) => String(value).replace(/[&<>"']/g, (character) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!);
 
 export async function cancelAdminBooking(id: string, revision: number, expectedStatus: SubmissionStatus) {
-  return prisma.$transaction(async (tx) => {
+  const booking = await prisma.$transaction(async (tx) => {
     await lockCapacity(tx);
     const current = await tx.submission.findUniqueOrThrow({
       where: { id },
@@ -23,15 +25,20 @@ export async function cancelAdminBooking(id: string, revision: number, expectedS
     if (current.revision !== revision || current.status !== expectedStatus) {
       throw new Error("This booking changed. Refresh before cancelling.");
     }
+    const stay = acceptedStay(current);
+    const before = await snapshotWaitlistCapacity(tx, dateRange(dateKey(stay.dropoffAt), dateKey(stay.pickupAt)));
     await archiveSubmissionRevision(tx, current);
     await tx.submission.update({
       where: { id },
-      data: { status: "CANCELLED", rewardState: "NONE", revision: { increment: 1 }, lastEditedAt: new Date(), holdExpiresAt: null },
+      data: { status: "CANCELLED", waitlistedAt: null, waitlistDates: [], rewardState: "NONE", revision: { increment: 1 }, lastEditedAt: new Date(), holdExpiresAt: null },
     });
     await reconcileRewardHolds(tx, current.customerId);
     // Keep accepted terms, quoted amounts, payments and the customer's request as history.
-    return current;
+    const waitlistAlertId = await recordWaitlistOpenings(tx, before, `cancel:${id}:${revision}`, `Booking ${id} was cancelled.`);
+    return { ...current, waitlistAlertId };
   });
+  await scheduleWaitlistNotification(booking.waitlistAlertId);
+  return booking;
 }
 
 type CancelledBooking = Awaited<ReturnType<typeof cancelAdminBooking>>;

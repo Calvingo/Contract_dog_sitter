@@ -1,6 +1,9 @@
 import { reconcileRewardHolds } from "@/lib/services/booking-rewards";
-import { prepareStatusChange } from "@/lib/platform/capacity";
+import { acceptanceImpact, acceptanceSummary, prepareStatusChange } from "@/lib/platform/capacity";
+import { acceptedStay, dateKey, dateRange } from "@/lib/platform/rules";
+import { snapshotWaitlistCapacity, recordWaitlistOpenings, scheduleWaitlistNotification } from "@/lib/services/waitlist-alerts";
 import { bookingDecisionActions } from "./booking-actions";
+import { waitlistDecisionNote } from "@/lib/waitlist";
 import {
   DecisionAction as DbDecisionAction,
   EmailStatus,
@@ -109,29 +112,37 @@ export async function processAdminSubmissionDecision(options: {
       ? `Meet & greet proposed for ${formatMeetGreetTime(options.meetGreetAt)}.`
       : `Admin selected ${decisionActionLabel(options.action)}.`;
 
-  const decisionEvent = await prisma.$transaction(async (tx) => {
+  const { decisionEvent, alertId } = await prisma.$transaction(async (tx) => {
     const hold = await prepareStatusChange(
       tx,
       submission.id,
       toSubmissionStatus(options.action),
       submission.revision,
       submission.status,
+      true,
     );
+    const impact = options.action === "accept" ? await acceptanceImpact(tx, submission) : [];
+    const previousStay = acceptedStay(submission);
+    const before = options.action === "accept"
+      ? await snapshotWaitlistCapacity(tx, dateRange(dateKey(previousStay.dropoffAt), dateKey(previousStay.pickupAt))) : new Map();
     await tx.submission.update({
       where: { id: submission.id },
       data: { status: toSubmissionStatus(options.action), ...hold },
     });
     await reconcileRewardHolds(tx, submission.customerId);
 
-    return tx.decisionEvent.create({
+    const decisionEvent = await tx.decisionEvent.create({
       data: {
         submissionId: submission.id,
         action: toDbDecisionAction(options.action),
         actorEmail: options.adminEmail,
-        message,
+        message: `${message}${waitlistDecisionNote(submission)}${impact.length ? ` ${acceptanceSummary(impact, 366)}` : ""}`,
       },
     });
+    const alertId = await recordWaitlistOpenings(tx, before, `accept:${submission.id}:${submission.revision}`, `Accepted changes to booking ${submission.id} released space.`);
+    return { decisionEvent, alertId };
   });
+  await scheduleWaitlistNotification(alertId);
 
   const payload = {
     submissionId: submission.id,

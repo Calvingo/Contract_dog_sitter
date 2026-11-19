@@ -49,14 +49,14 @@ export function statusClass(status: SubmissionStatus): string {
   }
 }
 
-export function StatusBadge({ status }: { status: SubmissionStatus }) {
+export function StatusBadge({ status, waitlisted = false }: { status: SubmissionStatus; waitlisted?: boolean }) {
   return (
     <span
       className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass(
         status,
       )}`}
     >
-      {status.replaceAll("_", " ")}
+      {waitlisted ? "WAITING LIST" : status.replaceAll("_", " ")}
     </span>
   );
 }

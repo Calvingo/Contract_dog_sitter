@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/db";
 import { getSettings, lockCapacity } from "./capacity";
 import { dateRange } from "./rules";
+import { randomUUID } from "node:crypto";
+import { snapshotWaitlistCapacity, recordWaitlistOpenings, scheduleWaitlistNotification } from "@/lib/services/waitlist-alerts";
 
 export type CalendarMode = "block" | "unblock" | "capacity" | "reset";
 export async function updateCalendarRange(options: {
@@ -23,9 +25,10 @@ export async function updateCalendarRange(options: {
       "Capacity must be a whole number from 1 to 100. Use Block dates to close dates.",
     );
   const note = (options.note || "").trim().slice(0, 300);
-  await prisma.$transaction(
+  const alertId = await prisma.$transaction(
     async (tx) => {
       await lockCapacity(tx);
+      const before = await snapshotWaitlistCapacity(tx, dates);
       const settings = await getSettings(tx);
       for (const date of dates) {
         const current = await tx.dailyCapacity.findUnique({ where: { date } });
@@ -65,14 +68,16 @@ export async function updateCalendarRange(options: {
           await tx.dailyCapacity.delete({ where: { date } });
         }
       }
+      return recordWaitlistOpenings(tx, before, `calendar:${randomUUID()}`, `Calendar ${options.mode}: ${options.start} through ${options.end}.`);
     },
     { timeout: 15000 },
   );
+  await scheduleWaitlistNotification(alertId);
   const label = {
     block: "Blocked",
     unblock: "Unblocked",
     capacity: "Updated capacity for",
     reset: "Restored default capacity for",
   }[options.mode];
-  return `${label} ${dates.length} day${dates.length === 1 ? "" : "s"}: ${options.start} through ${options.end}. Existing bookings are unchanged.${options.mode === "unblock" ? " Full dates still cannot be booked." : ""}`;
+  return `${label} ${dates.length} day${dates.length === 1 ? "" : "s"}: ${options.start} through ${options.end}. Existing bookings are unchanged.${options.mode === "unblock" ? " Full dates accept waiting-list requests." : ""}${alertId ? " Space opened up; review the waiting list reminder." : ""}`;
 }

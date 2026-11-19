@@ -1,4 +1,5 @@
 import { loadRewards } from "@/lib/platform/loyalty";
+import { isWaitlisted, WAITLIST_SAVED } from "@/lib/waitlist";
 import { HOLIDAY_BOOKING_POLICY, type DepositPolicy } from "@/lib/federal-holidays";
 import { acceptedBookingDetails } from "@/lib/platform/accepted-booking";
 import { notFound } from "next/navigation";
@@ -43,6 +44,7 @@ export default async function BookingDetail({
   const policy = (booking.acceptedRevision !== null
     ? booking.acceptedDepositPolicySnapshot : booking.depositPolicySnapshot) as DepositPolicy | null;
   const active = booking.status !== "CANCELLED" && (booking.status !== "REJECTED" || reservesCapacity(booking));
+  const waitingForFirstAcceptance = isWaitlisted(booking) && !reservesCapacity(booking);
   const remaining = Math.max(
     0,
     depositDue(stay.quotedTotal) - recordedPaymentAmount(booking),
@@ -80,10 +82,15 @@ export default async function BookingDetail({
       )}
       {!notification.emailWarning && notification.emailPending && (
         <p role="status" className="notice">
-          Your request has been saved. Your confirmation email and signed PDF
+          Your request has been saved. Your receipt email and signed PDF
           will arrive shortly. You do not need to submit again.
         </p>
       )}
+      {isWaitlisted(booking) && <p className="notice" role="status">
+        {reservesCapacity(booking)
+          ? "Your proposed changes are on the waiting list. Your previously confirmed dates remain reserved until we accept the changes."
+          : WAITLIST_SAVED}
+      </p>}
       <p className="small">Boarding rewards · {balance.days} dog-days earned · {balance.daysToNext} to your next reward · {balance.available} available</p>
       <section className="metric-grid">
         <div className="panel">
@@ -113,7 +120,7 @@ export default async function BookingDetail({
       </p>}
       {hasPendingChanges && <p className="notice">
         The dates and deposit shown are for your confirmed stay. Proposed dates: {format(booking.dropoffAt)} → {format(booking.pickupAt)}.
-        {booking.status === "REJECTED" ? " Your proposed changes were declined; the original stay remains confirmed." : " Your changes are awaiting review."}
+        {booking.status === "REJECTED" ? " Your proposed changes were declined; the original stay remains confirmed." : isWaitlisted(booking) ? " Your changes remain on the waiting list." : " Your changes are awaiting review."}
       </p>}
       <div className="detail-grid">
         <section className="panel">
@@ -132,20 +139,20 @@ export default async function BookingDetail({
                 <dd>${stay.quotedTotal.toFixed(2)}</dd>
               </div>
               <div>
-                <dt>20% deposit</dt>
+                <dt>{waitingForFirstAcceptance ? "20% deposit if accepted" : "20% deposit"}</dt>
                 <dd>${depositDue(stay.quotedTotal).toFixed(2)}</dd>
               </div>
               <div>
                 <dt>Confirmed payments after refunds</dt>
                 <dd>${verifiedAmount(booking).toFixed(2)}</dd>
               </div>
-              <div>
+              {!waitingForFirstAcceptance && <div>
                 <dt>Deposit not yet recorded</dt>
                 <dd>${remaining.toFixed(2)}</dd>
-              </div>
+              </div>}
             </dl>
           )}
-          {policy && <p className="notice">{HOLIDAY_BOOKING_POLICY} Non-refundable deposit: ${policy.nonRefundableAmount.toFixed(2)}. {policy.holidays.map(h => `${h.name} (${h.date})`).join(", ")}</p>}
+          {policy && <p className="notice">{waitingForFirstAcceptance ? "If accepted: " : ""}{HOLIDAY_BOOKING_POLICY} Non-refundable deposit: ${policy.nonRefundableAmount.toFixed(2)}. {policy.holidays.map(h => `${h.name} (${h.date})`).join(", ")}</p>}
           {canPay ? (
             <>
               {zelle || venmo ? (

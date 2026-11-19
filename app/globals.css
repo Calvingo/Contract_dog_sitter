@@ -501,6 +501,15 @@ summary:focus-visible {
 .calendar-day.in-range {
   background: var(--calendar-range);
 }
+.calendar-day.full.selected,
+.calendar-day.full.in-range {
+  background: #f3efec;
+  color: #6b6259;
+  border-color: var(--accent);
+}
+.calendar-day.full.selected {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
 .calendar-day:hover:not(:disabled) {
   border-color: var(--accent);
 }

@@ -231,6 +231,9 @@ try {
   let session = null;
   require("../lib/auth/customer-session.ts").getCustomerSession = async () => session;
   require("../lib/services/submission-notification.ts").scheduleSubmissionNotification = async () => true;
+  // Rate-limit behavior has its own tests. Keep repeated domain runs independent
+  // of the shared local-IP bucket and the fixed blocked-email fixture.
+  require("../lib/platform/rate-limit.ts").allowRequest = async () => true;
   const { POST: submitPOST } = require("../app/api/submit/route.ts");
   await prisma.bookingBlocklist.update({ where: { email: restored.customer.email }, data: { blocked: true, reason: "private internal reason" } });
   for (const identity of [null, { customerId: restored.customer.id }]) {
@@ -239,13 +242,13 @@ try {
     assert.equal(response.status, 409);
     assert.equal((await response.json()).error, require("../lib/platform/booking-blocklist.ts").BOOKING_UNAVAILABLE_MESSAGE);
   }
-  const sundayResponse = await submitPOST(new Request("http://localhost/api/submit", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(values(restored.customer.email, { dropoffDate: "2026-10-25", dropoffTime: "15:00", pickupDate: "2026-10-26" })) }));
+  const sundayResponse = await submitPOST(new Request("http://localhost/api/submit", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(values(restored.customer.email, { dropoffDate: "2090-04-09", dropoffTime: "15:00", pickupDate: "2090-04-10" })) }));
   assert.equal(sundayResponse.status, 400);
   assert.match((await sundayResponse.json()).error, /except Sundays/);
   const { createSubmissionEditToken } = require("../lib/submission-edit-token.ts");
   const editToken = await createSubmissionEditToken(restored.submission.id);
   const { POST: editPOST } = require("../app/api/submission/edit/route.ts");
-  const editResponse = await editPOST(new Request("http://localhost/api/submission/edit", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: editToken, values: values(restored.customer.email, { dropoffDate: "2026-10-24", pickupDate: "2026-10-25", pickupTime: "17:30" }) }) }));
+  const editResponse = await editPOST(new Request("http://localhost/api/submission/edit", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: editToken, values: values(restored.customer.email, { dropoffDate: "2090-04-08", pickupDate: "2090-04-09", pickupTime: "17:30" }) }) }));
   assert.equal(editResponse.status, 400);
   assert.match((await editResponse.json()).error, /except Sundays/);
   console.log("PASS accepted names/dates/deposit after edits, rejected-change re-edit, consistent marketing exclusions, admin agreement archive/policy/stale edit, private guest/signed-in API blocklist and Sunday create/edit API validation.");

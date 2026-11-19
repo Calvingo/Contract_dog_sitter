@@ -102,6 +102,8 @@ model Submission {
   customerId              String
   petId                   String
   status                  SubmissionStatus      @default(PENDING)
+  waitlistedAt            DateTime?
+  waitlistDates           String[]              @default([])
   revision                Int                   @default(1)
   rewardState             RewardState           @default(NONE)
   rewardRequestId         String?
@@ -143,6 +145,7 @@ model Submission {
   @@index([petId])
   @@unique([customerId, rewardRequestId])
   @@index([status, createdAt])
+  @@index([waitlistedAt])
   @@index([revision])
 }
 
@@ -223,6 +226,8 @@ model SubmissionRevision {
   submissionId     String
   revision         Int
   status           SubmissionStatus
+  waitlistedAt     DateTime?
+  waitlistDates    String[]         @default([])
   quotedBreakdown  Json
   quotedTotal      Decimal          @db.Decimal(10, 2)
   prescreenAnswers Json
@@ -240,6 +245,23 @@ model SubmissionRevision {
 
   @@unique([submissionId, revision])
   @@index([submissionId])
+}
+
+model WaitlistAlert {
+  id               String   @id @default(cuid())
+  eventKey         String   @unique
+  reason           String
+  dates            String[]
+  remaining        Json
+  candidateCount   Int
+  createdAt        DateTime @default(now())
+  acknowledgedAt   DateTime?
+  acknowledgedBy   String?
+  emailAttemptedAt DateTime?
+  emailSentAt      DateTime?
+  emailFailed      Boolean  @default(false)
+
+  @@index([acknowledgedAt, createdAt])
 }
 
 model SubmissionPet {

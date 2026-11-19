@@ -18,6 +18,7 @@ export async function GET(request: Request) {
 
   try {
     const result = await processDecision(token, action);
+    if (!result.ok && result.reviewUrl) return NextResponse.redirect(new URL(result.reviewUrl, request.url), 303);
     const { title, message, success } = decisionResultMessage(result);
 
     if (!result.ok) {

@@ -12,6 +12,9 @@ import { CancelOrderForm } from "@/components/CancelOrderForm";
 import { AdminShell } from "../../admin-ui";
 import { EditOrderForm } from "../_edit-order-form";
 import { EditCustomerPetsForm } from "../_edit-customer-pets-form";
+import { isWaitlisted } from "@/lib/waitlist";
+import { acceptanceImpact, acceptanceSummary } from "@/lib/platform/capacity";
+import { bookingDecisionActions } from "@/lib/admin/booking-actions";
 
 export const maxDuration = 120;
 
@@ -52,6 +55,8 @@ export default async function AdminSubmissionDetailPage(props: {
   });
 
   if (!submission) notFound();
+  const impact = bookingDecisionActions(submission.status).includes("accept")
+    ? await prisma.$transaction(tx => acceptanceImpact(tx, submission), { isolationLevel: "RepeatableRead" }) : [];
 
   const values = formValuesFromSubmission(submission);
   const manualPrice = storedManualPrice(submission.quotedBreakdown);
@@ -81,7 +86,7 @@ export default async function AdminSubmissionDetailPage(props: {
         <section className="grid gap-4 md:grid-cols-4">
           <Summary
             label="Status"
-            value={submission.status.replaceAll("_", " ")}
+            value={isWaitlisted(submission) ? "WAITING LIST" : submission.status.replaceAll("_", " ")}
           />
           <Summary label="Dropoff" value={dateTime(submission.dropoffAt)} />
           <Summary label="Pickup" value={dateTime(submission.pickupAt)} />
@@ -90,12 +95,19 @@ export default async function AdminSubmissionDetailPage(props: {
 
         <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-orange-100">
           <h2 className="text-xl font-bold text-stone-950">Admin Decision</h2>
+          {isWaitlisted(submission) && <div className="notice"><p>On the waiting list since {submission.waitlistedAt!.toLocaleString("en-US", { timeZone: "America/Los_Angeles" })} Pacific. Contact the customer before accepting. Accept can exceed the daily limit.</p><p>{values.firstName} {values.lastName} · {values.email} · {values.phone}</p>{submission.acceptedDropoffAt && <p>The previously accepted stay remains reserved while these changes wait for acceptance.</p>}</div>}
+          {impact.some(day => day.closed || day.after > day.capacity) && <div className="table-scroll">
+            <table className="platform-table"><thead><tr><th>Date</th><th>Booked / limit</th><th>After Accept / limit</th></tr></thead><tbody>
+              {impact.filter(day => day.closed || day.after > day.capacity).map(day => <tr key={day.date}><td>{day.date}</td><td>{day.occupied} / {day.capacity}</td><td>{day.closed ? "Closed — reopen first" : `${day.after} / ${day.capacity}`}</td></tr>)}
+            </tbody></table>
+          </div>}
           {submission.rewardState === "RECONFIRM" && <p className="notice">Reward withdrawn. The customer must confirm the revised price in their account before acceptance.</p>}
           <BookingRequestActions
             id={submission.id}
             status={submission.status}
             revision={submission.revision}
             showEdit={false}
+            capacitySummary={impact.length ? acceptanceSummary(impact) : undefined}
           />
         </section>
 
@@ -105,6 +117,7 @@ export default async function AdminSubmissionDetailPage(props: {
             key={`${submission.revision}:${submission.status}`}
             submissionId={submission.id}
             defaultStatus={submission.status}
+            waitlisted={isWaitlisted(submission)}
             defaultDropoffAt={localDateTimeInputValue(submission.dropoffAt)}
             defaultPickupAt={localDateTimeInputValue(submission.pickupAt)}
             defaultPrescreenNotes={submission.prescreenNotes || ""}

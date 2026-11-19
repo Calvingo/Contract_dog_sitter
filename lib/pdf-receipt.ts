@@ -162,7 +162,8 @@ export async function generateSubmissionPdf(
   data: FormValues,
   quote: SubmissionQuote,
   signatureBuffer: Buffer,
-  agreementVersion = "2026-10-federal-v1"
+  agreementVersion = "2026-10-federal-v1",
+  waitlisted = false,
 ): Promise<Buffer> {
   const doc = await PDFDocument.create();
   const { font, bold } = await embedPdfFonts(doc);
@@ -203,6 +204,11 @@ export async function generateSubmissionPdf(
     rgb(0.34, 0.33, 0.31)
   );
   ctx = { ...ctx, y: ctx.y - 10 };
+
+  if (waitlisted) {
+    ctx = drawLines(ctx, wrapLines("WAITING LIST — NOT CONFIRMED. Please wait for our acceptance before paying a deposit. The quote and agreement below do not reserve a place. Changes to an existing confirmed stay do not release the original dates.", bold, 11, CONTENT_WIDTH), 11, bold);
+    ctx = { ...ctx, y: ctx.y - 10 };
+  }
 
   ctx = drawBoardingChecklist(ctx);
 

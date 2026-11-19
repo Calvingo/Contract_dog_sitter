@@ -3,7 +3,9 @@ import { useEffect, useState } from "react";
 import { dateKey, todayKey } from "@/lib/platform/rules";
 import { getPickupDropoffTimeOptions, isPickupDropoffTimeAllowed } from "@/lib/booking-time";
 import { useCaliforniaToday } from "@/lib/use-california-today";
+import { WAITLIST_NOTICE, WAITLIST_NOTICE_ZH, WAITLIST_SAVED } from "@/lib/waitlist";
 type Day = { date: string; remaining: number; closed: boolean };
+export type CalendarSelectionStatus = { waitlisted: boolean; closed: boolean; loading: boolean };
 export function AvailabilityCalendar({
   dogs = 1,
   start = "",
@@ -14,6 +16,8 @@ export function AvailabilityCalendar({
   pickupTime = "",
   onTimeChange,
   errors,
+  waitlisted = false,
+  onStatusChange,
 }: {
   dogs?: number;
   start?: string;
@@ -26,6 +30,8 @@ export function AvailabilityCalendar({
   errors?: Partial<
     Record<"dropoffDate" | "pickupDate" | "dropoffTime" | "pickupTime", string>
   >;
+  waitlisted?: boolean;
+  onStatusChange?: (status: CalendarSelectionStatus) => void;
 }) {
   useEffect(() => {
     if (dropoffTime && !isPickupDropoffTimeAllowed(dropoffTime, start)) onTimeChange?.("dropoffTime", "");
@@ -37,6 +43,8 @@ export function AvailabilityCalendar({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [checking, setChecking] = useState(false);
+  const [rangeFull, setRangeFull] = useState(false);
+  const [rangeError, setRangeError] = useState("");
   const [inclusive, setInclusive] = useState(true);
   const [reload, setReload] = useState(0);
   const first = `${month}-01`;
@@ -55,6 +63,7 @@ export function AvailabilityCalendar({
     })
       .then(async (response) => {
         const data = await response.json();
+        if (controller.signal.aborted) return;
         if (!response.ok) throw new Error(data.error);
         setDays(data.days);
         setInclusive(data.includePickupDay);
@@ -69,35 +78,45 @@ export function AvailabilityCalendar({
       });
     return () => controller.abort();
   }, [first, last, tokenQuery, reload]);
-  async function select(date: string) {
+  useEffect(() => {
+    const controller = new AbortController();
+    setRangeFull(false);
+    setRangeError("");
+    if (!start || !end || end < start) {
+      setChecking(false);
+      onStatusChange?.({ waitlisted, closed: false, loading: false });
+      return () => controller.abort();
+    }
+    setChecking(true);
+    onStatusChange?.({ waitlisted, closed: false, loading: true });
+    fetch(`/api/availability?start=${start}&end=${end}${tokenQuery}`, { signal: controller.signal })
+      .then(async response => {
+        const data = await response.json();
+        if (controller.signal.aborted) return;
+        if (!response.ok) throw new Error(data.error || "Unable to check these dates.");
+        const stay: Day[] = !data.includePickupDay && end > start ? data.days.slice(0, -1) : data.days;
+        const closed = stay.some(day => day.closed);
+        const full = stay.some(day => !day.closed && day.remaining < dogs);
+        setRangeFull(full);
+        setRangeError(closed ? "Some dates in this stay are closed. Please choose another range." : "");
+        onStatusChange?.({ waitlisted: waitlisted || full, closed, loading: false });
+        setChecking(false);
+      }).catch(error => {
+        if (error.name === "AbortError") return;
+        setRangeError("Availability could not be checked. Please retry.");
+        setChecking(false);
+        onStatusChange?.({ waitlisted, closed: true, loading: false });
+      });
+    return () => controller.abort();
+  }, [start, end, dogs, tokenQuery, waitlisted, onStatusChange, reload]);
+  function select(date: string) {
     if (!onSelect || date < todayKey()) return;
     if (!start || start < todayKey() || end || date < start) {
       onSelect(date, "");
       setError("");
       return;
     }
-    setChecking(true);
-    setError("");
-    try {
-      const response = await fetch(
-        `/api/availability?start=${start}&end=${date}${tokenQuery}`,
-      );
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
-      const stay: Day[] =
-        !data.includePickupDay && date > start
-          ? data.days.slice(0, -1)
-          : data.days;
-      if (stay.some((day) => day.remaining < dogs || day.closed))
-        throw new Error(
-          "Some dates in this stay do not have enough space. Choose another range.",
-        );
-      onSelect(start, date);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "Please try again.");
-    } finally {
-      setChecking(false);
-    }
+    onSelect(start, date);
   }
   function shift(delta: number) {
     const date = new Date(`${first}T12:00:00Z`);
@@ -163,7 +182,7 @@ export function AvailabilityCalendar({
               onSelect && start && start >= today && !end && !inclusive && day.date > start,
             );
             const disabled =
-              checking || past || (full && !pickupOnly);
+              checking || past || (day.closed && !pickupOnly);
             const selected = !past && (day.date === start || day.date === end);
             const between = !past && start && end && day.date > start && day.date < end;
             return (
@@ -173,7 +192,7 @@ export function AvailabilityCalendar({
                 disabled={disabled}
                 onClick={() => void select(day.date)}
                 className={`calendar-day ${past ? "past" : full ? "full" : "available"} ${selected ? "selected" : ""} ${between ? "in-range" : ""}`}
-                aria-label={`${day.date}: ${past ? "past date, unavailable" : day.closed ? "closed" : full ? "not enough space" : `${day.remaining} spaces available`}`}
+                aria-label={`${day.date}: ${past ? "past date, unavailable" : day.closed ? "closed" : full ? "full, waiting list available" : `${day.remaining} spaces available`}`}
                 aria-current={day.date === today ? "date" : undefined}
                 aria-pressed={selected}
               >
@@ -190,6 +209,13 @@ export function AvailabilityCalendar({
           Checking availability…
         </p>
       )}
+      {checking && <p className="notice" role="status">Checking your stay…</p>}
+      {rangeError && <p className="notice error" role="alert">{rangeError} <button type="button" onClick={() => setReload(value => value + 1)}>Retry</button></p>}
+      {!rangeError && (rangeFull || waitlisted) && <div className="notice" role="status">
+        <strong>Waiting list — not confirmed</strong>
+        <p>{rangeFull ? WAITLIST_NOTICE : WAITLIST_SAVED}</p>
+        {rangeFull && <p lang="zh">{WAITLIST_NOTICE_ZH}</p>}
+      </div>}
       {error && (
         <p role="alert" className="notice error">
           {error}{" "}
@@ -272,6 +298,7 @@ export function AvailabilityCalendar({
         </div>
       )}
       <p className="small">
+        Full dates are grey and can be selected to join the waiting list. Closed dates are unavailable.
         Availability is checked again when you submit. Dates are in Pacific
         local time (California). Past dates are unavailable.
       </p>

@@ -9,11 +9,13 @@ export function BookingRequestActions({
   status,
   revision,
   showEdit = true,
+  capacitySummary,
 }: {
   id: string;
   status: string;
   revision: number;
   showEdit?: boolean;
+  capacitySummary?: string;
 }) {
   const [state, action, pending] = useActionState(
     decideSubmissionActionWithState,
@@ -29,6 +31,7 @@ export function BookingRequestActions({
           <input type="hidden" name="revision" value={revision} />
           <input type="hidden" name="expectedStatus" value={status} />
           <fieldset disabled={pending} className="form-stack">
+            {capacitySummary && <p className="small max-w-sm">{capacitySummary}</p>}
             <div className="flex flex-wrap gap-2">
               <button
                 className="button"

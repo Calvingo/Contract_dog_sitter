@@ -6,6 +6,8 @@ import { getAdminSession } from "@/lib/auth/admin-session";
 import { listBookingRequests, type BookingRequestParams } from "@/lib/admin/booking-requests";
 import { submissionDogNames } from "@/lib/submission-pets";
 import { AdminShell, StatusBadge, dateTime, money } from "../admin-ui";
+import { isWaitlisted } from "@/lib/waitlist";
+import { WaitlistAlerts } from "@/components/WaitlistAlerts";
 
 export const maxDuration = 120;
 
@@ -13,10 +15,12 @@ export default async function AdminRequestsPage({ searchParams }: { searchParams
   const session = await getAdminSession();
   if (!session) redirect("/admin/login");
 
-  const { query, submissions, total, page, pages, skip, pending } = await listBookingRequests(await searchParams);
+  const { query, view, date, waitlistCount, submissions, total, page, pages, skip, pending } = await listBookingRequests(await searchParams);
   function pageLink(targetPage: number) {
     const params = new URLSearchParams();
     if (query) params.set("q", query);
+    if (view === "waitlist") params.set("view", view);
+    if (date) params.set("date", date);
     params.set("page", String(targetPage));
     return `/admin/requests?${params}`;
   }
@@ -27,25 +31,33 @@ export default async function AdminRequestsPage({ searchParams }: { searchParams
       title="Requests"
       subtitle="Review booking requests and send customer decision emails."
     >
+      <WaitlistAlerts />
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-orange-100">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="text-xl font-bold text-stone-950">
-              Booking Requests
+              {view === "waitlist" ? "Waiting List" : "Booking Requests"}
             </h2>
             <p className="text-sm text-stone-600">
-              {pending._count} pending · pending quoted {money(pending._sum.quotedTotal ?? 0)}
+              {pending._count} pending · pending quoted {money(pending._sum.quotedTotal ?? 0)} · {waitlistCount} on waiting list
             </p>
           </div>
         </div>
 
-        <form action="/admin/requests" method="get" className="filter-form mt-4" key={query}>
+        <div className="flex flex-wrap gap-3 mt-4">
+          <Link className="button secondary" href="/admin/requests" aria-current={view === "all" ? "page" : undefined}>All requests</Link>
+          <Link className="button secondary" href="/admin/requests?view=waitlist" aria-current={view === "waitlist" ? "page" : undefined}>Waiting list ({waitlistCount})</Link>
+        </div>
+        {view === "waitlist" && <p className="small mt-3">Listed by time joined. Contact customers to confirm they still need boarding, then choose Accept. Open space never accepts a request automatically.</p>}
+        <form action="/admin/requests" method="get" className="filter-form mt-4" key={`${query}:${date}:${view}`}>
+          <input type="hidden" name="view" value={view} />
           <label>
             Customer or pet name
             <input type="search" name="q" defaultValue={query} maxLength={100} />
           </label>
+          <label>Stay includes date<input type="date" name="date" defaultValue={date} /></label>
           <button className="button" type="submit">Search</button>
-          {query && <Link className="button secondary" href="/admin/requests">Clear search</Link>}
+          {(query || date) && <Link className="button secondary" href={view === "waitlist" ? "/admin/requests?view=waitlist" : "/admin/requests"}>Clear filters</Link>}
         </form>
 
         {total > 0 && <p className="mt-4 text-sm text-stone-600">
@@ -65,7 +77,7 @@ export default async function AdminRequestsPage({ searchParams }: { searchParams
             </thead>
             <tbody className="divide-y divide-stone-100">
               {total === 0 && <tr><td colSpan={6} className="py-6 text-stone-600">
-                {query ? `No bookings match “${query}”.` : "No bookings yet."}
+                {query ? `No bookings match “${query}”.` : view === "waitlist" ? "No waiting-list requests match these dates." : "No bookings yet."}
               </td></tr>}
               {submissions.map((submission) => (
                 <tr key={submission.id} className="align-top">
@@ -77,6 +89,7 @@ export default async function AdminRequestsPage({ searchParams }: { searchParams
                     <div className="text-xs text-stone-500">
                       {submission.customer.email}
                     </div>
+                    <div className="text-xs text-stone-500">{submission.contactPhone}</div>
                   </td>
                   <td className="py-4 pr-4">
                     <div className="font-semibold text-stone-900">
@@ -103,7 +116,8 @@ export default async function AdminRequestsPage({ searchParams }: { searchParams
                     {money(submission.quotedTotal)}
                   </td>
                   <td className="py-4 pr-4">
-                    <StatusBadge status={submission.status} />
+                    <StatusBadge status={submission.status} waitlisted={isWaitlisted(submission)} />
+                    {isWaitlisted(submission) && <p className="mt-2 text-xs text-stone-500">Joined {submission.waitlistedAt!.toLocaleString("en-US", { timeZone: "America/Los_Angeles" })} Pacific{ submission.status === "MEET_GREET_REQUESTED" ? " · Meet & greet requested" : ""}</p>}
                     {submission.cancellationRequestedAt &&
                       submission.status !== "CANCELLED" && (
                         <p className="mt-2 text-xs font-semibold text-red-700">
@@ -122,6 +136,7 @@ export default async function AdminRequestsPage({ searchParams }: { searchParams
                       id={submission.id}
                       status={submission.status}
                       revision={submission.revision}
+                      capacitySummary={submission.capacitySummary}
                     />
                     <CancelOrderForm id={submission.id} status={submission.status} revision={submission.revision} />
                   </td>

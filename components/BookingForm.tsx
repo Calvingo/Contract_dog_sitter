@@ -14,7 +14,7 @@ import {
 } from "@/lib/booking-prefill";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AvailabilityCalendar } from "@/components/AvailabilityCalendar";
+import { AvailabilityCalendar, type CalendarSelectionStatus } from "@/components/AvailabilityCalendar";
 import { PublicNav } from "@/components/PlatformShell";
 import { AgreementPanel } from "@/components/AgreementPanel";
 import { BoardingChecklist } from "@/components/BoardingChecklist";
@@ -54,6 +54,8 @@ function HomePageContent() {
   const [editTerms, setEditTerms] = useState<DogPricingTerms[]>([]);
   const [editPrice, setEditPrice] = useState<ManualOrderPrice>();
   const [editRevision, setEditRevision] = useState<number | undefined>(undefined);
+  const [editingWaitlisted, setEditingWaitlisted] = useState(false);
+  const [calendarStatus, setCalendarStatus] = useState<CalendarSelectionStatus>({ waitlisted: false, closed: false, loading: false });
   const [formValues, setFormValues] = useState<FormValues>(initialFormValues);
   const [errors, setErrors] = useState<BookingFieldErrors>({});
   const feedbackRef = useRef<HTMLDivElement>(null);
@@ -324,6 +326,7 @@ function HomePageContent() {
           dogTerms?: DogPricingTerms[];
           manualPrice?: ManualOrderPrice;
           revision?: number;
+          waitlisted?: boolean;
           notice?: string;
           error?: string;
         };
@@ -338,6 +341,7 @@ function HomePageContent() {
         setEditTerms(data.dogTerms || []);
         setEditPrice(data.manualPrice);
         setEditRevision(data.revision);
+        setEditingWaitlisted(Boolean(data.waitlisted));
         setFormValues({
           ...data.values,
           agreed: false,
@@ -508,6 +512,11 @@ function HomePageContent() {
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (isSubmitting) return;
+    if (calendarStatus.closed || calendarStatus.loading) {
+      setSubmitError(calendarStatus.loading ? "Please wait while we check your dates." : "Some dates are closed or could not be checked. Review the calendar above.");
+      setFeedbackAttempt(attempt => attempt + 1);
+      return;
+    }
     const nextErrors = getBookingFieldErrors(formValues, { minimumDate: todayKey(), hasReadAgreement });
     setErrors(nextErrors);
     setSubmitError("");
@@ -549,7 +558,10 @@ function HomePageContent() {
         throw new Error(result?.error || "We could not submit your request. Please try again. Your answers are still here.");
       }
       if (!result?.ok) throw new Error(ui.submitError);
-      const notificationQuery = result.replayed ? "" : result.emailWarning ? "?emailWarning=1" : "?emailPending=1";
+      const notificationParams = new URLSearchParams();
+      if (!result.replayed) notificationParams.set(result.emailWarning ? "emailWarning" : "emailPending", "1");
+      if (result.waitlisted) notificationParams.set("waitlisted", "1");
+      const notificationQuery = notificationParams.size ? `?${notificationParams}` : "";
       router.push(
         editToken || !result.accountAccess
           ? `/success${notificationQuery}`
@@ -624,6 +636,8 @@ function HomePageContent() {
           start={formValues.dropoffDate}
           end={formValues.pickupDate}
           editToken={editToken}
+          waitlisted={editingWaitlisted}
+          onStatusChange={setCalendarStatus}
           dropoffTime={formValues.dropoffTime}
           pickupTime={formValues.pickupTime}
           onTimeChange={handleFieldChange}
@@ -840,6 +854,7 @@ function HomePageContent() {
             <PriceEstimate
               terms={editTerms}
               manualPrice={editToken ? editPrice : undefined}
+              waitlisted={calendarStatus.waitlisted}
               values={formValues}
               title={ui.priceEstimateTitle}
               incompleteHint={ui.priceEstimateIncomplete}
@@ -951,6 +966,7 @@ function HomePageContent() {
           ) : null}
 
           <FormSection title={ui.sections.agreement}>
+            {calendarStatus.waitlisted && <p className="notice">You are signing a waiting-list request. Signing does not confirm a place; boarding and deposit terms apply if we accept your request.</p>}
             <div id="booking-field-agreed" tabIndex={-1} role="group" aria-label="Agreement" aria-describedby={errors.agreed ? "booking-agreed-error" : undefined} className="space-y-4">
               <AgreementPanel
                 intro={ui.agreementIntro}
@@ -1027,10 +1043,10 @@ function HomePageContent() {
 
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || calendarStatus.loading}
             className="w-full rounded-2xl bg-emerald-600 px-6 py-4 text-base font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-70"
           >
-            {isSubmitting ? ui.submitting : ui.submit}
+            {isSubmitting ? ui.submitting : calendarStatus.loading ? "Checking dates…" : calendarStatus.waitlisted ? "Submit waiting list request / 提交候补申请" : ui.submit}
           </button>
           </fieldset>
         </form>

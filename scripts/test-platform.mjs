@@ -230,7 +230,8 @@ try {
     0,
   );
   const other = owner.id === a.id ? b : a;
-  await assert.rejects(createSubmissionRecord(values(other),other.id),/not enough space/);
+  const waiting = await createSubmissionRecord(values(other),other.id);
+  assert.ok(waiting.submission.waitlistedAt, "Full dates save a waiting-list request without occupying space");
   await prisma.$transaction(async tx => {
     const snapshot = await prepareStatusChange(tx,winner.submission.id,"ACCEPTED");
     await tx.submission.update({where:{id:winner.submission.id},data:{status:"ACCEPTED",...snapshot}});
@@ -258,13 +259,11 @@ try {
     (await availability("2027-04-10", "2027-04-10")).days[0].occupied,
     2,
   );
-  await assert.rejects(
-    createSubmissionRecord(
+  const overlapping = await createSubmissionRecord(
       values(b, { dropoffDate: "2027-04-09", pickupDate: "2027-04-11" }),
       b.id,
-    ),
-    /not enough space/,
-  );
+    );
+  assert.ok(overlapping.submission.waitlistedAt, "A full middle day sends the entire request to the waiting list");
   await prisma.dailyCapacity.upsert({
     where: { date: "2027-04-15" },
     create: { date: "2027-04-15", capacity: 0 },

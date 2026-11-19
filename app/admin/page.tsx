@@ -5,6 +5,8 @@ import { prisma } from "@/lib/db";
 import { availability } from "@/lib/platform/capacity";
 import { todayKey } from "@/lib/platform/rules";
 import { AdminShell, ModuleCard, Stat, money } from "./admin-ui";
+import { waitingListWhere } from "@/lib/services/waitlist-alerts";
+import { WaitlistAlerts } from "@/components/WaitlistAlerts";
 
 export default async function AdminPage() {
   const session = await getAdminSession();
@@ -15,7 +17,7 @@ export default async function AdminPage() {
 
   const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
-  const [submissions, customerCount] = await Promise.all([
+  const [submissions, customerCount, waitlistCount] = await Promise.all([
     prisma.submission.findMany({
       where: {
         OR: [
@@ -31,12 +33,13 @@ export default async function AdminPage() {
       include: { pet: true, submissionPets: true },
     }),
     prisma.customer.count(),
+    prisma.submission.count({ where: waitingListWhere }),
   ]);
 
   const pending = submissions.filter(
     (submission) =>
-      submission.status === SubmissionStatus.PENDING ||
-      submission.status === SubmissionStatus.NEEDS_REVIEW,
+      !submission.waitlistedAt && (submission.status === SubmissionStatus.PENDING ||
+      submission.status === SubmissionStatus.NEEDS_REVIEW),
   );
   const activeDogsToday = (await availability(todayKey(), todayKey())).days[0].occupied;
   const acceptedThisMonth = submissions.filter(
@@ -56,6 +59,7 @@ export default async function AdminPage() {
       title="Admin Dashboard"
       subtitle="Choose a module to manage requests, calendar, reports, or customers."
     >
+      <WaitlistAlerts />
       <section className="grid gap-3 md:grid-cols-4">
         <Stat label="Pending requests" value={String(pending.length)} />
         <Stat label="Active dogs today" value={String(activeDogsToday)} />
@@ -67,6 +71,7 @@ export default async function AdminPage() {
       </section>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <ModuleCard href="/admin/requests?view=waitlist" title="Waiting List" meta={`${waitlistCount} waiting`} description="Contact waiting customers and manually accept requests, including above the daily limit." />
         <ModuleCard
           href="/admin/requests"
           title="Requests"

@@ -9,6 +9,7 @@ import { signatureToBuffer, validateSubmissionDetails } from "@/lib/validate";
 import { allowRequest, requestIp } from "@/lib/platform/rate-limit";
 import { prisma } from "@/lib/db";
 import { normalizeEmail } from "@/lib/submission-data";
+import { isWaitlisted } from "@/lib/waitlist";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -47,17 +48,19 @@ export async function POST(request: Request) {
 
     const signatureBuffer = signatureToBuffer(data.signature);
     const { submission, quote, replayed } = await createSubmissionRecord(data, verifiedOwnerId);
-    if (replayed) return NextResponse.json({ ok: true, submissionId: submission.id, accountAccess: true, replayed: true });
+    if (replayed) return NextResponse.json({ ok: true, submissionId: submission.id, accountAccess: true, replayed: true, waitlisted: isWaitlisted(submission) });
     const emailPending = await scheduleSubmissionNotification(
       data, signatureBuffer, submission.id, {
         revision: submission.revision,
         quote,
+        waitlisted: isWaitlisted(submission),
       },
     );
 
     return NextResponse.json({
       ok: true,
       submissionId: submission.id,
+      waitlisted: isWaitlisted(submission),
       emailWarning: !emailPending,
       emailPending,
       accountAccess: Boolean(verifiedOwnerId),

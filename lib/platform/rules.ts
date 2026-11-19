@@ -1,4 +1,5 @@
 import { DEPOSIT_PERCENT } from "../pricing";
+import { isWaitlisted } from "../waitlist";
 // Dates are boarding-site calendar dates, independent of the browser's time zone.
 // Existing submission timestamps use UTC wall-clock values in production.
 export const DEFAULT_SETTINGS = {
@@ -49,6 +50,7 @@ export function depositDue(total: number): number {
   return Math.round(total * DEPOSIT_PERCENT) / 100;
 }
 export type OccupancyBooking = {
+  waitlistedAt?: Date | null;
   acceptedDropoffAt?: Date | null;
   acceptedPickupAt?: Date | null;
   acceptedDogs?: number | null;
@@ -137,6 +139,9 @@ export function occupancyByDay(
 export function bookingLabel(booking: OccupancyBooking): string {
   if (booking.status === "CANCELLED") return "Cancelled";
   if (booking.status === "ACCEPTED") return "Confirmed";
+  if (isWaitlisted(booking)) return reservesCapacity(booking)
+    ? "Confirmed stay — proposed changes on waiting list"
+    : "Waiting list — not confirmed";
   if (booking.status === "REJECTED" && reservesCapacity(booking)) return "Confirmed stay — proposed changes declined";
   if (reservesCapacity(booking)) return "Confirmed stay — changes awaiting review";
   if (booking.status === "REJECTED") return "Not approved";

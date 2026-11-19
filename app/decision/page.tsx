@@ -49,7 +49,7 @@ export default async function DecisionPage({ searchParams }: Props) {
     }
 
     return (
-      <ResultLayout success={success} title={title} message={message} />
+      <ResultLayout success={success} title={title} message={message} reviewUrl={!result.ok ? result.reviewUrl : undefined} />
     );
   } catch (error) {
     console.error("[decision-page] error", error);
@@ -127,10 +127,12 @@ function ResultLayout({
   success,
   title,
   message,
+  reviewUrl,
 }: {
   success: boolean;
   title: string;
   message: string;
+  reviewUrl?: string;
 }) {
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#fff5f0] px-4 py-10">
@@ -144,6 +146,7 @@ function ResultLayout({
         </div>
         <h1 className="text-2xl font-bold text-stone-900">{title}</h1>
         <p className="mt-3 text-stone-600">{message}</p>
+        {reviewUrl && <Link className="button mt-6" href={reviewUrl}>Review booking / Accept</Link>}
         <Link
           href="/"
           className="mt-6 inline-flex rounded-xl bg-orange-600 px-5 py-3 text-sm font-semibold text-white hover:bg-orange-700"

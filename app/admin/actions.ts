@@ -1,7 +1,9 @@
 "use server";
 
 import {
-  assertCapacity,
+  requestCapacity,
+  acceptanceImpact,
+  acceptanceSummary,
   lockCapacity,
   getSettings,
 } from "@/lib/platform/capacity";
@@ -24,7 +26,9 @@ import type { DecisionAction } from "@/lib/decision-emails";
 import { signatureToBuffer } from "@/lib/validate";
 import { isPickupDropoffTimeAllowed } from "@/lib/booking-time";
 import { parseDateTime } from "@/lib/pricing";
-import { dateKey, dateRange } from "@/lib/platform/rules";
+import { acceptedStay, dateKey, dateRange } from "@/lib/platform/rules";
+import { isWaitlisted } from "@/lib/waitlist";
+import { snapshotWaitlistCapacity, recordWaitlistOpenings, scheduleWaitlistNotification } from "@/lib/services/waitlist-alerts";
 import { archiveSubmissionRevision } from "@/lib/services/submission-revision";
 import { readManualTotal, repriceAdminSubmission } from "@/lib/admin/submission-pricing";
 import { reconcileRewardHolds, rewardOnAcceptance } from "@/lib/services/booking-rewards";
@@ -32,7 +36,7 @@ import { lockCustomerProfile } from "@/lib/services/customer-profile";
 import { cancelAdminBooking, scheduleCancellationConfirmation } from "@/lib/services/cancellation";
 
 function revalidateBooking(submissionId: string) {
-  for (const path of ["/admin", "/admin/requests", "/admin/calendar", "/admin/reports", "/admin/customers", "/admin/payments", "/account", "/account/dogs", "/account/profile", "/book", `/admin/submissions/${submissionId}`, `/account/bookings/${submissionId}`]) {
+  for (const path of ["/", "/admin", "/admin/requests", "/admin/calendar", "/admin/reports", "/admin/customers", "/admin/payments", "/account", "/account/dogs", "/account/profile", "/book", `/admin/submissions/${submissionId}`, `/account/bookings/${submissionId}`]) {
     revalidatePath(path);
   }
 }
@@ -79,13 +83,7 @@ export async function decideSubmissionAction(formData: FormData) {
     expectedStatus,
   });
 
-  revalidatePath("/admin");
-  revalidatePath("/admin/requests");
-  revalidatePath("/admin/calendar");
-  revalidatePath("/admin/reports");
-  revalidatePath("/admin/customers");
-  revalidatePath(`/admin/submissions/${submissionId}`);
-  revalidatePath(`/account/bookings/${submissionId}`);
+  revalidateBooking(submissionId);
   if (decision.notificationFailed)
     throw new Error(
       "Decision saved, but the customer email could not be delivered. Check the email log and contact the customer.",
@@ -150,6 +148,7 @@ async function sendLatestSubmissionReceipt(submissionId: string) {
       quote: submission.quotedBreakdown as unknown as SubmissionQuote,
       sendAdminNotification: true,
       agreementVersion: submission.agreementVersion,
+      waitlisted: isWaitlisted(submission),
     },
   );
 
@@ -157,7 +156,7 @@ async function sendLatestSubmissionReceipt(submissionId: string) {
 }
 
 async function updateSubmissionInternal(formData: FormData) {
-  await requireAdmin();
+  const admin = await requireAdmin();
 
   const submissionId = String(formData.get("submissionId") || "");
   const status = String(formData.get("status") || "") as SubmissionStatus;
@@ -185,7 +184,7 @@ async function updateSubmissionInternal(formData: FormData) {
   }
 
   dateRange(dateKey(dropoffDate), dateKey(pickupDate));
-  await prisma.$transaction(async (tx) => {
+  const alertId = await prisma.$transaction(async (tx) => {
     await lockCapacity(tx);
     const current = await tx.submission.findUniqueOrThrow({
       where: { id: submissionId },
@@ -195,17 +194,22 @@ async function updateSubmissionInternal(formData: FormData) {
     if (current.status === "CANCELLED") throw new Error("This booking is cancelled. Create a new request instead.");
     const expectedStatus = formData.get("expectedStatus");
     if (expectedStatus && expectedStatus !== current.status) throw new Error("This booking changed. Refresh before editing.");
+    if (status === "ACCEPTED" && isWaitlisted(current))
+      throw new Error("Use the Accept button to confirm this request. Saving edits does not accept a waiting-list request.");
     const withinConfirmedStay = current.status === "ACCEPTED" &&
       dropoffDate >= (current.acceptedDropoffAt ?? current.dropoffAt) &&
       pickupDate <= (current.acceptedPickupAt ?? current.pickupAt);
-    if (status === "ACCEPTED" && !withinConfirmedStay)
-      await assertCapacity(
+    const waitlistDates = status !== "REJECTED" && !withinConfirmedStay
+      ? await requestCapacity(
         tx,
         dropoffDate,
         pickupDate,
         Math.max(1, current.submissionPets.length),
         current.id,
-      );
+      ) : [];
+    const previousStay = acceptedStay(current);
+    const before = await snapshotWaitlistCapacity(tx, dateRange(dateKey(previousStay.dropoffAt), dateKey(previousStay.pickupAt)));
+    const impact = status === "ACCEPTED" ? await acceptanceImpact(tx, { ...current, dropoffAt: dropoffDate, pickupAt: pickupDate }) : [];
     const settings = await getSettings(tx);
     await archiveSubmissionRevision(tx, current);
     const terms = storedDogTerms(current);
@@ -233,6 +237,8 @@ async function updateSubmissionInternal(formData: FormData) {
       where: { id: submissionId },
       data: {
         status,
+        waitlistedAt: status === "ACCEPTED" || status === "REJECTED" ? null : current.waitlistedAt ?? (waitlistDates.length ? new Date() : null),
+        waitlistDates: status === "ACCEPTED" || status === "REJECTED" ? [] : waitlistDates,
         ...pricing,
         rewardState,
         holdExpiresAt:
@@ -245,7 +251,13 @@ async function updateSubmissionInternal(formData: FormData) {
       },
     });
     await reconcileRewardHolds(tx, current.customerId);
+    if (status === "ACCEPTED") await tx.decisionEvent.create({ data: {
+      submissionId, action: "ACCEPT", actorEmail: admin.email,
+      message: `Admin updated the confirmed stay. ${acceptanceSummary(impact, 366)}`,
+    } });
+    return recordWaitlistOpenings(tx, before, `admin-edit:${submissionId}:${current.revision}`, `Changes to booking ${submissionId} released space.`);
   });
+  await scheduleWaitlistNotification(alertId);
 
   let receiptSentTo: string | undefined;
   let receiptError = false;

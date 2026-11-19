@@ -3,7 +3,7 @@ import { reconcileRewardHolds } from "./booking-rewards";
 import { bookingEmailAllowed, BOOKING_UNAVAILABLE_MESSAGE } from "@/lib/platform/booking-blocklist";
 import {
   BookingConflict,
-  assertCapacity,
+  requestCapacity,
   getSettings,
   lockCapacity,
 } from "@/lib/platform/capacity";
@@ -109,7 +109,7 @@ export async function createSubmissionRecord(
     if (data.useReward === true && (!owner || !(await loadRewards(tx, owner.id)).balance.available)) {
       throw new BookingConflict("This reward is unavailable. Refresh the booking page to review your rewards and price.");
     }
-    await assertCapacity(tx, dropoffAt, pickupAt, petSnapshots.length);
+    const waitlistDates = await requestCapacity(tx, dropoffAt, pickupAt, petSnapshots.length);
     const settings = await getSettings(tx);
     const customer = await tx.customer.upsert({
       where: { email: customerSnapshot.email },
@@ -164,6 +164,8 @@ export async function createSubmissionRecord(
       data: {
         customerId: customer.id,
         rewardRequestId,
+        waitlistedAt: waitlistDates.length ? now : null,
+        waitlistDates,
         rewardState: data.useReward === true ? "HELD" : "NONE",
         petId: pet.id,
         holdExpiresAt: new Date(now.getTime() + settings.holdHours * 3600000),
@@ -254,7 +256,7 @@ export async function updateSubmissionRecord(options: {
       throw new BookingConflict(
         "Use the original booking email. Contact us to change the booking owner.",
       );
-    await assertCapacity(
+    const waitlistDates = await requestCapacity(
       tx,
       dropoffAt,
       pickupAt,
@@ -310,6 +312,8 @@ export async function updateSubmissionRecord(options: {
         customerId: customer.id,
         petId: pet.id,
         status: nextStatus,
+        waitlistedAt: current.waitlistedAt ?? (waitlistDates.length ? now : null),
+        waitlistDates,
         ...(current.status === SubmissionStatus.ACCEPTED && !current.acceptedDropoffAt ? {
           acceptedDropoffAt:current.dropoffAt,acceptedPickupAt:current.pickupAt,
           acceptedDogs:Math.max(1,current.submissionPets.length),acceptedRevision:current.revision,

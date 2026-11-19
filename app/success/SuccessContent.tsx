@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { BoardingChecklist } from "@/components/BoardingChecklist";
 import { ui } from "@/lib/i18n";
+import { WAITLIST_SAVED } from "@/lib/waitlist";
 
-export default function SuccessContent({ emailWarning = false }: { emailWarning?: boolean }) {
+export default function SuccessContent({ emailWarning = false, waitlisted = false }: { emailWarning?: boolean; waitlisted?: boolean }) {
   return (
     <main className="min-h-screen px-4 py-8">
       <div className="mx-auto flex max-w-2xl flex-col gap-6">
@@ -11,11 +12,12 @@ export default function SuccessContent({ emailWarning = false }: { emailWarning?
             ✓
           </div>
           <h1 className="text-2xl font-bold text-stone-900">
-            {ui.successTitle}
+            {waitlisted ? "You’re on the waiting list" : ui.successTitle}
           </h1>
+          {waitlisted && <p className="mt-3 text-stone-600">{WAITLIST_SAVED}</p>}
           <p className="mt-3 text-stone-600">{emailWarning
             ? "Your request has been saved, but we could not start sending your receipt. Please contact us for a copy. You do not need to submit again."
-            : ui.successBody}</p>
+            : waitlisted ? "Your details have been saved. You do not need to submit again." : ui.successBody}</p>
         </div>
 
         <BoardingChecklist />

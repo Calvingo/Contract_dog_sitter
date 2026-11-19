@@ -32,6 +32,7 @@ import {
   parseAdminEmails,
 } from "./mailer";
 import { logEmail } from "./email-log";
+import { WAITLIST_SAVED } from "./waitlist";
 import {
   BOARDING_CHECKLIST_INTRO,
   BOARDING_CHECKLIST_ITEMS,
@@ -343,7 +344,8 @@ function buildCustomerEmailHtml(
   quote: SubmissionQuote,
   editUrl?: string,
   isUpdate = false,
-  agreementVersion = "2026-10-federal-v1"
+  agreementVersion = "2026-10-federal-v1",
+  waitlisted = false,
 ): string {
   const ownerName = `${data.firstName} ${data.lastName}`.trim();
   const editBlock = editUrl
@@ -351,6 +353,13 @@ function buildCustomerEmailHtml(
         You can edit this request here while it remains eligible for changes:<br/>
         <a href="${escapeHtml(editUrl)}" style="color:#ea580c;">Edit your submission</a></p>`
     : "";
+
+  if (waitlisted) return `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:640px;">
+    <h2>[${BRAND_NAME}] Waiting list — not confirmed</h2>
+    <p>Dear ${escapeHtml(ownerName)},</p><p>${WAITLIST_SAVED}</p>
+    <p>Requested dates: ${escapeHtml(data.dropoffDate)} to ${escapeHtml(data.pickupDate)}. Estimated total: $${quote.totalPrice.toFixed(2)}.</p>
+    <p>Your signed request is attached for your records. Prices and deposit terms apply if we accept your request. If this is a change to a previously confirmed stay, that original stay remains reserved.</p>
+    ${editBlock}${formatContactsSection()}</div>`;
 
   return `
     <div style="font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:640px;">
@@ -378,7 +387,8 @@ function buildAdminEmailHtml(
   submissionId?: string,
   revision?: number,
   isUpdate = false,
-  previousStatus?: string
+  previousStatus?: string,
+  waitlisted = false,
 ): string {
   const ownerName = `${data.firstName} ${data.lastName}`.trim();
   const submittedAt = new Date().toLocaleString("en-US");
@@ -396,7 +406,9 @@ function buildAdminEmailHtml(
       <p><strong>Dogs:</strong> ${escapeHtml([data.petName, data.hasSecondDog ? data.secondPetName : ""].filter(Boolean).join(" & "))}</p>
       <p><strong>Submitted at:</strong> ${escapeHtml(submittedAt)}</p>
       ${formatBoardingChecklistSection()}
-      ${buildAdminDecisionButtons(data, submissionId, revision)}
+      ${waitlisted && submissionId
+        ? `<p><strong>Waiting list — not confirmed.</strong> Contact the customer and review capacity before accepting. You may accept above the limit; capacity limits will not change.</p><p><a href="${escapeHtml(getAppBaseUrl())}/admin/submissions/${encodeURIComponent(submissionId)}">Review waiting-list request / Accept</a></p>`
+        : buildAdminDecisionButtons(data, submissionId, revision)}
       ${formatPricingSection(data, quote)}
       ${formatPrescreenSection(data)}
       ${data.hasSecondDog ? formatPrescreenSection(data, true) : ""}
@@ -419,11 +431,12 @@ export async function sendSubmissionEmails(
     quote?: SubmissionQuote;
     sendAdminNotification?: boolean;
     agreementVersion?: string;
+    waitlisted?: boolean;
   } = {}
 ) {
   const quote = resolveQuote(data, options.quote);
 
-  const pdfBuffer = await generateSubmissionPdf(data, quote, signatureBuffer, options.agreementVersion);
+  const pdfBuffer = await generateSubmissionPdf(data, quote, signatureBuffer, options.agreementVersion, options.waitlisted);
   const dogNames = [data.petName, data.hasSecondDog ? data.secondPetName : ""].filter(Boolean).join(" & ");
   const pdfName = pdfFilename(dogNames);
 
@@ -440,10 +453,10 @@ export async function sendSubmissionEmails(
   const bookingDates = `${data.dropoffDate} to ${data.pickupDate}`;
   const bookingSummary = `${dogNames} — $${quote.totalPrice.toFixed(2)} — ${bookingDates}`;
 
-  const customerSubject = options.isUpdate
+  const customerSubject = options.waitlisted ? `[${BRAND_NAME}] Waiting list — not confirmed — ${bookingSummary}` : options.isUpdate
     ? `[${BRAND_NAME}] Updated booking confirmation — ${bookingSummary}`
     : `[${BRAND_NAME}] Booking confirmation — ${bookingSummary}`;
-  const adminSubject = options.isUpdate
+  const adminSubject = options.waitlisted ? `[Waiting List] ${bookingSummary} — ${ownerName}` : options.isUpdate
     ? `[Updated Submission - Needs Review] ${bookingSummary} — ${ownerName}`
     : `[New Submission] ${bookingSummary} — ${ownerName}`;
 
@@ -452,7 +465,7 @@ export async function sendSubmissionEmails(
       from: fromHeader,
       to: data.email,
       subject: customerSubject,
-      html: buildCustomerEmailHtml(data, quote, editUrl, options.isUpdate, options.agreementVersion) + (cancelUrl ? `<p><a href="${escapeHtml(cancelUrl)}">Cancel Booking</a> — confirm your cancellation request on the booking page.</p>` : ""),
+      html: buildCustomerEmailHtml(data, quote, editUrl, options.isUpdate, options.agreementVersion, options.waitlisted) + (cancelUrl ? `<p><a href="${escapeHtml(cancelUrl)}">Cancel Booking</a> — confirm your cancellation request on the booking page.</p>` : ""),
       attachments: [
         {
           filename: pdfName,
@@ -497,7 +510,8 @@ export async function sendSubmissionEmails(
         submissionId,
         options.revision,
         options.isUpdate,
-        options.previousStatus
+        options.previousStatus,
+        options.waitlisted,
       ),
       attachments: [
         {

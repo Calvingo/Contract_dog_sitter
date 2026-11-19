@@ -10,6 +10,8 @@ import {
   type CalendarMode,
 } from "@/lib/platform/calendar-management";
 import type { ActionState } from "@/components/ActionForm";
+import { randomUUID } from "node:crypto";
+import { snapshotWaitlistCapacity, recordWaitlistOpenings, scheduleWaitlistNotification } from "@/lib/services/waitlist-alerts";
 function text(form: FormData, key: string) {
   return String(form.get(key) || "").trim();
 }
@@ -18,6 +20,7 @@ function refresh() {
     "/admin",
     "/admin/calendar",
     "/admin/settings",
+    "/admin/requests",
     "/admin/payments",
     "/account",
   ])
@@ -70,15 +73,20 @@ export async function saveSettings(
     venmoUsername,
     venmoName,
   };
-  await prisma.$transaction(async (tx) => {
+  const alertId = await prisma.$transaction(async (tx) => {
     await lockCapacity(tx);
+    const before = await snapshotWaitlistCapacity(tx);
     await tx.platformSettings.upsert({
       where: { id: "default" },
       create: { id: "default", ...data },
       update: data,
     });
-  });
+    return recordWaitlistOpenings(tx, before, `settings:${randomUUID()}`, "Capacity settings changed.");
+  }, { timeout: 15000 });
+  await scheduleWaitlistNotification(alertId);
   refresh();
+  revalidatePath("/book");
+  revalidatePath("/");
   return {
     message:
       "Settings saved. Existing bookings are preserved; check the calendar for any capacity warnings. Existing hold deadlines remain unchanged.",

@@ -6,6 +6,8 @@ import { prisma } from "@/lib/db";
 import { acceptedBookingDetails } from "@/lib/platform/accepted-booking";
 import { AdminCapacityCalendar } from "@/components/AdminCapacityCalendar";
 import { AdminShell, StatusBadge } from "../admin-ui";
+import { WaitlistAlerts } from "@/components/WaitlistAlerts";
+import { isWaitlisted } from "@/lib/waitlist";
 export default async function AdminCalendarPage({
   searchParams,
 }: {
@@ -59,6 +61,7 @@ export default async function AdminCalendarPage({
       title="Calendar & capacity"
       subtitle={`Default capacity: ${settings.defaultCapacity} dogs. ${settings.includePickupDay ? "Arrival and pick-up dates both count." : "Capacity is counted by night."}`}
     >
+      <WaitlistAlerts />
       {over.length > 0 && (
         <p role="alert" className="notice error">
           {over.length} day(s) exceed the current limit. Review existing stays
@@ -101,7 +104,7 @@ export default async function AdminCalendarPage({
                   {dateKey(acceptedStay(b).dropoffAt)} → {dateKey(acceptedStay(b).pickupAt)}
                 </td>
                 <td>
-                  <StatusBadge status={b.status} />
+                  <StatusBadge status={b.status} waitlisted={isWaitlisted(b)} />
                 </td>
                 <td>
                   {b.holdExpiresAt

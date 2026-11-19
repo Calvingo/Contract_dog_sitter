@@ -9,6 +9,7 @@ import { updateSubmissionRecord } from "@/lib/services/submission-service";
 import { signatureToBuffer, validateSubmissionDetails } from "@/lib/validate";
 import { setCustomerSession } from "@/lib/auth/customer-session";
 import { todayKey } from "@/lib/platform/rules";
+import { isWaitlisted } from "@/lib/waitlist";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -52,6 +53,7 @@ export async function GET(request: Request) {
     ok: true,
     token,
     status: editToken.submission.status,
+    waitlisted: isWaitlisted(editToken.submission),
     revision: editToken.submission.revision,
     dogTerms: storedDogTerms(editToken.submission),
     manualPrice: storedManualPrice(editToken.submission.quotedBreakdown),
@@ -115,6 +117,7 @@ export async function POST(request: Request) {
         isUpdate: true,
         previousStatus: result.previousStatus,
         quote: result.quote,
+        waitlisted: isWaitlisted(result.submission),
       },
     );
 
@@ -124,6 +127,7 @@ export async function POST(request: Request) {
       emailPending,
       submissionId: result.submission.id,
       status: result.submission.status,
+      waitlisted: isWaitlisted(result.submission),
       revision: result.submission.revision,
     }, { headers: { "Server-Timing": `booking;dur=${(performance.now() - startedAt).toFixed(1)}` } });
   } catch (error) {

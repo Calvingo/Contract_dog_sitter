@@ -6,6 +6,9 @@ import {
   dateRange,
   occupancyByDay,
   stayDates,
+  acceptedStay,
+  reservesCapacity,
+  type OccupancyBooking,
 } from "./rules";
 
 export class BookingConflict extends Error {}
@@ -84,12 +87,58 @@ export async function assertCapacity(
     );
 }
 
+// Closed dates remain a hard boundary; ordinary capacity shortages join the queue.
+export async function requestCapacity(
+  tx: Prisma.TransactionClient,
+  start: Date,
+  end: Date,
+  dogs: number,
+  excludeId?: string,
+) {
+  const settings = await getSettings(tx);
+  const dates = stayDates(start, end, settings.includePickupDay);
+  const result = await availability(dates[0], dates.at(-1)!, tx, excludeId);
+  const closed = result.days.find(day => day.closed);
+  if (closed) throw new BookingConflict(`There is not enough space on ${closed.date}: this date is closed. Please choose different dates.`);
+  return result.days.filter(day => day.remaining < dogs).map(day => day.date);
+}
+
+export type AcceptanceDay = { date: string; occupied: number; capacity: number; after: number; closed: boolean };
+export async function acceptanceImpact(db: Prisma.TransactionClient, booking: OccupancyBooking) {
+  const settings = await getSettings(db);
+  const dates = stayDates(booking.dropoffAt, booking.pickupAt, settings.includePickupDay);
+  const result = await availability(dates[0], dates.at(-1)!, db, booking.id);
+  const accepted = acceptedStay(booking);
+  const previousDates = new Set(reservesCapacity(booking)
+    ? stayDates(accepted.dropoffAt, accepted.pickupAt, settings.includePickupDay) : []);
+  return result.days.map(day => ({
+    date: day.date,
+    occupied: day.occupied + (previousDates.has(day.date) ? accepted.dogs : 0),
+    capacity: day.capacity,
+    after: day.occupied + Math.max(1, booking.submissionPets.length),
+    closed: day.closed,
+  }));
+}
+
+export function acceptanceSummary(days: AcceptanceDay[], maximum = 3) {
+  const constrained = days.filter(day => day.closed || day.after > day.capacity);
+  if (!constrained.length) return "Space is currently available for this stay. Acceptance is still your decision.";
+  const rows = constrained.slice(0, maximum).map(day => day.closed
+    ? `${day.date}: Closed. Reopen this date before accepting.`
+    : `${day.date}: ${day.occupied} / ${day.capacity} → ${day.after} / ${day.capacity} after Accept (${day.after - day.capacity} above the limit).`);
+  if (constrained.length > maximum) rows.push(`And ${constrained.length - maximum} more date(s). Open the booking for the full capacity details.`);
+  return rows.join(" ");
+}
+
 export async function prepareStatusChange(
   tx: Prisma.TransactionClient,
   id: string,
   status: string,
   expectedRevision?: number,
   expectedStatus?: string,
+  // Only an explicit admin decision opts in. Legacy signed email actions remain
+  // strict so a last-second capacity change cannot silently overbook via GET.
+  allowOverCapacity = false,
 ) {
   await lockCapacity(tx);
   const current = await tx.submission.findUnique({
@@ -111,7 +160,7 @@ export async function prepareStatusChange(
       throw new BookingConflict(
         "This booking is closed. Create a new request instead.",
       );
-    await assertCapacity(
+    await (allowOverCapacity ? requestCapacity : assertCapacity)(
       tx,
       current.dropoffAt,
       current.pickupAt,
@@ -121,6 +170,8 @@ export async function prepareStatusChange(
   }
   const settings = await getSettings(tx);
   return {
+    ...(["ACCEPTED", "REJECTED", "CANCELLED"].includes(status)
+      ? { waitlistedAt: null, waitlistDates: [] } : {}),
     ...(status === "ACCEPTED" ? {
       acceptedDropoffAt: current.dropoffAt,
       acceptedPickupAt: current.pickupAt,

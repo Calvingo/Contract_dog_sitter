@@ -19,6 +19,7 @@ type EditOrderFormProps = {
   submissionId: string;
   revision: number;
   defaultStatus: SubmissionStatus;
+  waitlisted?: boolean;
   defaultDropoffAt: string;
   defaultPickupAt: string;
   defaultPrescreenNotes: string;
@@ -48,6 +49,7 @@ export function EditOrderForm({
   submissionId,
   revision,
   defaultStatus,
+  waitlisted = false,
   defaultDropoffAt,
   defaultPickupAt,
   defaultPrescreenNotes,
@@ -110,12 +112,13 @@ export function EditOrderForm({
             defaultValue={defaultStatus}
             className="mt-2 w-full rounded-xl border border-stone-200 px-3 py-3"
           >
-            {(Object.values(SubmissionStatus) as SubmissionStatus[]).filter(status => status !== "CANCELLED").map((status) => (
+            {(Object.values(SubmissionStatus) as SubmissionStatus[]).filter(status => status !== "CANCELLED" && (status !== "ACCEPTED" || !waitlisted)).map((status) => (
               <option key={status} value={status}>
                 {status.replaceAll("_", " ")}
               </option>
             ))}
           </select>
+          {waitlisted && <p className="small">Use Accept under Admin Decision to confirm this waiting-list request.</p>}
         </label>
         {(["dropoff", "pickup"] as const).map((kind) => {
           const label = kind === "dropoff" ? "Dropoff" : "Pickup";
