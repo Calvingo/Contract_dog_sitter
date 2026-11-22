@@ -18,8 +18,8 @@ require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileMo
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
 }).outputText, filename);
 const nextServer = require("next/server");
-const background = [], sent = [], decisions = [], pdfCalls = [];
-let admin = true, failRecipient = "", failSchedule = false;
+const background = [], sent = [], pdfCalls = [];
+let admin = true, failRecipient = "", failSchedule = false, failAdminMail = false, failPdf = false;
 const originalLoad = Module._load;
 Module._load = function (request, parent, ...args) {
   if (request === "nodemailer") throw new Error("Real SMTP is forbidden in waiting-list tests");
@@ -33,16 +33,20 @@ Module._load = function (request, parent, ...args) {
   if (path === resolve(root, "lib/auth/admin-session.ts")) return { getAdminSession: async () => admin ? { email: "admin@example.test" } : null };
   if (path === resolve(root, "lib/auth/customer-session.ts")) return { ...originalLoad.call(this, request, parent, ...args), getCustomerSession: async () => null, setCustomerSession: async () => true };
   if (path === resolve(root, "lib/platform/rate-limit.ts")) return { allowRequest: async () => true, requestIp: () => "127.0.0.1" };
-  if (path === resolve(root, "lib/decision-emails.ts")) return {
-    decisionActionLabel: action => action, sendDecisionEmail: async (...args) => { decisions.push(args); },
-  };
   if (path === resolve(root, "lib/pdf-receipt.ts")) return {
-    generateSubmissionPdf: async (...args) => { pdfCalls.push(args); return Buffer.from("test-pdf"); }, pdfFilename: () => "test.pdf",
+    generateSubmissionPdf: async (...args) => {
+      pdfCalls.push(args);
+      if (failPdf) throw new Error("Simulated PDF failure");
+      return Buffer.from("test-pdf");
+    }, pdfFilename: () => "test.pdf",
   };
   if (path === resolve(root, "lib/mailer.ts")) return {
     BRAND_NAME: "Silicon Paws Retreat", getEnv: name => process.env[name],
     parseAdminEmails: () => ["admin@example.test", "second@example.test", "ADMIN@example.test"],
-    sendMail: async message => { sent.push(message); if (message.to === failRecipient) throw new Error("Simulated SMTP failure"); },
+    sendMail: async message => {
+      sent.push(message);
+      if (message.to === failRecipient || (failAdminMail && Array.isArray(message.to))) throw new Error("Simulated SMTP failure");
+    },
   };
   return originalLoad.call(this, request, parent, ...args);
 };
@@ -149,10 +153,36 @@ try {
   admin = true;
   const accidentalAccept = await updateSubmissionActionWithState(null, form({ submissionId: firstRow.id, revision: firstRow.revision, expectedStatus: firstRow.status, status: "ACCEPTED", dropoffAt: `${start}T10:00`, pickupAt: `${end}T10:00` }));
   assert.match(accidentalAccept.error, /Use the Accept button/);
-  const beforeDecisions = decisions.length;
+  // The accepted copy must retain the reviewed price and signed contact/pet
+  // snapshots, even when the customer's saved profile has since changed.
+  const storedQuote = { ...firstRow.quotedBreakdown, totalPrice: 123.45, depositAmount: 24.69,
+    manualPrice: { stayKey: "reviewed-test-price", total: 123.45 } };
+  await prisma.submission.update({ where: { id: firstRow.id }, data: { quotedBreakdown: storedQuote, quotedTotal: 123.45 } });
+  await prisma.customer.update({ where: { id: firstRow.customerId }, data: { phone: "5559999999" } });
+  await prisma.pet.update({ where: { id: firstRow.petId }, data: { name: "Changed profile name" } });
+  const beforeAcceptance = sent.length;
   const race = await Promise.allSettled([decide(firstRow.id), decide(firstRow.id)]);
   assert.equal(race.filter(row => row.status === "fulfilled").length, 1);
-  assert.equal(decisions.length, beforeDecisions + 1);
+  assert.equal(race.find(row => row.status === "fulfilled").value.notificationFailed, false);
+  const acceptedEmails = sent.slice(beforeAcceptance);
+  assert.equal(acceptedEmails.length, 2, "Concurrent/repeated Accept sends one owner confirmation and one admin intake copy");
+  const ownerConfirmation = acceptedEmails.find(message => message.to === waitValues.email);
+  assert.match(ownerConfirmation.subject, /Your booking request has been accepted/);
+  assert.match(ownerConfirmation.html, /Your booking is confirmed by our acceptance/);
+  const intake = acceptedEmails.find(message => Array.isArray(message.to));
+  assert.deepEqual(intake.to, ["admin@example.test", "second@example.test"], "Admin recipients are deduplicated");
+  assert.equal(intake.subject, `[New Submission] Coco — $123.45 — ${start} to ${end} — Waitlist ${prefix}`);
+  assert.match(intake.html, /Confirmed booking — accepted from the waiting list/);
+  for (const value of [waitValues.email, waitValues.phone, waitValues.emergencyContactPhone, "Mix", "$123.45", "$24.69", "Pre-Screening", `/admin/submissions/${firstRow.id}`]) assert.ok(intake.html.includes(value), value);
+  assert.doesNotMatch(intake.html, /Changed profile name|5559999999|not confirmed|action=accept|action=reject|action=meet_greet/);
+  assert.deepEqual(intake.attachments.map(file => file.contentType), ["image/png", "application/pdf"]);
+  assert.deepEqual(intake.attachments[0].content, Buffer.from("test"));
+  assert.equal(pdfCalls.at(-1)[0].petName, "Coco");
+  assert.equal(pdfCalls.at(-1)[1].totalPrice, 123.45);
+  assert.equal(pdfCalls.at(-1)[4], false, "Accepted PDF no longer labels the booking as waiting");
+  assert.equal(await prisma.emailLog.count({ where: { submissionId: firstRow.id, type: "ADMIN_NOTIFICATION", status: "SENT", subject: intake.subject } }), 1);
+  await assert.rejects(decide(firstRow.id), /already recorded/);
+  assert.equal(sent.length, beforeAcceptance + 2, "Reload/repeat Accept never resends the intake copy");
   assert.equal((await load(firstRow.id)).waitlistedAt, null);
   assert.ok((await availability(start, end)).days.every(day => day.occupied === 18 && day.capacity === 17 && day.overCapacity));
   const event = await prisma.decisionEvent.findFirstOrThrow({ where: { submissionId: firstRow.id, action: "ACCEPT" } });
@@ -279,6 +309,58 @@ try {
   assert.equal((await load(concurrentA.submission.id)).waitlistedAt, null);
   assert.equal((await load(concurrentB.submission.id)).waitlistedAt, null);
   console.log("PASS concurrent manual acceptance of distinct waiting-list requests counts both accurately without changing the limit.");
+
+  const pairRow = await load(pair.submission.id);
+  const beforePair = sent.length;
+  const pairResult = await decideSubmissionActionWithState({}, form({ submissionId: pairRow.id, revision: pairRow.revision, expectedStatus: pairRow.status, action: "accept" }));
+  assert.match(pairResult.message, /admin sent the \[New Submission\] email/);
+  const pairIntake = sent.slice(beforePair).find(message => Array.isArray(message.to));
+  assert.match(pairIntake.subject, /^\[New Submission\] Coco & Milo/);
+  assert.match(pairIntake.html, /Dog 2 — Milo/);
+  assert.equal(pdfCalls.at(-1)[0].hasSecondDog, true);
+  assert.equal(pdfCalls.at(-1)[1].dogs.length, 2);
+
+  // Ordinary submissions already sent an admin intake email. Meet & greet,
+  // rejection and unsuccessful/stale decisions must not create another one.
+  const normal = await createSubmissionRecord(values({ dropoffDate: "2095-10-01", pickupDate: "2095-10-03" }));
+  assert.equal(normal.submission.waitlistedAt, null);
+  const beforeNormal = sent.length;
+  await decide(normal.submission.id);
+  assert.equal(sent.length, beforeNormal + 1);
+  assert.ok(!Array.isArray(sent.at(-1).to));
+  const reviewed = await createSubmissionRecord(values(concurrentValues));
+  const beforeReview = sent.length;
+  await assert.rejects(processAdminSubmissionDecision({ submissionId: reviewed.submission.id, action: "accept", adminEmail: "admin@example.test", expectedRevision: 999 }), /booking changed/);
+  assert.equal(sent.length, beforeReview);
+  await decide(reviewed.submission.id, "meet_greet");
+  await decide(reviewed.submission.id, "reject");
+  assert.equal(sent.length, beforeReview + 2);
+  assert.ok(sent.slice(beforeReview).every(message => !Array.isArray(message.to)));
+
+  for (const failure of ["admin", "customer", "pdf"]) {
+    const data = values(concurrentValues);
+    const record = await createSubmissionRecord(data);
+    assert.ok(isWaitlisted(record.submission));
+    failAdminMail = failure === "admin";
+    failRecipient = failure === "customer" ? data.email : "";
+    failPdf = failure === "pdf";
+    const beforeFailure = sent.length;
+    const outcome = await decideSubmissionActionWithState({}, form({ submissionId: record.submission.id, revision: record.submission.revision, expectedStatus: record.submission.status, action: "accept" }));
+    assert.match(outcome.error, new RegExp(`Decision saved, but the ${failure === "customer" ? "customer" : "admin"} email could not be delivered`));
+    const saved = await load(record.submission.id);
+    assert.equal(saved.status, "ACCEPTED", "Delivery failure never rolls back the confirmed booking");
+    assert.equal(saved.waitlistedAt, null);
+    const logs = await prisma.emailLog.findMany({ where: { submissionId: saved.id } });
+    assert.ok(logs.some(log => log.type === "DECISION_ACCEPT" && log.status === (failure === "customer" ? "FAILED" : "SENT")));
+    assert.ok(logs.some(log => log.type === "ADMIN_NOTIFICATION" && log.status === (failure === "customer" ? "SENT" : "FAILED") && log.subject.startsWith("[New Submission]")));
+    assert.equal(sent.length, beforeFailure + (failure === "pdf" ? 1 : 2), "Both recipients are attempted independently");
+    failAdminMail = false;
+    failRecipient = "";
+    failPdf = false;
+    await assert.rejects(decide(saved.id), /already recorded/);
+    assert.equal(sent.length, beforeFailure + (failure === "pdf" ? 1 : 2), "A delivery failure does not reopen Accept or cause duplicates");
+  }
+  console.log("PASS accepted waiting-list owner/admin delivery, legacy [New Submission] subject, complete stored details and attachments, multi-dog/manual pricing, repeat protection, and independent SMTP/PDF failure logs and admin feedback. No real email sent.");
 } finally {
   console.error = originalError;
   const newAlerts = await prisma.waitlistAlert.findMany({ where: { id: { notIn: oldAlerts } }, select: { id: true } });

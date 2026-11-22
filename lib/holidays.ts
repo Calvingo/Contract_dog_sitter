@@ -8,6 +8,9 @@ type HolidayRange = {
   feePerDay?: number;
 };
 
+// 2027 Easter, July 4, Thanksgiving and Christmas/New Year ranges updated from
+// https://support.rover.com/hc/en-us/articles/204706790 on 2026-11-21.
+// Other dates and our surcharge rules intentionally retain their existing values.
 export const HOLIDAY_RANGES: readonly HolidayRange[] = [
   { start: "2026-05-22", end: "2026-05-25", label: "May 22–25, 2026" },
   { start: "2026-07-03", end: "2026-07-05", label: "Jul 3–5, 2026" },
@@ -18,15 +21,16 @@ export const HOLIDAY_RANGES: readonly HolidayRange[] = [
   // Jan 1–3, 2027 is already covered by the preceding New Year range.
   { start: "2027-01-15", end: "2027-01-18", label: "Jan 15–18, 2027" },
   { start: "2027-02-12", end: "2027-02-15", label: "Feb 12–15, 2027" },
+  { start: "2027-03-26", end: "2027-03-29", label: "Mar 26–29, 2027" },
   { start: "2027-05-28", end: "2027-05-31", label: "May 28–31, 2027" },
   { start: "2027-06-18", end: "2027-06-20", label: "Jun 18–20, 2027" },
-  { start: "2027-07-02", end: "2027-07-05", label: "Jul 2–5, 2027" },
+  { start: "2027-07-01", end: "2027-07-05", label: "Jul 1–5, 2027" },
   { start: "2027-09-03", end: "2027-09-06", label: "Sep 3–6, 2027" },
-  { start: "2027-11-25", end: "2027-11-28", label: "Nov 25–28, 2027" },
+  { start: "2027-11-24", end: "2027-11-28", label: "Nov 24–28, 2027" },
   {
-    start: "2027-12-24",
-    end: "2028-01-03",
-    label: "Dec 24, 2027 – Jan 3, 2028 (continuous, including Dec 28–30)",
+    start: "2027-12-23",
+    end: "2028-01-02",
+    label: "Dec 23, 2027 – Jan 2, 2028 (continuous, including Dec 28–30)",
     feePerDay: CHRISTMAS_HOLIDAY_FEE_PER_DAY,
   },
 ];

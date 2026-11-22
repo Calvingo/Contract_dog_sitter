@@ -389,10 +389,11 @@ function buildAdminEmailHtml(
   isUpdate = false,
   previousStatus?: string,
   waitlisted = false,
+  acceptedFromWaitlist = false,
 ): string {
   const ownerName = `${data.firstName} ${data.lastName}`.trim();
   const submittedAt = new Date().toLocaleString("en-US");
-  const title = isUpdate ? "Updated Agreement Submission" : "New Agreement Submission";
+  const title = acceptedFromWaitlist ? "Waiting List Booking Accepted" : isUpdate ? "Updated Agreement Submission" : "New Agreement Submission";
   const updateNote = isUpdate
     ? `<p style="padding:12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;color:#9a3412;"><strong>This request has been updated.</strong> Previous admin decision links are no longer valid. Please use the buttons in this latest email.${previousStatus ? ` Previous status: ${escapeHtml(previousStatus)}.` : ""}</p>`
     : "";
@@ -404,9 +405,11 @@ function buildAdminEmailHtml(
       <p><strong>Owner:</strong> ${escapeHtml(ownerName)}</p>
       <p><strong>Email:</strong> ${escapeHtml(data.email)}</p>
       <p><strong>Dogs:</strong> ${escapeHtml([data.petName, data.hasSecondDog ? data.secondPetName : ""].filter(Boolean).join(" & "))}</p>
-      <p><strong>Submitted at:</strong> ${escapeHtml(submittedAt)}</p>
+      <p><strong>${acceptedFromWaitlist ? "Accepted" : "Submitted"} at:</strong> ${escapeHtml(submittedAt)}</p>
       ${formatBoardingChecklistSection()}
-      ${waitlisted && submissionId
+      ${acceptedFromWaitlist && submissionId
+        ? `<p><strong>Confirmed booking — accepted from the waiting list.</strong> This booking is ready to record. The confirmed details, pricing and signed agreement are included below and attached.</p><p><a href="${escapeHtml(getAppBaseUrl())}/admin/submissions/${encodeURIComponent(submissionId)}">View confirmed booking</a></p>`
+        : waitlisted && submissionId
         ? `<p><strong>Waiting list — not confirmed.</strong> Contact the customer and review capacity before accepting. You may accept above the limit; capacity limits will not change.</p><p><a href="${escapeHtml(getAppBaseUrl())}/admin/submissions/${encodeURIComponent(submissionId)}">Review waiting-list request / Accept</a></p>`
         : buildAdminDecisionButtons(data, submissionId, revision)}
       ${formatPricingSection(data, quote)}
@@ -415,7 +418,7 @@ function buildAdminEmailHtml(
       ${formatEmergencyContactSection(data)}
       ${formatFormSection(data)}
       ${formatSecondDogSection(data)}
-      <p>Signature attached as PNG. Customer received a PDF receipt.</p>
+      <p>Signature attached as PNG. Full agreement attached as PDF.</p>
     </div>
   `;
 }
@@ -441,7 +444,6 @@ export async function sendSubmissionEmails(
   const pdfName = pdfFilename(dogNames);
 
   const fromUser = getEnv("GMAIL_USER");
-  const ownerName = `${data.firstName} ${data.lastName}`.trim();
   const fromHeader = `"${BRAND_NAME}" <${fromUser}>`;
   const editUrl = submissionId
     ? await createCustomerEmailUrl(
@@ -456,9 +458,6 @@ export async function sendSubmissionEmails(
   const customerSubject = options.waitlisted ? `[${BRAND_NAME}] Waiting list — not confirmed — ${bookingSummary}` : options.isUpdate
     ? `[${BRAND_NAME}] Updated booking confirmation — ${bookingSummary}`
     : `[${BRAND_NAME}] Booking confirmation — ${bookingSummary}`;
-  const adminSubject = options.waitlisted ? `[Waiting List] ${bookingSummary} — ${ownerName}` : options.isUpdate
-    ? `[Updated Submission - Needs Review] ${bookingSummary} — ${ownerName}`
-    : `[New Submission] ${bookingSummary} — ${ownerName}`;
 
   try {
     await sendMail({
@@ -497,11 +496,48 @@ export async function sendSubmissionEmails(
     return;
   }
 
-  const adminEmails = parseAdminEmails();
+  await sendAdminSubmissionEmail(data, signatureBuffer, submissionId, {
+    ...options,
+    quote,
+    pdfBuffer,
+  });
+}
+
+// Shared with initial submission delivery so accepted waiting-list bookings use
+// the same subject, complete form, stored quote and attachments for admin intake.
+// This sends only the admin copy; the decision flow sends the owner confirmation.
+export async function sendAdminSubmissionEmail(
+  data: FormValues,
+  signatureBuffer: Buffer,
+  submissionId?: string,
+  options: {
+    revision?: number;
+    isUpdate?: boolean;
+    previousStatus?: string;
+    quote?: SubmissionQuote;
+    agreementVersion?: string;
+    waitlisted?: boolean;
+    acceptedFromWaitlist?: boolean;
+    pdfBuffer?: Buffer;
+  } = {},
+) {
+  const quote = resolveQuote(data, options.quote);
+  const dogNames = [data.petName, data.hasSecondDog ? data.secondPetName : ""].filter(Boolean).join(" & ");
+  const ownerName = `${data.firstName} ${data.lastName}`.trim();
+  const bookingSummary = `${dogNames} — $${quote.totalPrice.toFixed(2)} — ${data.dropoffDate} to ${data.pickupDate}`;
+  const adminSubject = options.acceptedFromWaitlist
+    ? `[New Submission] ${bookingSummary} — ${ownerName}`
+    : options.waitlisted ? `[Waiting List] ${bookingSummary} — ${ownerName}` : options.isUpdate
+      ? `[Updated Submission - Needs Review] ${bookingSummary} — ${ownerName}`
+      : `[New Submission] ${bookingSummary} — ${ownerName}`;
+  const adminEmails = [...new Set(parseAdminEmails().map(email => email.toLowerCase()))];
 
   try {
+    const pdfBuffer = options.pdfBuffer ?? await generateSubmissionPdf(
+      data, quote, signatureBuffer, options.agreementVersion, options.waitlisted ?? false,
+    );
     await sendMail({
-      from: fromHeader,
+      from: `"${BRAND_NAME}" <${getEnv("GMAIL_USER")}>`,
       to: adminEmails,
       subject: adminSubject,
       html: buildAdminEmailHtml(
@@ -512,6 +548,7 @@ export async function sendSubmissionEmails(
         options.isUpdate,
         options.previousStatus,
         options.waitlisted,
+        options.acceptedFromWaitlist,
       ),
       attachments: [
         {
@@ -520,7 +557,7 @@ export async function sendSubmissionEmails(
           contentType: "image/png",
         },
         {
-          filename: pdfName,
+          filename: pdfFilename(dogNames),
           content: pdfBuffer,
           contentType: "application/pdf",
         },

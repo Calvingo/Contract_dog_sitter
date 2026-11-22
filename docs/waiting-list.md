@@ -59,6 +59,19 @@ PDF covers explicitly say the request is not confirmed. Deposit instructions sta
 after acceptance. The original signed agreement and pricing remain attached as
 conditional terms; this feature does not change financial records or refund rules.
 
+On admin acceptance, the owner receives the standard acceptance confirmation and
+admins receive a separate `[New Submission] Dogs — $Total — Start to End — Owner`
+email, using the same full submission template and signature/PDF attachments as
+ordinary intake. It identifies the booking as confirmed, links to its admin detail
+page and omits decision buttons. It uses the reviewed revision's saved form and
+quote, including manual prices and both dogs, without recalculating current rates.
+Normal acceptance, Meet & Greet and rejection do not create this extra intake copy.
+
+The winning status transition sends the copy once; stale/concurrent/repeat Accept
+attempts send nothing. Owner and admin delivery are attempted independently, with
+separate email logs and failure feedback in the admin action. Failures do not undo
+acceptance or reopen Accept. There is no automatic retry of this intake email.
+
 ## Migration and verification
 
 Migration `20261119000000_waiting_list` adds nullable membership timestamps, empty
@@ -88,3 +101,8 @@ all eight suites listed above passed. Browser checks covered desktop and 390px
 mobile full-date selection with the bilingual notice, the admin waiting-list view,
 and a real local Accept changing the calendar from 17/17 to 18/17. Email delivery
 was simulated in tests; real SMTP was disabled in the local browser preview.
+
+The acceptance-email regression added on 2026-11-21 exercises the real email
+templates with simulated SMTP/PDF generation. It checks the exact intake subject,
+complete stored information, multi-dog and manual prices, attachments, owner
+confirmation, duplicate suppression, independent delivery failures and PDF errors.

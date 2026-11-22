@@ -84,10 +84,13 @@ export async function decideSubmissionAction(formData: FormData) {
   });
 
   revalidateBooking(submissionId);
-  if (decision.notificationFailed)
+  if (decision.notificationFailed) {
+    const recipients = [decision.customerNotificationFailed ? "customer" : "", decision.adminNotificationFailed ? "admin" : ""].filter(Boolean).join(" and ");
     throw new Error(
-      "Decision saved, but the customer email could not be delivered. Check the email log and contact the customer.",
+      `Decision saved, but the ${recipients} email could not be delivered. Check the email log and follow up; the booking decision is already saved.`,
     );
+  }
+  return decision;
 }
 
 export async function decideSubmissionActionWithState(
@@ -96,8 +99,10 @@ export async function decideSubmissionActionWithState(
 ): Promise<ActionState> {
   await requireAdmin();
   try {
-    await decideSubmissionAction(formData);
-    return { message: "Decision saved and customer notified." };
+    const decision = await decideSubmissionAction(formData);
+    return { message: decision.adminNotified
+      ? "Decision saved. Customer confirmed and admin sent the [New Submission] email."
+      : "Decision saved and customer notified." };
   } catch (error) {
     return {
       error:

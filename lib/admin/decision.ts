@@ -3,7 +3,10 @@ import { acceptanceImpact, acceptanceSummary, prepareStatusChange } from "@/lib/
 import { acceptedStay, dateKey, dateRange } from "@/lib/platform/rules";
 import { snapshotWaitlistCapacity, recordWaitlistOpenings, scheduleWaitlistNotification } from "@/lib/services/waitlist-alerts";
 import { bookingDecisionActions } from "./booking-actions";
-import { waitlistDecisionNote } from "@/lib/waitlist";
+import { isWaitlisted, waitlistDecisionNote } from "@/lib/waitlist";
+import { sendAdminSubmissionEmail } from "@/lib/email";
+import { formValuesFromSubmission, type SubmissionQuote } from "@/lib/submission-data";
+import { signatureToBuffer } from "@/lib/validate";
 import {
   DecisionAction as DbDecisionAction,
   EmailStatus,
@@ -155,6 +158,9 @@ export async function processAdminSubmissionDecision(options: {
     exp: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60,
   };
   const subjectLabel = decisionActionLabel(options.action);
+  const acceptedFromWaitlist = options.action === "accept" && isWaitlisted(submission);
+  let customerNotificationFailed = false;
+  let adminNotificationFailed = false;
 
   try {
     const editUrl =
@@ -189,7 +195,34 @@ export async function processAdminSubmissionDecision(options: {
       status: EmailStatus.FAILED,
       error: error instanceof Error ? error.message : String(error),
     });
-    return { notificationFailed: true };
+    customerNotificationFailed = true;
   }
-  return { notificationFailed: false };
+
+  // Only the winning decision sends this copy. Use the reviewed revision's
+  // snapshots, not a recalculated price or a later edit made while SMTP runs.
+  // A customer delivery failure must not skip the admin intake email.
+  if (acceptedFromWaitlist) {
+    try {
+      await sendAdminSubmissionEmail(
+        formValuesFromSubmission(submission),
+        signatureToBuffer(submission.signatureData),
+        submission.id,
+        {
+          revision: submission.revision,
+          quote: submission.quotedBreakdown as unknown as SubmissionQuote,
+          agreementVersion: submission.agreementVersion,
+          acceptedFromWaitlist: true,
+        },
+      );
+    } catch {
+      // The shared sender records the failed admin delivery in EmailLog.
+      adminNotificationFailed = true;
+    }
+  }
+  return {
+    notificationFailed: customerNotificationFailed || adminNotificationFailed,
+    customerNotificationFailed,
+    adminNotificationFailed,
+    adminNotified: acceptedFromWaitlist && !adminNotificationFailed,
+  };
 }
